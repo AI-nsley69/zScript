@@ -31,13 +31,13 @@ pub const Interpreter = struct {
         return instruction;
     }
 
-    pub fn run(self: *Self, alloc: *std.mem.Allocator) InterpretResult {
+    pub fn run(self: *Self) InterpretResult {
         if (!self.has_next()) return .HALT;
 
-        var instruction: []const u8 = self.advance();
-        if (self.trace) {
-            std.debug.print("{s}\n", .{debug.dissambleInstruction(alloc, &instruction, self.instruction_pointer - 4)});
-        }
+        const instruction: []const u8 = self.advance();
+        // if (self.trace) {
+        //     std.debug.print("{s}\n", .{debug.dissambleInstruction(alloc, &instruction, self.instruction_pointer - 4)});
+        // }
         const op_code: bytecode.OpCodes = @enumFromInt(instruction[0]);
 
         return switch (op_code) {
@@ -46,12 +46,12 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn dump(self: *Self, alloc: *std.mem.Allocator) void {
-        const current_ip = self.instruction_pointer;
-        while (self.has_next()) {
-            var instruction: []const u8 = self.advance();
-            std.debug.print("{s}\n", .{debug.dissambleInstruction(alloc, &instruction, self.instruction_pointer - 4)});
-        }
-        self.instruction_pointer = current_ip;
-    }
+    // pub fn dump(self: *Self, alloc: *std.mem.Allocator) void {
+    //     const current_ip = self.instruction_pointer;
+    //     while (self.has_next()) {
+    //         var instruction: []const u8 = self.advance();
+    //         std.debug.print("{s}\n", .{debug.dissambleInstruction(alloc, &instruction, self.instruction_pointer - 4)});
+    //     }
+    //     self.instruction_pointer = current_ip;
+    // }
 };
