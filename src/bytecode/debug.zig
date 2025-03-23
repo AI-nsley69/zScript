@@ -16,6 +16,11 @@ fn doubleRegInstruction(alloc: *std.mem.Allocator, name: *[]const u8, operands: 
     return fmtInstruction(alloc, &str, pointer);
 }
 
+fn singleRegInstruction(alloc: *std.mem.Allocator, name: *[]const u8, operands: *[]const u8, pointer: u32) []const u8 {
+    var str: []const u8 = std.fmt.allocPrint(alloc.*, "{s} r{d}", .{ name, operands.*[0] }) catch return "Unable to format instruction.";
+    return fmtInstruction(alloc, &str, pointer);
+}
+
 pub fn dissambleInstruction(alloc: *std.mem.Allocator, instruction: *[]const u8, pointer: u32) []const u8 {
     const opcode: bytecode.OpCodes = @enumFromInt(instruction.*[0]);
     var operands: []const u8 = &[_]u8{ instruction.*[1], instruction.*[2], instruction.*[3] };
@@ -57,10 +62,33 @@ pub fn dissambleInstruction(alloc: *std.mem.Allocator, instruction: *[]const u8,
             var str: []const u8 = "div";
             return tripleRegInstruction(alloc, &str, &operands, pointer);
         },
-        // .JUMP => {},
-        else => {
-            var str: []const u8 = std.fmt.allocPrint(alloc.*, "{any} {x:0>2} {x:0>2} {x:0>2}", .{ opcode, instruction.*[1], instruction.*[2], instruction.*[3] }) catch return "Unable to format instruction.";
-            return fmtInstruction(alloc, &str, pointer);
+        .JUMP => {
+            var str: []const u8 = "jmp";
+            return singleRegInstruction(alloc, &str, &operands, pointer);
         },
+        .BRANCH_IF_EQUAL => {
+            var str: []const u8 = "beq";
+            return tripleRegInstruction(alloc, &str, &operands, pointer);
+        },
+        .BRANCH_IF_NOT_EQUAL => {
+            var str: []const u8 = "bne";
+            return tripleRegInstruction(alloc, &str, &operands, pointer);
+        },
+        .XOR => {
+            var str: []const u8 = "xor";
+            return tripleRegInstruction(alloc, &str, &operands, pointer);
+        },
+        .AND => {
+            var str: []const u8 = "and";
+            return tripleRegInstruction(alloc, &str, &operands, pointer);
+        },
+        .OR => {
+            var str: []const u8 = "or";
+            return tripleRegInstruction(alloc, &str, &operands, pointer);
+        },
+        // else => {
+        //     var str: []const u8 = std.fmt.allocPrint(alloc.*, "{any} {x:0>2} {x:0>2} {x:0>2}", .{ opcode, instruction.*[1], instruction.*[2], instruction.*[3] }) catch return "Unable to format instruction.";
+        //     return fmtInstruction(alloc, &str, pointer);
+        // },
     };
 }

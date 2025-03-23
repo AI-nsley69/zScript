@@ -16,8 +16,15 @@ pub fn main() !void {
     try instance.instructions.appendSlice(&[_]u8{
         @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE),
         0x01, // Register 1,
-        0x00, // 0x0001
-        0x01, //
+        0x00, // ->
+        0x01, // 0x0001
+    });
+
+    try instance.instructions.appendSlice(&[_]u8{
+        @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE),
+        0x02, // Register 2,
+        0x00, // ->
+        0x01, // 0x0001
     });
 
     try instance.instructions.appendSlice(&[_]u8{

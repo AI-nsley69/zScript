@@ -13,6 +13,7 @@ pub const OpCodes = enum(u8) {
     DIVIDE,
     JUMP,
     BRANCH_IF_EQUAL,
+    BRANCH_IF_NOT_EQUAL,
     XOR,
     AND,
     OR,
