@@ -51,7 +51,6 @@ pub const Interpreter = struct {
         return switch (op_code) {
             .ADD => {
                 const res: u32 = self.getRegister(instruction[2]) + self.getRegister(instruction[3]);
-                std.debug.print("{d}\n", .{res});
                 self.setRegister(instruction[1], res);
                 return InterpretResult.OK;
             },
