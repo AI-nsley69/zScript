@@ -73,3 +73,33 @@ pub const Interpreter = struct {
     //     self.instruction_pointer = current_ip;
     // }
 };
+
+test "Simple addition bytecode" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+
+    var instance = Interpreter{};
+    @memset(&instance.registers, 0);
+    defer instance.deinit(allocator);
+    // Load code into the interpreter
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE), 0x01, 0x00, 0x01 });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE), 0x02, 0x00, 0x02 });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.ADD), 0x03, 0x01, 0x02 });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.HALT), 0x00, 0x00, 0x00 });
+
+    // Post load imm in r1
+    var result = instance.run();
+    try std.testing.expect(result == .OK);
+    try std.testing.expect(instance.registers[1] == 0x01);
+    // Post load imm in r2
+    result = instance.run();
+    try std.testing.expect(result == .OK);
+    try std.testing.expect(instance.registers[2] == 0x02);
+    // Post addition
+    result = instance.run();
+    try std.testing.expect(result == .OK);
+    try std.testing.expect(instance.registers[3] == 0x03);
+    // Post halt
+    result = instance.run();
+    try std.testing.expect(result == .HALT);
+}
