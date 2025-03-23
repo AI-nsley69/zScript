@@ -9,15 +9,15 @@ const InterpreterError = error{};
 pub const Interpreter = struct {
     trace: bool = true,
     instruction_pointer: u32 = 0,
-    instructions: std.ArrayList(u8),
-    constants: std.ArrayList(bytecode.Value),
+    instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
+    constants: std.ArrayListUnmanaged(bytecode.Value) = std.ArrayListUnmanaged(bytecode.Value){},
     registers: [256]u8 = undefined,
 
     const Self = @This();
 
-    pub fn deinit(self: *Self) void {
-        self.instructions.deinit();
-        self.constants.deinit();
+    pub fn deinit(self: *Self, alloc: std.mem.Allocator) void {
+        self.instructions.deinit(alloc);
+        self.constants.deinit(alloc);
     }
 
     pub fn has_next(self: *Self) bool {
