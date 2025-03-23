@@ -11,7 +11,7 @@ pub const Interpreter = struct {
     instruction_pointer: u32 = 0,
     instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
     constants: std.ArrayListUnmanaged(bytecode.Value) = std.ArrayListUnmanaged(bytecode.Value){},
-    registers: [256]u8 = undefined,
+    registers: [256]u32 = undefined,
 
     const Self = @This();
 
@@ -31,6 +31,14 @@ pub const Interpreter = struct {
         return instruction;
     }
 
+    fn getRegister(self: *Self, index: u8) u32 {
+        return self.registers[index];
+    }
+
+    fn setRegister(self: *Self, index: u8, value: u32) void {
+        self.registers[index] = value;
+    }
+
     pub fn run(self: *Self) InterpretResult {
         if (!self.has_next()) return .HALT;
 
@@ -41,6 +49,17 @@ pub const Interpreter = struct {
         const op_code: bytecode.OpCodes = @enumFromInt(instruction[0]);
 
         return switch (op_code) {
+            .ADD => {
+                const res: u32 = self.getRegister(instruction[2]) + self.getRegister(instruction[3]);
+                std.debug.print("{d}\n", .{res});
+                self.setRegister(instruction[1], res);
+                return InterpretResult.OK;
+            },
+            .LOAD_IMMEDIATE => {
+                const imm: u16 = @as(u16, instruction[2]) << 8 | instruction[3];
+                self.setRegister(instruction[1], imm);
+                return InterpretResult.OK;
+            },
             .HALT => InterpretResult.HALT,
             else => .COMPILE_ERR,
         };
