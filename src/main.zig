@@ -6,16 +6,36 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var allocator = gpa.allocator();
 
-    var instance = interpreter.Interpreter{ .instructions = std.ArrayList(u8).init(allocator), .lines = std.ArrayList(usize).init(allocator), .constants = std.ArrayList(bytecode.Value).init(allocator) };
+    var instance = interpreter.Interpreter{
+        .instructions = std.ArrayList(u8).init(allocator),
+        .constants = std.ArrayList(bytecode.Value).init(allocator),
+    };
+    @memset(&instance.registers, 0);
     defer instance.deinit();
 
-    const val: bytecode.Value = 100;
-    const const_idx = try instance.add_constant(val, 123);
-    try instance.add_instruction(&[_]u8{ @intFromEnum(bytecode.OpCodes.CONSTANT), const_idx }, 123);
+    try instance.instructions.appendSlice(&[_]u8{
+        @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE),
+        0x01, // Register 1,
+        0x00, // 0x0001
+        0x01, //
+    });
 
-    try instance.add_instruction(&[_]u8{@intFromEnum(bytecode.OpCodes.RETURN)}, 123);
+    try instance.instructions.appendSlice(&[_]u8{
+        @intFromEnum(bytecode.OpCodes.HALT),
+        0x00,
+        0x00,
+        0x00,
+    });
 
     instance.dump(&allocator);
+
+    // var result: interpreter.InterpretResult = undefined;
+    // while (result == .OK) {
+    //     result = instance.run(&allocator);
+    //     std.debug.print("Run result: {any}\n", .{result});
+    // }
+
+    // std.log.info("Program exited with: {any}\n", .{result});
 
     return;
 }
