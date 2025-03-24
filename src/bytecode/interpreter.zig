@@ -1,17 +1,18 @@
 const std = @import("std");
-const bytecode = @import("bytecode.zig");
 const debug = @import("debug.zig");
+
+pub const OpCodes = enum(u8) { HALT, NOP, LOAD_IMMEDIATE, LOAD_WORD, STORE_WORD, ADD, SUBTRACT, MULTIPLY, DIVIDE, JUMP, BRANCH_IF_EQUAL, BRANCH_IF_NOT_EQUAL, XOR, AND, NOT };
 
 pub const InterpretResult = enum { OK, COMPILE_ERR, RUNTIME_ERR, HALT };
 
-const InterpreterError = error{};
+pub const Value = u64;
 
 pub const Interpreter = struct {
     trace: bool = true,
     instruction_pointer: u64 = 0,
     instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
-    constants: std.ArrayListUnmanaged(bytecode.Value) = std.ArrayListUnmanaged(bytecode.Value){},
-    registers: [256]bytecode.Value = undefined,
+    constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+    registers: [256]Value = undefined,
 
     const Self = @This();
 
@@ -31,11 +32,11 @@ pub const Interpreter = struct {
         return instruction;
     }
 
-    fn getRegister(self: *Self, index: u8) bytecode.Value {
+    fn getRegister(self: *Self, index: u8) Value {
         return self.registers[index];
     }
 
-    fn setRegister(self: *Self, index: u8, value: bytecode.Value) void {
+    fn setRegister(self: *Self, index: u8, value: Value) void {
         self.registers[index] = value;
     }
 
@@ -46,24 +47,24 @@ pub const Interpreter = struct {
         // if (self.trace) {
         //     std.debug.print("{s}\n", .{debug.dissambleInstruction(alloc, &instruction, self.instruction_pointer - 4)});
         // }
-        const op_code: bytecode.OpCodes = @enumFromInt(instruction[0]);
+        const op_code: OpCodes = @enumFromInt(instruction[0]);
         const arg0 = instruction[1];
         const arg1 = instruction[2];
         const arg2 = instruction[3];
 
         return switch (op_code) {
             .ADD => {
-                const res: bytecode.Value = self.getRegister(arg1) + self.getRegister(arg2);
+                const res: Value = self.getRegister(arg1) + self.getRegister(arg2);
                 self.setRegister(arg0, res);
                 return .OK;
             },
             .SUBTRACT => {
-                const res: bytecode.Value = self.getRegister(arg1) - self.getRegister(arg2);
+                const res: Value = self.getRegister(arg1) - self.getRegister(arg2);
                 self.setRegister(arg0, res);
                 return .OK;
             },
             .MULTIPLY => {
-                const res: bytecode.Value = self.getRegister(arg1) * self.getRegister(arg2);
+                const res: Value = self.getRegister(arg1) * self.getRegister(arg2);
                 self.setRegister(arg0, res);
                 return .OK;
             },
@@ -71,7 +72,7 @@ pub const Interpreter = struct {
                 const lhs = self.getRegister(arg1);
                 const rhs = self.getRegister(arg2);
                 if (rhs == 0) return .RUNTIME_ERR;
-                const res: bytecode.Value = lhs / rhs;
+                const res: Value = lhs / rhs;
                 self.setRegister(arg0, res);
                 return .OK;
             },
@@ -109,10 +110,10 @@ test "Simple addition bytecode" {
     @memset(&instance.registers, 0);
     defer instance.deinit(allocator);
     // Load code into the interpreter
-    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE), 0x01, 0x00, 0x01 });
-    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE), 0x02, 0x00, 0x02 });
-    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.ADD), 0x03, 0x01, 0x02 });
-    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.HALT), 0x00, 0x00, 0x00 });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(OpCodes.LOAD_IMMEDIATE), 0x01, 0x00, 0x01 });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(OpCodes.LOAD_IMMEDIATE), 0x02, 0x00, 0x02 });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(OpCodes.ADD), 0x03, 0x01, 0x02 });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(OpCodes.HALT), 0x00, 0x00, 0x00 });
 
     // Post load imm in r1
     var result = instance.run();

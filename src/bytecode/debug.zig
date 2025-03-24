@@ -1,8 +1,7 @@
 const std = @import("std");
 const interpreter = @import("interpreter.zig");
-const bytecode = @import("bytecode.zig");
 
-fn codeToString(opcode: bytecode.OpCodes) []const u8 {
+fn codeToString(opcode: interpreter.OpCodes) []const u8 {
     return switch (opcode) {
         .HALT => "halt",
         .NOP => "nop",
@@ -22,7 +21,7 @@ fn codeToString(opcode: bytecode.OpCodes) []const u8 {
     };
 }
 
-pub const Dissassembler = struct {
+pub const Disassembler = struct {
     ip: u32 = 0,
     instructions: std.ArrayListUnmanaged(u8),
 
@@ -39,9 +38,9 @@ pub const Dissassembler = struct {
         return self.ip < self.instructions.items.len;
     }
 
-    pub fn dissassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {
+    pub fn disassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {
         const instruction = self.advance();
-        const opcode: bytecode.OpCodes = @enumFromInt(instruction[0]);
+        const opcode: interpreter.OpCodes = @enumFromInt(instruction[0]);
         const name = codeToString(opcode);
 
         switch (opcode) {
