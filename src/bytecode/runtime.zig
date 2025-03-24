@@ -1,11 +1,62 @@
 const std = @import("std");
 const debug = @import("debug.zig");
 
-pub const OpCodes = enum(u8) { HALT, NOP, LOAD_IMMEDIATE, LOAD_WORD, STORE_WORD, ADD, ADD_IMMEDIATE, SUBTRACT, SUBTRACT_IMMEDIATE, MULTIPLY, MULTIPLY_IMMEDIATE, DIVIDE, DIVIDE_IMMEDIATE, JUMP, BRANCH_IF_EQUAL, BRANCH_IF_NOT_EQUAL, XOR, AND, NOT, OR };
+pub const OpCodes = enum(u8) {
+    HALT,
+    NOP,
+    MOV,
+    LOAD_IMMEDIATE,
+    LOAD_WORD,
+    STORE_WORD,
+    ADD,
+    ADD_IMMEDIATE,
+    SUBTRACT,
+    SUBTRACT_IMMEDIATE,
+    MULTIPLY,
+    MULTIPLY_IMMEDIATE,
+    DIVIDE,
+    DIVIDE_IMMEDIATE,
+    JUMP,
+    BRANCH_IF_EQUAL,
+    BRANCH_IF_NOT_EQUAL,
+    XOR,
+    AND,
+    NOT,
+    OR,
+};
 
 pub const InterpretResult = enum { OK, COMPILE_ERR, RUNTIME_ERR, HALT };
 
 pub const Value = u64;
+
+pub const Assembler = struct {
+    allocator: std.mem.Allocator,
+    instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
+    // reg_idx: u8 = 0,
+    const Self = @This();
+
+    pub fn createRaw(self: *Self, opcode: OpCodes, arg0: u8, arg1: u8, arg2: u8) !void {
+        try self.instructions.appendSlice(self.allocator, &[_]u8{ @intFromEnum(opcode), arg0, arg1, arg2 });
+    }
+
+    pub fn createNoArg(self: *Self, opcode: OpCodes) !void {
+        try self.createRaw(opcode, 0x00, 0x00, 0x00);
+    }
+
+    pub fn createSingleRegImm(self: *Self, opcode: OpCodes, arg0: u8, arg1: u16) !void {
+        const imm_upper: u8 = @intCast(arg1 >> 8);
+        const imm_lower: u8 = @intCast(arg1);
+        try self.createRaw(opcode, arg0, imm_upper, imm_lower);
+    }
+
+    pub fn createSingleReg(self: *Self, opcode: OpCodes, arg0: u8) !void {
+        try self.createRaw(opcode, opcode, arg0, 0x00, 0x00);
+    }
+
+    pub fn createDoubleReg(self: *Self, opcode: OpCodes, arg0: u8, arg1: u8) !void {
+        try self.createRaw(opcode, arg0, arg1, 0x00);
+    }
+};
 
 pub const Interpreter = struct {
     trace: bool = true,
@@ -53,8 +104,18 @@ pub const Interpreter = struct {
         const arg2 = instruction[3];
 
         return switch (op_code) {
+            .MOV => {
+                self.setRegister(arg0, self.getRegister(arg1));
+                return .OK;
+            },
             .ADD => {
                 const res: Value = self.getRegister(arg1) + self.getRegister(arg2);
+                self.setRegister(arg0, res);
+                return .OK;
+            },
+            .ADD_IMMEDIATE => {
+                const imm: u16 = @as(u16, arg1) << 8 | arg2;
+                const res: Value = self.getRegister(arg0) + @as(Value, imm);
                 self.setRegister(arg0, res);
                 return .OK;
             },

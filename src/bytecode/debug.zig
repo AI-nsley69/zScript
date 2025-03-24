@@ -1,10 +1,11 @@
 const std = @import("std");
-const interpreter = @import("interpreter.zig");
+const runtime = @import("runtime.zig");
 
-fn codeToString(opcode: interpreter.OpCodes) []const u8 {
+fn codeToString(opcode: runtime.OpCodes) []const u8 {
     return switch (opcode) {
         .HALT => "halt",
         .NOP => "nop",
+        .MOV => "mov",
         .LOAD_IMMEDIATE => "li",
         .LOAD_WORD => "lw",
         .STORE_WORD => "sw",
@@ -45,7 +46,7 @@ pub const Disassembler = struct {
 
     pub fn disassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {
         const instruction = self.advance();
-        const opcode: interpreter.OpCodes = @enumFromInt(instruction[0]);
+        const opcode: runtime.OpCodes = @enumFromInt(instruction[0]);
         const name = codeToString(opcode);
 
         switch (opcode) {
@@ -61,7 +62,7 @@ pub const Disassembler = struct {
                 try writer.print("[{x:0>6}] {s} r{d}\n", .{ self.ip, name, instruction[1] });
             },
             // 2x reg arg
-            .LOAD_WORD, .STORE_WORD => {
+            .LOAD_WORD, .STORE_WORD, .MOV => {
                 try writer.print("[{x:0>6}] {s} r{d} r{d}\n", .{ self.ip, name, instruction[1], instruction[2] });
             },
             // 3x reg arg
