@@ -1,6 +1,7 @@
 const std = @import("std");
 const interpreter = @import("bytecode/interpreter.zig");
 const debug = @import("bytecode/debug.zig");
+const bytecode_test = @import("test/bytecode.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -10,14 +11,8 @@ pub fn main() !void {
     @memset(&instance.registers, 0);
     defer instance.deinit(allocator);
 
-    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(interpreter.OpCodes.LOAD_IMMEDIATE), 0x01, 0x00, 0x01 });
-
-    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(interpreter.OpCodes.LOAD_IMMEDIATE), 0x02, 0x00, 0x44 });
-
-    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(interpreter.OpCodes.ADD), 0x03, 0x01, 0x02 });
-
-    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(interpreter.OpCodes.HALT), 0x00, 0x00, 0x00 });
-
+    try bytecode_test.fib(allocator, &instance.instructions, 10);
+    std.log.debug("Instructions dump: {any}", .{instance.instructions.items});
     // instance.dump(&allocator);
     var disasm = debug.Disassembler{ .instructions = instance.instructions };
     const stdin = std.io.getStdIn();
