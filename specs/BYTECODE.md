@@ -13,8 +13,8 @@ Opcode | Instruction | Description      | Example
 `0x07` | `mul`        | Multiply         | `mul r1, r2, r3`
 `0x08` | `div`        | Divide           | `div r1, r2, r3`
 `0x09` | `jmp`        | Jump             | `jmp 0x1234`
-`0x0a` | `beq`        | Equal            | `beq r1, r2, 0x1234`
-`0x0b` | `bne`        | Not equal        | `bne r1, r2, 0x1234`
+`0x0a` | `beq`        | Equal            | `beq r1, r2, r3`
+`0x0b` | `bne`        | Not equal        | `bne r1, r2, r3`
 `0x0c` | `xor`        | Xor              | `xor r1, r2, r3`
 `0x0d` | `and`        | And              | `and r1, r2, r3`
 `0x0e` | `not`        | Not              | `not r1, r2`

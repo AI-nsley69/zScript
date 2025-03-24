@@ -16,7 +16,7 @@ pub const OpCodes = enum(u8) {
     BRANCH_IF_NOT_EQUAL,
     XOR,
     AND,
-    OR,
+    NOT,
 };
 
-pub const Value = f64;
+pub const Value = u64;

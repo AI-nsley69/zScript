@@ -18,7 +18,7 @@ fn codeToString(opcode: bytecode.OpCodes) []const u8 {
         .BRANCH_IF_NOT_EQUAL => "bne",
         .XOR => "xor",
         .AND => "and",
-        .OR => "or",
+        .NOT => "not",
     };
 }
 
@@ -61,7 +61,7 @@ pub const Dissassembler = struct {
                 try writer.print("[{x:0>6}] {s} r{d} r{d}\n", .{ self.ip, name, instruction[1], instruction[2] });
             },
             // 3x reg arg
-            .ADD, .SUBTRACT, .MULTIPLY, .DIVIDE, .BRANCH_IF_EQUAL, .BRANCH_IF_NOT_EQUAL, .XOR, .AND, .OR => {
+            .ADD, .SUBTRACT, .MULTIPLY, .DIVIDE, .BRANCH_IF_EQUAL, .BRANCH_IF_NOT_EQUAL, .XOR, .AND, .NOT => {
                 try writer.print("[{x:0>6}] {s} r{d} r{d} r{d}\n", .{ self.ip, name, instruction[1], instruction[2], instruction[3] });
             },
         }

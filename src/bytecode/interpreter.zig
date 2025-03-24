@@ -8,10 +8,10 @@ const InterpreterError = error{};
 
 pub const Interpreter = struct {
     trace: bool = true,
-    instruction_pointer: u32 = 0,
+    instruction_pointer: u64 = 0,
     instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
     constants: std.ArrayListUnmanaged(bytecode.Value) = std.ArrayListUnmanaged(bytecode.Value){},
-    registers: [256]u32 = undefined,
+    registers: [256]bytecode.Value = undefined,
 
     const Self = @This();
 
@@ -31,11 +31,11 @@ pub const Interpreter = struct {
         return instruction;
     }
 
-    fn getRegister(self: *Self, index: u8) u32 {
+    fn getRegister(self: *Self, index: u8) bytecode.Value {
         return self.registers[index];
     }
 
-    fn setRegister(self: *Self, index: u8, value: u32) void {
+    fn setRegister(self: *Self, index: u8, value: bytecode.Value) void {
         self.registers[index] = value;
     }
 
@@ -47,19 +47,46 @@ pub const Interpreter = struct {
         //     std.debug.print("{s}\n", .{debug.dissambleInstruction(alloc, &instruction, self.instruction_pointer - 4)});
         // }
         const op_code: bytecode.OpCodes = @enumFromInt(instruction[0]);
+        const arg0 = instruction[1];
+        const arg1 = instruction[2];
+        const arg2 = instruction[3];
 
         return switch (op_code) {
             .ADD => {
-                const res: u32 = self.getRegister(instruction[2]) + self.getRegister(instruction[3]);
-                self.setRegister(instruction[1], res);
-                return InterpretResult.OK;
+                const res: bytecode.Value = self.getRegister(arg1) + self.getRegister(arg2);
+                self.setRegister(arg0, res);
+                return .OK;
+            },
+            .SUBTRACT => {
+                const res: bytecode.Value = self.getRegister(arg1) - self.getRegister(arg2);
+                self.setRegister(arg0, res);
+                return .OK;
+            },
+            .MULTIPLY => {
+                const res: bytecode.Value = self.getRegister(arg1) * self.getRegister(arg2);
+                self.setRegister(arg0, res);
+                return .OK;
+            },
+            .DIVIDE => {
+                const lhs = self.getRegister(arg1);
+                const rhs = self.getRegister(arg2);
+                if (rhs == 0) return .RUNTIME_ERR;
+                const res: bytecode.Value = lhs / rhs;
+                self.setRegister(arg0, res);
+                return .OK;
             },
             .LOAD_IMMEDIATE => {
-                const imm: u16 = @as(u16, instruction[2]) << 8 | instruction[3];
-                self.setRegister(instruction[1], imm);
-                return InterpretResult.OK;
+                const imm: u16 = @as(u16, arg1) << 8 | arg2;
+                self.setRegister(arg0, imm);
+                return .OK;
             },
-            .HALT => InterpretResult.HALT,
+            .BRANCH_IF_NOT_EQUAL => {
+                const isNotEql: bool = self.getRegister(arg1) != self.getRegister(arg2);
+                if (!isNotEql) return .OK;
+                self.instruction_pointer = self.getRegister(arg0);
+                return .OK;
+            },
+            .HALT => .HALT,
             else => .COMPILE_ERR,
         };
     }

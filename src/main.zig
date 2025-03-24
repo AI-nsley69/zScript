@@ -11,33 +11,13 @@ pub fn main() !void {
     @memset(&instance.registers, 0);
     defer instance.deinit(allocator);
 
-    try instance.instructions.appendSlice(allocator, &[_]u8{
-        @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE),
-        0x01, // Register 1,
-        0x00, // ->
-        0x01, // 0x0001
-    });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE), 0x01, 0x00, 0x01 });
 
-    try instance.instructions.appendSlice(allocator, &[_]u8{
-        @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE),
-        0x02, // Register 2,
-        0x00, // ->
-        0x44, // 0x0001
-    });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.LOAD_IMMEDIATE), 0x02, 0x00, 0x44 });
 
-    try instance.instructions.appendSlice(allocator, &[_]u8{
-        @intFromEnum(bytecode.OpCodes.ADD),
-        0x03, // dst -> r3
-        0x01, // src1 -> r1
-        0x02, // src2 -> r2
-    });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.ADD), 0x03, 0x01, 0x02 });
 
-    try instance.instructions.appendSlice(allocator, &[_]u8{
-        @intFromEnum(bytecode.OpCodes.HALT),
-        0x00,
-        0x00,
-        0x00,
-    });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(bytecode.OpCodes.HALT), 0x00, 0x00, 0x00 });
 
     // instance.dump(&allocator);
     var disasm = debug.Dissassembler{ .instructions = instance.instructions };
