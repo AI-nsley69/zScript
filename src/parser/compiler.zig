@@ -24,10 +24,6 @@ const Rule = struct {
     prec: Precedence,
 };
 
-const Deferred = struct {
-    val: u8 = 0,
-};
-
 pub const Compiler = struct {
     allocator: std.mem.Allocator,
     tokens: std.ArrayListUnmanaged(scanner.Token),
@@ -37,7 +33,7 @@ pub const Compiler = struct {
     reg_ptr: u8 = 1,
     hadErr: bool = false,
     panicMode: bool = false,
-    deferred: Deferred = Deferred{},
+    deferred: u8 = 0,
 
     const Self = @This();
 
@@ -101,12 +97,12 @@ pub const Compiler = struct {
 
     fn expression(self: *Self) !u8 {
         const ret = try self.parsePrecedence(.ASSIGNMENT);
-        if (self.deferred.val == 0) return ret;
+        if (self.deferred == 0) return ret;
 
-        const op = self.deferred.val;
+        const op = self.deferred;
         try self.emitBytes(op, self.allocateRegister());
         try self.emitBytes(self.reg_ptr - 2, self.reg_ptr - 3);
-        self.deferred = Deferred{};
+        self.deferred = 0;
 
         return ret;
     }
@@ -180,7 +176,7 @@ pub const Compiler = struct {
     }
 
     fn deferEmit(self: *Self, byte: u8) void {
-        self.deferred = Deferred{ .times = 0, .val = byte };
+        self.deferred = byte;
     }
 
     fn emitBytes(self: *Self, byte1: u8, byte2: u8) !void {
