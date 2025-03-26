@@ -60,7 +60,7 @@ pub const Assembler = struct {
 
 pub const Interpreter = struct {
     trace: bool = true,
-    instruction_pointer: u64 = 0,
+    ip: u64 = 0,
     instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
     constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
     registers: [256]Value = undefined,
@@ -73,14 +73,13 @@ pub const Interpreter = struct {
     }
 
     pub fn has_next(self: *Self) bool {
-        return self.instruction_pointer < self.instructions.items.len;
+        return self.ip < self.instructions.items.len;
     }
 
-    fn advance(self: *Self) []u8 {
-        std.debug.assert(self.instruction_pointer < self.instructions.items.len);
-        const instruction = self.instructions.items[self.instruction_pointer .. self.instruction_pointer + 4];
-        self.instruction_pointer += 4;
-        return instruction;
+    fn next(self: *Self) u8 {
+        std.debug.assert(self.ip < self.instructions.items.len);
+        self.ip += 1;
+        return self.instructions.items[self.ip - 1];
     }
 
     fn getRegister(self: *Self, index: u8) Value {
@@ -94,73 +93,35 @@ pub const Interpreter = struct {
     pub fn run(self: *Self) InterpretResult {
         if (!self.has_next()) return .HALT;
 
-        const instruction: []const u8 = self.advance();
-        // if (self.trace) {
-        //     std.debug.print("{s}\n", .{debug.dissambleInstruction(alloc, &instruction, self.instruction_pointer - 4)});
-        // }
-        const op_code: OpCodes = @enumFromInt(instruction[0]);
-        const arg0 = instruction[1];
-        const arg1 = instruction[2];
-        const arg2 = instruction[3];
+        const opcode: OpCodes = @enumFromInt(self.next());
 
-        return switch (op_code) {
-            .MOV => {
-                self.setRegister(arg0, self.getRegister(arg1));
-                return .OK;
-            },
-            .ADD => {
-                const res: Value = self.getRegister(arg1) + self.getRegister(arg2);
-                self.setRegister(arg0, res);
-                return .OK;
-            },
-            .ADD_IMMEDIATE => {
-                const imm: u16 = @as(u16, arg1) << 8 | arg2;
-                const res: Value = self.getRegister(arg0) + @as(Value, imm);
-                self.setRegister(arg0, res);
-                return .OK;
-            },
-            .SUBTRACT => {
-                const res: Value = self.getRegister(arg1) - self.getRegister(arg2);
-                self.setRegister(arg0, res);
-                return .OK;
-            },
-            .MULTIPLY => {
-                const res: Value = self.getRegister(arg1) * self.getRegister(arg2);
-                self.setRegister(arg0, res);
-                return .OK;
-            },
-            .DIVIDE => {
-                const lhs = self.getRegister(arg1);
-                const rhs = self.getRegister(arg2);
-                if (rhs == 0) return .RUNTIME_ERR;
-                const res: Value = lhs / rhs;
-                self.setRegister(arg0, res);
-                return .OK;
-            },
-            .LOAD_IMMEDIATE => {
-                const imm: u16 = @as(u16, arg1) << 8 | arg2;
-                self.setRegister(arg0, imm);
-                return .OK;
-            },
-            .BRANCH_IF_NOT_EQUAL => {
-                const isNotEql: bool = self.getRegister(arg1) != self.getRegister(arg2);
-                if (!isNotEql) return .OK;
-                self.instruction_pointer = self.getRegister(arg0);
-                return .OK;
-            },
+        return switch (opcode) {
+            .MOV => return self.mov(),
+            .ADD => return self.add(),
+            .LOAD_IMMEDIATE => return self.loadConst(),
             .HALT => .HALT,
-            else => .COMPILE_ERR,
+            else => .RUNTIME_ERR,
         };
     }
 
-    // pub fn dump(self: *Self, alloc: *std.mem.Allocator) void {
-    //     const current_ip = self.instruction_pointer;
-    //     while (self.has_next()) {
-    //         var instruction: []const u8 = self.advance();
-    //         std.debug.print("{s}\n", .{debug.dissambleInstruction(alloc, &instruction, self.instruction_pointer - 4)});
-    //     }
-    //     self.instruction_pointer = current_ip;
-    // }
+    fn mov(self: *Self) InterpretResult {
+        self.setRegister(self.next(), self.getRegister(self.next()));
+        return .OK;
+    }
+
+    fn add(self: *Self) InterpretResult {
+        const dst = self.next();
+        const val: Value = self.getRegister(self.next()) + self.getRegister(self.next());
+        self.setRegister(dst, val);
+        return .OK;
+    }
+
+    fn loadConst(self: *Self) InterpretResult {
+        const dst = self.next();
+        const const_idx = self.next();
+        self.setRegister(dst, self.constants.items[const_idx]);
+        return .OK;
+    }
 };
 
 test "Simple addition bytecode" {

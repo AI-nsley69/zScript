@@ -33,10 +33,10 @@ pub const Disassembler = struct {
 
     const Self = @This();
 
-    fn advance(self: *Self) []const u8 {
+    fn next(self: *Self) u8 {
         std.debug.assert(self.ip < self.instructions.items.len);
-        const instruction = self.instructions.items[self.ip .. self.ip + 4];
-        self.ip += 4;
+        const instruction = self.instructions.items[self.ip];
+        self.ip += 1;
         return instruction;
     }
 
@@ -45,29 +45,32 @@ pub const Disassembler = struct {
     }
 
     pub fn disassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {
-        const instruction = self.advance();
-        const opcode: runtime.OpCodes = @enumFromInt(instruction[0]);
+        const opcode: runtime.OpCodes = @enumFromInt(self.next());
         const name = codeToString(opcode);
 
         switch (opcode) {
             // no arg
-            .HALT, .NOP => try writer.print("[{x:0>6}] {s}\n", .{ self.ip, name }),
+            .HALT, .NOP => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
             // 1x reg with imm arg
-            .LOAD_IMMEDIATE, .ADD_IMMEDIATE, .SUBTRACT_IMMEDIATE, .MULTIPLY_IMMEDIATE, .DIVIDE_IMMEDIATE => {
-                const imm: u16 = @as(u16, instruction[2]) << 8 | instruction[3];
-                try writer.print("[{x:0>6}] {s} r{d} #{d}\n", .{ self.ip, name, instruction[1], imm });
+            .ADD_IMMEDIATE, .SUBTRACT_IMMEDIATE, .MULTIPLY_IMMEDIATE, .DIVIDE_IMMEDIATE => {
+                const reg = self.next();
+                const imm: u16 = @as(u16, self.next()) << 8 | self.next();
+                try writer.print("[{x:0>6}] {s} r{d} #{d}\n", .{ self.ip - 1, name, reg, imm });
             },
             // 1x reg arg
             .JUMP => {
-                try writer.print("[{x:0>6}] {s} r{d}\n", .{ self.ip, name, instruction[1] });
+                try writer.print("[{x:0>6}] {s} r{d}\n", .{ self.ip - 1, name, self.next() });
+            },
+            .LOAD_IMMEDIATE => {
+                try writer.print("[{x:0>6}] {s} r{d} c{d}\n", .{ self.ip - 1, name, self.next(), self.next() });
             },
             // 2x reg arg
             .LOAD_WORD, .STORE_WORD, .MOV => {
-                try writer.print("[{x:0>6}] {s} r{d} r{d}\n", .{ self.ip, name, instruction[1], instruction[2] });
+                try writer.print("[{x:0>6}] {s} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next() });
             },
             // 3x reg arg
             .ADD, .SUBTRACT, .MULTIPLY, .DIVIDE, .BRANCH_IF_EQUAL, .BRANCH_IF_NOT_EQUAL, .XOR, .AND, .NOT, .OR => {
-                try writer.print("[{x:0>6}] {s} r{d} r{d} r{d}\n", .{ self.ip, name, instruction[1], instruction[2], instruction[3] });
+                try writer.print("[{x:0>6}] {s} r{d} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next(), self.next() });
             },
         }
     }
