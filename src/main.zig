@@ -9,7 +9,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var s = scanner.Scanner{ .source = "1 + 1" };
+    var s = scanner.Scanner{ .source = "1 + 1 + 1" };
 
     var tokens = try s.scan(allocator);
     defer tokens.deinit(allocator);

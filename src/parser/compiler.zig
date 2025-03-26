@@ -97,12 +97,6 @@ pub const Compiler = struct {
 
     fn expression(self: *Self) !u8 {
         const ret = try self.parsePrecedence(.ASSIGNMENT);
-        if (self.deferred == 0) return ret;
-
-        const op = self.deferred;
-        try self.emitBytes(op, self.allocateRegister());
-        try self.emitBytes(self.reg_ptr - 2, self.reg_ptr - 3);
-        self.deferred = 0;
 
         return ret;
     }
@@ -126,7 +120,15 @@ pub const Compiler = struct {
             infixSrc = try infixFn.?(self);
         }
 
-        return try prefixFn.?(self);
+        const prefixOut = try prefixFn.?(self);
+        if (self.deferred == 0) return prefixOut;
+
+        const op = self.deferred;
+        try self.emitBytes(op, self.allocateRegister());
+        try self.emitBytes(self.reg_ptr - 2, self.reg_ptr - 3);
+        self.deferred = 0;
+
+        return prefixOut;
     }
 
     fn getRule(tokenType: scanner.TokenType) Rule {
