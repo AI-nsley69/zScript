@@ -5,11 +5,14 @@ const runtime = @import("bytecode/runtime.zig");
 const debug = @import("bytecode/debug.zig");
 const bytecode_test = @import("test/bytecode.zig");
 
+// Test files for development
+const addition = @embedFile("test/001_addition.uc");
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var s = scanner.Scanner{ .source = "1 + 1 + 1" };
+    var s = scanner.Scanner{ .source = addition };
 
     var tokens = try s.scan(allocator);
     defer tokens.deinit(allocator);
