@@ -1,12 +1,12 @@
 const std = @import("std");
-const scanner = @import("parser/scanner.zig");
-const compiler = @import("parser/compiler.zig");
-const runtime = @import("bytecode/runtime.zig");
-const debug = @import("bytecode/debug.zig");
+const scanner = @import("scanner.zig");
+const compiler = @import("compiler.zig");
+const runtime = @import("runtime.zig");
+const debug = @import("debug.zig");
 const bytecode_test = @import("test/bytecode.zig");
 
 // Test files for development
-const addition = @embedFile("test/001_addition.uc");
+const addition = @embedFile("test/001_addition.zs");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

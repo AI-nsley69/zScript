@@ -1,6 +1,6 @@
 const std = @import("std");
 const scanner = @import("scanner.zig");
-const runtime = @import("../bytecode/runtime.zig");
+const runtime = @import("runtime.zig");
 
 const opcodes = runtime.OpCodes;
 
