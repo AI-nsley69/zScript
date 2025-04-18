@@ -1,4 +1,4 @@
-# unicorn
+# zScript
 Yet another esoteric language.
 
 ## Work In Progress
