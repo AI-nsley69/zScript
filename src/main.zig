@@ -35,7 +35,6 @@ pub fn main() !void {
     }
 
     var instance = runtime.Interpreter{ .instructions = c.instructions, .constants = c.constants };
-    @memset(&instance.registers, 0);
     defer instance.deinit(allocator);
 
     var result: runtime.InterpretResult = .OK;

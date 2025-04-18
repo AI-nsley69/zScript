@@ -28,7 +28,7 @@ pub const Compiler = struct {
     allocator: std.mem.Allocator,
     tokens: std.ArrayListUnmanaged(scanner.Token),
     instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
-    constants: std.ArrayListUnmanaged(u64) = std.ArrayListUnmanaged(u64){},
+    constants: std.ArrayListUnmanaged(runtime.Value) = std.ArrayListUnmanaged(runtime.Value){},
     ptr: usize = 0,
     reg_ptr: u8 = 1,
     hadErr: bool = false,
@@ -85,8 +85,8 @@ pub const Compiler = struct {
         return self.reg_ptr - 1;
     }
 
-    fn addConstant(self: *Self, value: u64) !u8 {
-        try self.constants.append(self.allocator, value);
+    fn addConstant(self: *Self, value: i64) !u8 {
+        try self.constants.append(self.allocator, runtime.Value{ .int = value });
         if (self.constants.items.len > std.math.maxInt(u8)) {
             self.err(self.previous(), "Out of capacity!");
             return 0;
@@ -159,7 +159,7 @@ pub const Compiler = struct {
 
     fn number(self: *Self) !u8 {
         std.debug.print("str to int: {any}\n", .{self.previous().type});
-        const value: runtime.Value = try std.fmt.parseInt(runtime.Value, self.previous().value, 10);
+        const value: i64 = try std.fmt.parseInt(i64, self.previous().value, 10);
         const dst = self.allocateRegister();
         const const_idx = try self.addConstant(value);
 

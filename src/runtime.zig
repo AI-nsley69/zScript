@@ -27,7 +27,19 @@ pub const OpCodes = enum(u8) {
 
 pub const InterpretResult = enum { OK, COMPILE_ERR, RUNTIME_ERR, HALT };
 
-pub const Value = u64;
+pub const ValueType = enum {
+    int,
+    float,
+    string,
+    boolean,
+};
+
+pub const Value = union(ValueType) {
+    int: i64,
+    float: f64,
+    string: []const u8,
+    boolean: bool,
+};
 
 pub const Assembler = struct {
     allocator: std.mem.Allocator,
@@ -111,8 +123,16 @@ pub const Interpreter = struct {
 
     fn add(self: *Self) InterpretResult {
         const dst = self.next();
-        const val: Value = self.getRegister(self.next()) + self.getRegister(self.next());
-        self.setRegister(dst, val);
+        const a = self.getRegister(self.next());
+        const b = self.getRegister(self.next());
+
+        switch (a) {
+            .int => self.setRegister(dst, Value{ .int = a.int + b.int }),
+            .float => self.setRegister(dst, Value{ .float = a.float + b.float }),
+            .string => return .RUNTIME_ERR,
+            .boolean => return .RUNTIME_ERR,
+        }
+
         return .OK;
     }
 
