@@ -1,5 +1,5 @@
 const std = @import("std");
-const interpreter = @import("../runtime.zig");
+const interpreter = @import("../vm.zig");
 
 const OpCodes = interpreter.OpCodes;
 

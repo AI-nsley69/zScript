@@ -1,4 +1,4 @@
-const runtime = @import("runtime.zig");
+const runtime = @import("vm.zig");
 const scanner = @import("scanner.zig");
 
 pub const ExpressionType = enum {

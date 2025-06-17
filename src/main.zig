@@ -1,8 +1,8 @@
 const std = @import("std");
-const scanner = @import("scanner.zig");
-const compiler = @import("compiler.zig");
-const runtime = @import("runtime.zig");
-const debug = @import("debug.zig");
+const Scanner = @import("scanner.zig");
+const Compiler = @import("compiler.zig");
+const Vm = @import("vm.zig");
+const Disassembler = @import("debug.zig");
 const bytecode_test = @import("test/bytecode.zig");
 
 // Test files for development
@@ -12,21 +12,21 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var s = scanner.Scanner{ .source = addition };
+    var s = Scanner{ .source = addition };
 
     var tokens = try s.scan(allocator);
     defer tokens.deinit(allocator);
-    std.debug.print("{any}\n", .{tokens.items});
-    var c = compiler.Compiler{ .allocator = allocator, .tokens = tokens };
+    // std.debug.print("{any}\n", .{tokens.items});
+    var c = Compiler{ .allocator = allocator, .tokens = tokens };
 
     const successful = try c.compile();
-    std.debug.print("Compiler success: {any}\n", .{successful});
-    // _ = parse;
+    // std.debug.print("Compiler success: {any}\n", .{successful});
+    _ = successful;
 
     // var assembler = runtime.Assembler{ .allocator = allocator };
     // try bytecode_test.fib(&assembler, 10);
 
-    var disasm = debug.Disassembler{ .instructions = c.instructions };
+    var disasm = Disassembler{ .instructions = c.instructions };
     const stdin = std.io.getStdIn();
     const writer = stdin.writer();
 
@@ -34,10 +34,10 @@ pub fn main() !void {
         try disasm.disassembleNextInstruction(writer);
     }
 
-    var instance = runtime.Interpreter{ .instructions = c.instructions, .constants = c.constants };
+    var instance = Vm{ .instructions = c.instructions, .constants = c.constants };
     defer instance.deinit(allocator);
 
-    var result: runtime.InterpretResult = .OK;
+    var result: Vm.InterpretResult = .OK;
     while (result == .OK) {
         result = instance.run();
     }
