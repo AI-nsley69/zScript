@@ -1,5 +1,9 @@
+const std = @import("std");
 const runtime = @import("vm.zig");
 const scanner = @import("scanner.zig");
+
+const Value = runtime.Value;
+const TokenType = scanner.TokenType;
 
 pub const ExpressionType = enum {
     expr,
@@ -8,18 +12,19 @@ pub const ExpressionType = enum {
 
 pub const ExpressionValue = union(ExpressionType) {
     expr: *Expression,
-    literal: runtime.Value,
-};
-
-pub const Operands = enum {
-    Add,
-    Subtract,
-    Divide,
-    Multiply,
+    literal: Value,
 };
 
 pub const Expression = struct {
     lhs: ExpressionValue,
-    operand: ?Operands,
+    operand: ?TokenType,
     rhs: ?ExpressionValue,
+};
+
+pub const StmtType = enum {
+    Expression,
+};
+
+pub const Stmt = union(StmtType) {
+    Expression: Expression,
 };
