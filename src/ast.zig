@@ -17,8 +17,8 @@ pub const ExpressionValue = union(ExpressionType) {
 
 pub const Expression = struct {
     lhs: ExpressionValue,
-    operand: ?TokenType,
-    rhs: ?ExpressionValue,
+    operand: ?TokenType = null,
+    rhs: ?ExpressionValue = null,
 };
 
 pub const StmtType = enum {

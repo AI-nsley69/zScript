@@ -4,24 +4,31 @@ const scanner = @import("scanner.zig");
 const vm = @import("vm.zig");
 
 const Expression = ast.Expression;
+const ExpressionValue = ast.ExpressionValue;
 const Stmt = ast.Stmt;
 const Token = scanner.Token;
 const TokenType = scanner.TokenType;
 const Value = vm.Value;
 
+pub const ParseError = error{
+    ExpressionExpected,
+};
+
 const Parser = @This();
 
 tokens: std.ArrayListUnmanaged(Token),
 current: usize = 0,
-errors: std.ArrayListUnmanaged([]const u8),
+errors: std.ArrayListUnmanaged([]const u8) = std.ArrayListUnmanaged([]const u8){},
 allocator: std.mem.Allocator = undefined,
 
 pub fn parse(self: *Parser, alloc: std.mem.Allocator) !std.MultiArrayList(Stmt) {
     self.allocator = alloc;
-    var statements = std.MultiArrayList(Stmt);
+    var statements = std.MultiArrayList(Stmt){};
     while (!self.isEof()) {
         try statements.append(self.allocator, try self.declaration());
     }
+
+    return statements;
 }
 
 fn declaration(self: *Parser) !Stmt {
@@ -67,28 +74,57 @@ fn comparison(self: *Parser) !Expression {
 }
 
 fn term(self: *Parser) !Expression {
-    const lhs = self.factor();
+    var lhs = try self.factor();
 
     // TODO: Implement for sub
-    while (self.match(TokenType.add)) {
+    while (self.match(.add)) {
+        std.log.debug("Hello! {any}", .{self.peek().type});
         const op = self.previous();
-        const rhs = self.factor();
+        var rhs = try self.factor();
 
         return Expression{
-            .lhs = lhs,
-            .operand = op,
-            .rhs = rhs,
+            .lhs = ExpressionValue{ .expr = &lhs },
+            .operand = op.type,
+            .rhs = ExpressionValue{ .expr = &rhs },
         };
     }
     return lhs;
 }
 
+fn factor(self: *Parser) !Expression {
+    const lhs = try self.unary();
+    // TODO: implement checking for terms
+    return lhs;
+}
+
+fn unary(self: *Parser) !Expression {
+    // TODO: check for ! and subtract
+
+    return self.call();
+}
+
+fn call(self: *Parser) !Expression {
+    const lhs = try self.primary();
+    // TODO: implement checking for calls
+    return lhs;
+}
+
+fn primary(self: *Parser) !Expression {
+    if (self.match(.number)) {
+        const value = try std.fmt.parseInt(i64, self.previous().value, 10);
+        return Expression{ .lhs = .{ .literal = .{ .int = value } } };
+    }
+
+    std.log.debug("Token found at primary: {any}", .{self.peek().type});
+    return ParseError.ExpressionExpected;
+}
+
 fn match(self: *Parser, token: TokenType) bool {
-    if (self.check(token)) {
+    if (!self.check(token)) {
         return false;
     }
 
-    self.advance();
+    _ = self.advance();
     return true;
 }
 
@@ -117,8 +153,8 @@ fn advance(self: *Parser) Token {
     return self.previous();
 }
 
-fn isEof(self: *Parser) void {
-    return self.peek().type == .EOF;
+fn isEof(self: *Parser) bool {
+    return self.peek().type == .eof;
 }
 
 fn peek(self: *Parser) Token {

@@ -1,5 +1,6 @@
 const std = @import("std");
 const Scanner = @import("scanner.zig");
+const Parser = @import("parser.zig");
 const Compiler = @import("compiler.zig");
 const Vm = @import("vm.zig");
 const Disassembler = @import("debug.zig");
@@ -16,35 +17,39 @@ pub fn main() !void {
 
     var tokens = try s.scan(allocator);
     defer tokens.deinit(allocator);
+
+    var p = Parser{ .tokens = tokens };
+    const parsed = try p.parse(allocator);
+    _ = parsed;
     // std.debug.print("{any}\n", .{tokens.items});
-    var c = Compiler{ .allocator = allocator, .tokens = tokens };
+    // var c = Compiler{ .allocator = allocator, .tokens = tokens };
 
-    const successful = try c.compile();
-    // std.debug.print("Compiler success: {any}\n", .{successful});
-    _ = successful;
+    // const successful = try c.compile();
+    // // std.debug.print("Compiler success: {any}\n", .{successful});
+    // _ = successful;
 
-    // var assembler = runtime.Assembler{ .allocator = allocator };
-    // try bytecode_test.fib(&assembler, 10);
+    // // var assembler = runtime.Assembler{ .allocator = allocator };
+    // // try bytecode_test.fib(&assembler, 10);
 
-    var disasm = Disassembler{ .instructions = c.instructions };
-    const stdin = std.io.getStdIn();
-    const writer = stdin.writer();
+    // var disasm = Disassembler{ .instructions = c.instructions };
+    // const stdin = std.io.getStdIn();
+    // const writer = stdin.writer();
 
-    while (disasm.has_next()) {
-        try disasm.disassembleNextInstruction(writer);
-    }
+    // while (disasm.has_next()) {
+    //     try disasm.disassembleNextInstruction(writer);
+    // }
 
-    var instance = Vm{ .instructions = c.instructions, .constants = c.constants };
-    defer instance.deinit(allocator);
+    // var instance = Vm{ .instructions = c.instructions, .constants = c.constants };
+    // defer instance.deinit(allocator);
 
-    var result: Vm.InterpretResult = .OK;
-    while (result == .OK) {
-        result = instance.run();
-    }
+    // var result: Vm.InterpretResult = .OK;
+    // while (result == .OK) {
+    //     result = instance.run();
+    // }
 
-    std.log.info("Program exited with: {any}\n", .{result});
-    std.log.debug("Register dump: {any}\n", .{instance.registers});
-    std.log.debug("Constants dump: {any}\n", .{instance.constants});
+    // std.log.info("Program exited with: {any}\n", .{result});
+    // std.log.debug("Register dump: {any}\n", .{instance.registers});
+    // std.log.debug("Constants dump: {any}\n", .{instance.constants});
 
     return;
 }
