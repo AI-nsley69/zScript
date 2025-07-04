@@ -78,7 +78,6 @@ fn term(self: *Parser) !Expression {
 
     // TODO: Implement for sub
     while (self.match(.add)) {
-        std.log.debug("Hello! {any}", .{self.peek().type});
         const op = self.previous();
         var rhs = try self.factor();
 
@@ -111,8 +110,7 @@ fn call(self: *Parser) !Expression {
 
 fn primary(self: *Parser) !Expression {
     if (self.match(.number)) {
-        const value = try std.fmt.parseInt(i64, self.previous().value, 10);
-        return Expression{ .lhs = .{ .literal = .{ .int = value } } };
+        return createLiteral(.int, self.previous().value);
     }
 
     std.log.debug("Token found at primary: {any}", .{self.peek().type});
@@ -163,4 +161,11 @@ fn peek(self: *Parser) Token {
 
 fn previous(self: *Parser) Token {
     return self.tokens.items[self.current - 1];
+}
+
+fn createLiteral(comptime T: vm.ValueType, value: []const u8) !Expression {
+    switch (T) {
+        .int => return Expression{ .lhs = .{ .literal = .{ .int = try std.fmt.parseInt(i64, value, 10) } } },
+        else => Expression{ .lhs = .{ .literal = .{ .int = 0 } } },
+    }
 }
