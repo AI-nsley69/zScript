@@ -1,5 +1,6 @@
 const std = @import("std");
 const Scanner = @import("scanner.zig");
+const Ast = @import("ast.zig");
 const Parser = @import("parser.zig");
 const Compiler = @import("compiler.zig");
 const Vm = @import("vm.zig");
@@ -20,7 +21,7 @@ pub fn main() !void {
 
     var p = Parser{ .tokens = tokens };
     const parsed = try p.parse(allocator);
-    _ = parsed;
+    std.log.debug("{any}", .{parsed.items[0]});
     // std.debug.print("{any}\n", .{tokens.items});
     // var c = Compiler{ .allocator = allocator, .tokens = tokens };
 

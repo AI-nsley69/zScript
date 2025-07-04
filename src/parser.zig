@@ -21,9 +21,9 @@ current: usize = 0,
 errors: std.ArrayListUnmanaged([]const u8) = std.ArrayListUnmanaged([]const u8){},
 allocator: std.mem.Allocator = undefined,
 
-pub fn parse(self: *Parser, alloc: std.mem.Allocator) !std.MultiArrayList(Stmt) {
+pub fn parse(self: *Parser, alloc: std.mem.Allocator) !std.ArrayListUnmanaged(Stmt) {
     self.allocator = alloc;
-    var statements = std.MultiArrayList(Stmt){};
+    var statements = std.ArrayListUnmanaged(Stmt){};
     while (!self.isEof()) {
         try statements.append(self.allocator, try self.declaration());
     }
@@ -79,12 +79,12 @@ fn term(self: *Parser) !Expression {
     // TODO: Implement for sub
     while (self.match(.add)) {
         std.log.debug("Hello! {any}", .{self.peek().type});
-        const op = self.previous();
+        const op = self.previous().type;
         var rhs = try self.factor();
 
         return Expression{
             .lhs = ExpressionValue{ .expr = &lhs },
-            .operand = op.type,
+            .operand = op,
             .rhs = ExpressionValue{ .expr = &rhs },
         };
     }
