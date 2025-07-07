@@ -24,7 +24,7 @@ pub fn main() !void {
     defer parsed.arena.deinit();
 
     var ast = Debug.Ast{ .writer = std.io.getStdOut().writer(), .allocator = allocator };
-    try ast.print(parsed.stmts.*.items[0]);
+    try ast.print(parsed);
     // std.log.debug("{any}", .{parsed.stmts.*.items[0]});
     // std.debug.print("{any}\n", .{tokens.items});
     // var c = Compiler{ .allocator = allocator, .tokens = tokens };

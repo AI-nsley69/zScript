@@ -6,6 +6,7 @@ const Scanner = @import("scanner.zig");
 const TokenType = Scanner.TokenType;
 
 const Stmt = types.Stmt;
+const Program = types.Program;
 const Expression = types.Expression;
 const Value = Vm.Value;
 
@@ -119,9 +120,17 @@ pub const Ast = struct {
     allocator: std.mem.Allocator,
     const indent_step = 2;
 
-    pub fn print(self: *Self, input: Stmt) !void {
-        try self.writer.print("{s}\n", .{"stmt:"});
-        try self.printExpression(input.expr, 2);
+    pub fn print(self: *Self, input: Program) !void {
+        const indent_msg = try self.allocator.alloc(u8, indent_step);
+        defer self.allocator.free(indent_msg);
+        @memset(indent_msg, ' ');
+
+        const list = input.stmts.*;
+        try self.writer.print("(program)\n", .{});
+        for (list.items) |stmt| {
+            try self.writer.print("{s}stmt:\n", .{indent_msg});
+            try self.printExpression(stmt.expr, indent_step * 2);
+        }
         // self.io.("{any}", .{input});
     }
 
