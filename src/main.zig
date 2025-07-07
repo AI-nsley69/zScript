@@ -23,37 +23,37 @@ pub fn main() !void {
     const parsed = try p.parse(allocator);
     defer parsed.arena.deinit();
 
-    var ast = Debug.Ast{ .writer = std.io.getStdOut().writer(), .allocator = allocator };
-    try ast.print(parsed);
+    // var ast = Debug.Ast{ .writer = std.io.getStdOut().writer(), .allocator = allocator };
+    // try ast.print(parsed);
     // std.log.debug("{any}", .{parsed.stmts.*.items[0]});
     // std.debug.print("{any}\n", .{tokens.items});
-    // var c = Compiler{ .allocator = allocator, .tokens = tokens };
+    var c = Compiler{ .allocator = allocator, .ast = parsed };
 
-    // const successful = try c.compile();
-    // // std.debug.print("Compiler success: {any}\n", .{successful});
+    const successful = try c.compile();
+    std.debug.print("Compiler success: {any}\n", .{successful});
     // _ = successful;
 
-    // // var assembler = runtime.Assembler{ .allocator = allocator };
-    // // try bytecode_test.fib(&assembler, 10);
+    // var assembler = Debug.Assembler{ .allocator = allocator };
+    // try bytecode_test.fib(&assembler, 10);
 
-    // var disasm = Disassembler{ .instructions = c.instructions };
-    // const stdin = std.io.getStdIn();
-    // const writer = stdin.writer();
+    var disasm = Debug.Disassembler{ .instructions = c.instructions };
+    const stdin = std.io.getStdIn();
+    const writer = stdin.writer();
 
-    // while (disasm.has_next()) {
-    //     try disasm.disassembleNextInstruction(writer);
-    // }
+    while (disasm.has_next()) {
+        try disasm.disassembleNextInstruction(writer);
+    }
 
-    // var instance = Vm{ .instructions = c.instructions, .constants = c.constants };
-    // defer instance.deinit(allocator);
+    var instance = Vm{ .instructions = c.instructions, .constants = c.constants };
+    defer instance.deinit(allocator);
 
-    // var result: Vm.InterpretResult = .OK;
-    // while (result == .OK) {
-    //     result = instance.run();
-    // }
+    var result: Vm.InterpretResult = .OK;
+    while (result == .OK) {
+        result = instance.run();
+    }
 
-    // std.log.info("Program exited with: {any}\n", .{result});
-    // std.log.debug("Register dump: {any}\n", .{instance.registers});
+    std.log.info("Program exited with: {any}\n", .{result});
+    std.log.debug("Register dump: {any}\n", .{instance.registers});
     // std.log.debug("Constants dump: {any}\n", .{instance.constants});
 
     return;

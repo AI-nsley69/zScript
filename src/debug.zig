@@ -36,7 +36,7 @@ fn codeToString(opcode: Vm.OpCodes) []const u8 {
     };
 }
 
-const Disassembler = struct {
+pub const Disassembler = struct {
     const Self = @This();
 
     ip: u32 = 0,
