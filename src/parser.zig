@@ -79,22 +79,26 @@ fn comparison(self: *Parser) !Expression {
 }
 
 fn term(self: *Parser) !Expression {
-    const lhs = try self.allocator.create(Expression);
-    errdefer self.allocator.destroy(lhs);
-    lhs.* = try self.factor();
+    var expr = try self.factor();
 
     // TODO: Implement for sub
     while (self.match(.add)) {
+        const lhs = try self.allocator.create(Expression);
+        errdefer self.allocator.destroy(lhs);
+        lhs.* = expr;
+
         const op = self.previous().type;
+
         const rhs = try self.allocator.create(Expression);
         errdefer self.allocator.destroy(rhs);
         rhs.* = try self.factor();
 
-        lhs.*.lhs = .{ .expr = lhs };
-        lhs.*.operand = op;
-        lhs.*.rhs = .{ .expr = rhs };
+        expr.lhs = .{ .expr = lhs };
+        expr.operand = op;
+        expr.rhs = .{ .expr = rhs };
+        // expr = lhs.*;
     }
-    return lhs.*;
+    return expr;
 }
 
 fn factor(self: *Parser) !Expression {

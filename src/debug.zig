@@ -1,6 +1,9 @@
 const std = @import("std");
 const Vm = @import("vm.zig");
 const types = @import("ast.zig");
+const Scanner = @import("scanner.zig");
+
+const TokenType = Scanner.TokenType;
 
 const Stmt = types.Stmt;
 const Expression = types.Expression;
@@ -117,7 +120,7 @@ pub const Ast = struct {
     const indent_step = 2;
 
     pub fn print(self: *Self, input: Stmt) !void {
-        try self.writer.print("{s}\n", .{"(Stmt)"});
+        try self.writer.print("{s}\n", .{"stmt:"});
         try self.printExpression(input.expr, 2);
         // self.io.("{any}", .{input});
     }
@@ -127,22 +130,22 @@ pub const Ast = struct {
         defer self.allocator.free(indent_msg);
         @memset(indent_msg, ' ');
 
-        try self.writer.print("{s}(expr)\n", .{indent_msg});
+        try self.writer.print("{s}expr:\n", .{indent_msg});
         const lhs = expr.lhs;
         switch (lhs) {
             .expr => try self.printExpression(lhs.expr.*, indent + indent_step),
-            .literal => try self.printLiteral(lhs.literal, indent),
+            .literal => try self.printLiteral(lhs.literal, indent + indent_step),
         }
 
         const op = expr.operand;
         if (op) |operand| {
-            try self.writer.print("{s} {s}\n", .{ indent_msg, @tagName(operand) });
+            try self.printOperand(operand, indent + indent_step);
         }
 
         if (expr.rhs) |rhs| {
             switch (rhs) {
                 .expr => try self.printExpression(rhs.expr.*, indent + indent_step),
-                .literal => try self.printLiteral(rhs.literal, indent),
+                .literal => try self.printLiteral(rhs.literal, indent + indent_step),
             }
         }
     }
@@ -152,12 +155,19 @@ pub const Ast = struct {
         defer self.allocator.free(indent_msg);
         @memset(indent_msg, ' ');
 
-        std.log.debug("{d}", .{indent_msg.len});
         return switch (value) {
-            .int => try self.writer.print("{s}{d}\n", .{ indent_msg, value.int }),
-            .float => try self.writer.print("{s}{d}\n", .{ indent_msg, value.float }),
-            .string => try self.writer.print("{s}{s}\n", .{ indent_msg, value.string }),
-            .boolean => try self.writer.print("{s}{any}\n", .{ indent_msg, value.boolean }),
+            .int => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.int }),
+            .float => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.float }),
+            .string => try self.writer.print("{s}lit: {s}\n", .{ indent_msg, value.string }),
+            .boolean => try self.writer.print("{s}lit: {any}\n", .{ indent_msg, value.boolean }),
         };
+    }
+
+    fn printOperand(self: *Self, op: TokenType, indent: usize) !void {
+        const indent_msg = try self.allocator.alloc(u8, indent);
+        defer self.allocator.free(indent_msg);
+        @memset(indent_msg, ' ');
+
+        try self.writer.print("{s}op: {s}\n", .{ indent_msg, @tagName(op) });
     }
 };
