@@ -18,6 +18,11 @@ pub fn build(allocator: std.mem.Allocator) !*zli.Command {
     }, run);
     try root.addFlag(ast_dump);
     try root.addFlag(asm_dump);
+    try root.addPositionalArg(.{
+        .name = "source",
+        .required = true,
+        .description = "Source file to be executed",
+    });
 
     // try root.addCommands(&.{
     //     try run.register(allocator),
@@ -34,17 +39,20 @@ fn showHelp(ctx: zli.CommandContext) !void {
 const ast_dump: Flag = .{ .name = "ast", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump AST tree" };
 const asm_dump: Flag = .{ .name = "asm", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
 
-const addition = @embedFile("../test/001_addition.zs");
-
 fn run(ctx: zli.CommandContext) !void {
     // Test files for development
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    std.log.debug("Source: {s}", .{addition});
+    const file = try std.fs.cwd().openFile(ctx.positional_args[0], .{});
 
-    var scanner = Scanner{ .source = addition };
+    const contents = try file.readToEndAlloc(allocator, 1 << 24);
+    defer allocator.free(contents);
+
+    std.log.debug("Source: {s}", .{contents});
+
+    var scanner = Scanner{ .source = contents };
 
     var tokens = try scanner.scan(allocator);
     defer tokens.deinit(allocator);

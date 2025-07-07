@@ -87,6 +87,9 @@ fn expression(self: *Compiler, target: Expression) !u8 {
 
     const opcode = switch (target.operand.?) {
         .add => opcodes.ADD,
+        .sub => opcodes.SUBTRACT,
+        .mul => opcodes.MULTIPLY,
+        .div => opcodes.DIVIDE,
         else => opcodes.NOP,
     };
 

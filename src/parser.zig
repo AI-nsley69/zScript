@@ -83,7 +83,7 @@ fn term(self: *Parser) !Expression {
     var expr = try self.factor();
 
     // TODO: Implement for sub
-    while (self.match(.add)) {
+    while (self.match(.add) or self.match(.sub)) {
         const lhs = try self.allocator.create(Expression);
         errdefer self.allocator.destroy(lhs);
         lhs.* = expr;
@@ -103,9 +103,24 @@ fn term(self: *Parser) !Expression {
 }
 
 fn factor(self: *Parser) !Expression {
-    const lhs = try self.unary();
-    // TODO: implement checking for terms
-    return lhs;
+    var expr = try self.unary();
+    while (self.match(.mul) or self.match(.div)) {
+        const lhs = try self.allocator.create(Expression);
+        errdefer self.allocator.destroy(lhs);
+        lhs.* = expr;
+
+        const op = self.previous().type;
+
+        const rhs = try self.allocator.create(Expression);
+        errdefer self.allocator.destroy(rhs);
+        rhs.* = try self.factor();
+
+        expr.lhs = .{ .expr = lhs };
+        expr.operand = op;
+        expr.rhs = .{ .expr = rhs };
+        // expr = lhs.*;
+    }
+    return expr;
 }
 
 fn unary(self: *Parser) !Expression {

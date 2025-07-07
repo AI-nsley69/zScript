@@ -81,6 +81,9 @@ pub fn run(self: *Vm) InterpretResult {
     return switch (opcode) {
         .MOV => return self.mov(),
         .ADD => return self.add(),
+        .SUBTRACT => return self.sub(),
+        .MULTIPLY => return self.mul(),
+        .DIVIDE => return self.div(),
         .LOAD_IMMEDIATE => return self.loadConst(),
         .RET => return self.ret(),
         else => .RUNTIME_ERR,
@@ -99,33 +102,86 @@ fn mov(self: *Vm) InterpretResult {
 
 fn add(self: *Vm) InterpretResult {
     const dst = self.next();
-    const a = self.getRegister(self.next());
-    const b = self.getRegister(self.next());
+    const fst = self.getRegister(self.next());
+    const snd = self.getRegister(self.next());
 
-    return switch (a) {
-        .int => self.addInt(dst, a, b),
-        .float => self.addFloat(dst, a, b),
+    return switch (fst) {
+        .int => {
+            if (snd != .int) return .RUNTIME_ERR;
+            self.setRegister(dst, .{ .int = fst.int + snd.int });
+            return .OK;
+        },
+        .float => {
+            if (snd != .float) return .RUNTIME_ERR;
+            self.setRegister(dst, .{ .float = fst.float + snd.float });
+            return .OK;
+        },
         .string => return .RUNTIME_ERR,
         .boolean => return .RUNTIME_ERR,
     };
 }
 
-inline fn addInt(self: *Vm, dst: u8, fst: Value, snd: Value) InterpretResult {
-    if (snd != .int) {
-        return .RUNTIME_ERR;
-    }
-    const res = Value{ .int = fst.int + snd.int };
-    self.setRegister(dst, res);
-    return .OK;
+fn sub(self: *Vm) InterpretResult {
+    const dst = self.next();
+    const fst = self.getRegister(self.next());
+    const snd = self.getRegister(self.next());
+
+    return switch (fst) {
+        .int => {
+            if (snd != .int) return .RUNTIME_ERR;
+            self.setRegister(dst, .{ .int = fst.int - snd.int });
+            return .OK;
+        },
+        .float => {
+            if (snd != .float) return .RUNTIME_ERR;
+            self.setRegister(dst, .{ .float = fst.float - snd.float });
+            return .OK;
+        },
+        .string => return .RUNTIME_ERR,
+        .boolean => return .RUNTIME_ERR,
+    };
 }
 
-inline fn addFloat(self: *Vm, dst: u8, fst: Value, snd: Value) InterpretResult {
-    if (snd != .float) {
-        return .RUNTIME_ERR;
-    }
-    const res = Value{ .float = fst.float + snd.float };
-    self.setRegister(dst, res);
-    return .OK;
+fn mul(self: *Vm) InterpretResult {
+    const dst = self.next();
+    const fst = self.getRegister(self.next());
+    const snd = self.getRegister(self.next());
+
+    return switch (fst) {
+        .int => {
+            if (snd != .int) return .RUNTIME_ERR;
+            self.setRegister(dst, .{ .int = fst.int * snd.int });
+            return .OK;
+        },
+        .float => {
+            if (snd != .float) return .RUNTIME_ERR;
+            self.setRegister(dst, .{ .float = fst.float * snd.float });
+            return .OK;
+        },
+        .string => return .RUNTIME_ERR,
+        .boolean => return .RUNTIME_ERR,
+    };
+}
+
+fn div(self: *Vm) InterpretResult {
+    const dst = self.next();
+    const fst = self.getRegister(self.next());
+    const snd = self.getRegister(self.next());
+
+    return switch (fst) {
+        .int => {
+            if (snd != .int) return .RUNTIME_ERR;
+            self.setRegister(dst, .{ .int = @divExact(fst.int, snd.int) });
+            return .OK;
+        },
+        .float => {
+            if (snd != .float) return .RUNTIME_ERR;
+            self.setRegister(dst, .{ .float = @divExact(fst.float, snd.float) });
+            return .OK;
+        },
+        .string => return .RUNTIME_ERR,
+        .boolean => return .RUNTIME_ERR,
+    };
 }
 
 fn loadConst(self: *Vm) InterpretResult {

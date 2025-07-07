@@ -1,6 +1,14 @@
 const std = @import("std");
 
-pub const TokenType = enum { number, add, eof, err };
+pub const TokenType = enum {
+    number,
+    add,
+    sub,
+    mul,
+    div,
+    eof,
+    err,
+};
 
 pub const Token = struct {
     type: TokenType,
@@ -67,6 +75,9 @@ fn scanToken(self: *Scanner) Token {
     switch (c) {
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => return self.number(),
         '+' => return self.makeToken(.add),
+        '-' => return self.makeToken(.sub),
+        '*' => return self.makeToken(.mul),
+        '/' => return self.makeToken(.div),
         else => return self.makeError("Unrecognized token: " ++ [_]u8{c}),
     }
 }
