@@ -6,6 +6,7 @@ const Ast = @import("ast.zig");
 const Program = Ast.Program;
 const Stmt = Ast.Stmt;
 const Expression = Ast.Expression;
+const ExpressionValue = Ast.ExpressionValue;
 
 const Compiler = @This();
 
@@ -25,13 +26,13 @@ pub fn compile(self: *Compiler) !bool {
     // try self.advance();
     // _ = try self.expression();
 
-    const statements = self.ast.stmts.*.items;
+    const statements = self.ast.stmts.items;
     var final_dst: u8 = 0;
     for (statements) |elem| {
         final_dst = try self.statement(elem);
     }
 
-    std.log.debug("Final dst: {}", .{final_dst});
+    // std.log.debug("Final dst: {}", .{final_dst});
 
     // Emit halt instruction at the end
     try self.emitBytes(@intFromEnum(opcodes.RET), final_dst);
@@ -44,7 +45,7 @@ fn statement(self: *Compiler, target: Stmt) !u8 {
 }
 
 fn expression(self: *Compiler, target: Expression) !u8 {
-    const lhs = target.lhs;
+    const lhs: ExpressionValue = target.lhs;
     const lhs_dst = try switch (lhs) {
         .expr => self.expression(lhs.expr.*),
         .literal => {

@@ -27,12 +27,13 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator) !Program {
     self.allocator = arena.allocator();
     var statements = std.ArrayListUnmanaged(Stmt){};
     while (!self.isEof()) {
-        try statements.append(alloc, try self.declaration());
+        const stmt = try self.declaration();
+        try statements.append(self.allocator, stmt);
     }
 
     return .{
         .arena = arena,
-        .stmts = &statements,
+        .stmts = statements,
     };
 }
 

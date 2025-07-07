@@ -40,6 +40,10 @@
             .url = "git+https://github.com/Hejsil/mecha.git#ae7de9e42531bbb36d501bde6c42cca368c7686c",
             .hash = "mecha-0.10.0-dVGaSElaAQBycIyj1XNpJTJLt6gMWXgB3urMvnpCD1ON",
         },
+        .zli = .{
+            .url = "https://github.com/xcaeser/zli/archive/v3.7.1.tar.gz",
+            .hash = "zli-3.7.1-LeUjpgU6AQBNLZY9yZNnldh1YGHAGVx6YBjoPjJhqQIz",
+        },
     },
     .paths = .{
         "build.zig",

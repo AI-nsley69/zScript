@@ -131,9 +131,9 @@ pub const Ast = struct {
         defer self.allocator.free(indent_msg);
         @memset(indent_msg, ' ');
 
-        const list = input.stmts.*;
+        const list = input.stmts.items;
         try self.writer.print("(program)\n", .{});
-        for (list.items) |stmt| {
+        for (list) |stmt| {
             try self.writer.print("{s}stmt:\n", .{indent_msg});
             try self.printExpression(stmt.expr, indent_step * 2);
         }

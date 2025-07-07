@@ -30,6 +30,6 @@ pub const Stmt = union(StmtType) {
 };
 
 pub const Program = struct {
-    stmts: *std.ArrayListUnmanaged(Stmt),
+    stmts: std.ArrayListUnmanaged(Stmt),
     arena: std.heap.ArenaAllocator,
 };

@@ -18,12 +18,9 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
-    const mecha = b.dependency("mecha", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const mecha_mod = mecha.module("mecha");
-    exe.root_module.addImport("mecha", mecha_mod);
+    // Zli
+    const zli_dep = b.dependency("zli", .{ .target = target });
+    exe.root_module.addImport("zli", zli_dep.module("zli"));
 
     b.installArtifact(exe);
 
