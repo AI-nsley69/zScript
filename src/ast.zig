@@ -22,9 +22,14 @@ pub const Expression = struct {
 };
 
 pub const StmtType = enum {
-    Expression,
+    expr,
 };
 
 pub const Stmt = union(StmtType) {
-    Expression: Expression,
+    expr: Expression,
+};
+
+pub const Program = struct {
+    stmts: *std.ArrayListUnmanaged(Stmt),
+    arena: std.heap.ArenaAllocator,
 };

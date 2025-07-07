@@ -6,6 +6,7 @@ const vm = @import("vm.zig");
 const Expression = ast.Expression;
 const ExpressionValue = ast.ExpressionValue;
 const Stmt = ast.Stmt;
+const Program = ast.Program;
 const Token = scanner.Token;
 const TokenType = scanner.TokenType;
 const Value = vm.Value;
@@ -21,14 +22,18 @@ current: usize = 0,
 errors: std.ArrayListUnmanaged([]const u8) = std.ArrayListUnmanaged([]const u8){},
 allocator: std.mem.Allocator = undefined,
 
-pub fn parse(self: *Parser, alloc: std.mem.Allocator) !std.ArrayListUnmanaged(Stmt) {
-    self.allocator = alloc;
+pub fn parse(self: *Parser, alloc: std.mem.Allocator) !Program {
+    var arena = std.heap.ArenaAllocator.init(alloc);
+    self.allocator = arena.allocator();
     var statements = std.ArrayListUnmanaged(Stmt){};
     while (!self.isEof()) {
-        try statements.append(self.allocator, try self.declaration());
+        try statements.append(alloc, try self.declaration());
     }
 
-    return statements;
+    return .{
+        .arena = arena,
+        .stmts = &statements,
+    };
 }
 
 fn declaration(self: *Parser) !Stmt {
@@ -36,7 +41,7 @@ fn declaration(self: *Parser) !Stmt {
 }
 
 fn statement(self: *Parser) !Stmt {
-    return Stmt{ .Expression = try self.expression() };
+    return .{ .expr = try self.expression() };
 }
 
 fn expression(self: *Parser) !Expression {
@@ -74,21 +79,22 @@ fn comparison(self: *Parser) !Expression {
 }
 
 fn term(self: *Parser) !Expression {
-    var lhs = try self.factor();
+    const lhs = try self.allocator.create(Expression);
+    errdefer self.allocator.destroy(lhs);
+    lhs.* = try self.factor();
 
     // TODO: Implement for sub
     while (self.match(.add)) {
-        std.log.debug("Hello! {any}", .{self.peek().type});
         const op = self.previous().type;
-        var rhs = try self.factor();
+        const rhs = try self.allocator.create(Expression);
+        errdefer self.allocator.destroy(rhs);
+        rhs.* = try self.factor();
 
-        return Expression{
-            .lhs = ExpressionValue{ .expr = &lhs },
-            .operand = op,
-            .rhs = ExpressionValue{ .expr = &rhs },
-        };
+        lhs.*.lhs = .{ .expr = lhs };
+        lhs.*.operand = op;
+        lhs.*.rhs = .{ .expr = rhs };
     }
-    return lhs;
+    return lhs.*;
 }
 
 fn factor(self: *Parser) !Expression {
@@ -112,7 +118,7 @@ fn call(self: *Parser) !Expression {
 fn primary(self: *Parser) !Expression {
     if (self.match(.number)) {
         const value = try std.fmt.parseInt(i64, self.previous().value, 10);
-        return Expression{ .lhs = .{ .literal = .{ .int = value } } };
+        return .{ .lhs = .{ .literal = .{ .int = value } } };
     }
 
     std.log.debug("Token found at primary: {any}", .{self.peek().type});

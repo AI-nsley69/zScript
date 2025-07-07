@@ -118,7 +118,7 @@ pub const Ast = struct {
 
     pub fn print(self: *Self, input: Stmt) !void {
         try self.writer.print("{s}\n", .{"(Stmt)"});
-        try self.printExpression(input.Expression, 2);
+        try self.printExpression(input.expr, 2);
         // self.io.("{any}", .{input});
     }
 
