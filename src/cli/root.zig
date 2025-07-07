@@ -32,7 +32,7 @@ fn showHelp(ctx: zli.CommandContext) !void {
 }
 
 const ast_dump: Flag = .{ .name = "ast", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump AST tree" };
-const asm_dump: Flag = .{ .name = "disasm", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Disassemble instructions" };
+const asm_dump: Flag = .{ .name = "asm", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
 
 const addition = @embedFile("../test/001_addition.zs");
 
@@ -68,7 +68,7 @@ fn run(ctx: zli.CommandContext) !void {
     }
     // std.debug.print("Compiler success: {any}\n", .{successful});
 
-    if (ctx.flag("disasm", bool)) {
+    if (ctx.flag("asm", bool)) {
         var disasm = Debug.Disassembler{ .instructions = compiler.instructions };
         try disasm.disassemble(writer);
     }
