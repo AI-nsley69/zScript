@@ -12,7 +12,7 @@ const Value = Vm.Value;
 
 fn codeToString(opcode: Vm.OpCodes) []const u8 {
     return switch (opcode) {
-        .HALT => "halt",
+        .RET => "ret",
         .NOP => "nop",
         .MOV => "mov",
         .LOAD_IMMEDIATE => "li",
@@ -59,7 +59,7 @@ pub const Disassembler = struct {
 
         switch (opcode) {
             // no arg
-            .HALT, .NOP => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
+            .NOP => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
             // 1x reg with imm arg
             .ADD_IMMEDIATE, .SUBTRACT_IMMEDIATE, .MULTIPLY_IMMEDIATE, .DIVIDE_IMMEDIATE => {
                 const reg = self.next();
@@ -67,7 +67,7 @@ pub const Disassembler = struct {
                 try writer.print("[{x:0>6}] {s} r{d} #{d}\n", .{ self.ip - 1, name, reg, imm });
             },
             // 1x reg arg
-            .JUMP => {
+            .JUMP, .RET => {
                 try writer.print("[{x:0>6}] {s} r{d}\n", .{ self.ip - 1, name, self.next() });
             },
             .LOAD_IMMEDIATE => {
@@ -81,6 +81,12 @@ pub const Disassembler = struct {
             .ADD, .SUBTRACT, .MULTIPLY, .DIVIDE, .BRANCH_IF_EQUAL, .BRANCH_IF_NOT_EQUAL, .XOR, .AND, .NOT, .OR => {
                 try writer.print("[{x:0>6}] {s} r{d} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next(), self.next() });
             },
+        }
+    }
+
+    pub fn disassemble(self: *Disassembler, writer: std.fs.File.Writer) !void {
+        while (self.has_next()) {
+            try self.disassembleNextInstruction(writer);
         }
     }
 };

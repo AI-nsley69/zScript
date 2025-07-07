@@ -26,12 +26,15 @@ pub fn compile(self: *Compiler) !bool {
     // _ = try self.expression();
 
     const statements = self.ast.stmts.*.items;
+    var final_dst: u8 = 0;
     for (statements) |elem| {
-        _ = try self.statement(elem);
+        final_dst = try self.statement(elem);
     }
 
+    std.log.debug("Final dst: {}", .{final_dst});
+
     // Emit halt instruction at the end
-    try self.emitByte(@intFromEnum(opcodes.HALT));
+    try self.emitBytes(@intFromEnum(opcodes.RET), final_dst);
     // try self.consume(.eof, "Expect end of expression.");
     return !self.hadErr;
 }

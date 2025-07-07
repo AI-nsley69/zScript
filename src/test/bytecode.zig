@@ -1,9 +1,9 @@
 const std = @import("std");
-const interpreter = @import("../vm.zig");
+const Vm = @import("../vm.zig");
 
-const OpCodes = interpreter.OpCodes;
+const OpCodes = Vm.OpCodes;
 
-pub fn fib(assembler: *interpreter.Assembler, n: u8) !void {
+pub fn fib(assembler: *Vm.Assembler, n: u8) !void {
     // Setup
     try assembler.createSingleRegImm(.LOAD_IMMEDIATE, 0x01, 0x0000); // a
     try assembler.createSingleRegImm(.LOAD_IMMEDIATE, 0x02, 0x0001); // b
@@ -18,5 +18,5 @@ pub fn fib(assembler: *interpreter.Assembler, n: u8) !void {
     try assembler.createDoubleReg(.MOV, 0x01, 0x03); // Copy tmp to a
     try assembler.createRaw(.BRANCH_IF_NOT_EQUAL, 0x07, 0x04, 0x06); // Branch if value not equal
     // Halt program
-    try assembler.createNoArg(.HALT); // Halt execution
+    try assembler.createNoArg(.RET); // Halt execution
 }

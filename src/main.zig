@@ -14,6 +14,8 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
+    std.log.debug("Source: {s}", .{addition});
+
     var s = Scanner{ .source = addition };
 
     var tokens = try s.scan(allocator);
@@ -25,24 +27,17 @@ pub fn main() !void {
 
     // var ast = Debug.Ast{ .writer = std.io.getStdOut().writer(), .allocator = allocator };
     // try ast.print(parsed);
-    // std.log.debug("{any}", .{parsed.stmts.*.items[0]});
-    // std.debug.print("{any}\n", .{tokens.items});
+
     var c = Compiler{ .allocator = allocator, .ast = parsed };
 
     const successful = try c.compile();
     std.debug.print("Compiler success: {any}\n", .{successful});
-    // _ = successful;
-
-    // var assembler = Debug.Assembler{ .allocator = allocator };
-    // try bytecode_test.fib(&assembler, 10);
 
     var disasm = Debug.Disassembler{ .instructions = c.instructions };
-    const stdin = std.io.getStdIn();
-    const writer = stdin.writer();
+    const stdout = std.io.getStdOut();
+    const writer = stdout.writer();
 
-    while (disasm.has_next()) {
-        try disasm.disassembleNextInstruction(writer);
-    }
+    try disasm.disassemble(writer);
 
     var instance = Vm{ .instructions = c.instructions, .constants = c.constants };
     defer instance.deinit(allocator);
@@ -53,7 +48,8 @@ pub fn main() !void {
     }
 
     std.log.info("Program exited with: {any}\n", .{result});
-    std.log.debug("Register dump: {any}\n", .{instance.registers});
+    if (instance.return_value) |ret_val| std.log.info("Return value: {}", .{ret_val});
+    // std.log.debug("Register dump: {any}\n", .{instance.registers});
     // std.log.debug("Constants dump: {any}\n", .{instance.constants});
 
     return;

@@ -2,7 +2,7 @@ const std = @import("std");
 const debug = @import("debug.zig");
 
 pub const OpCodes = enum(u8) {
-    HALT,
+    RET,
     NOP,
     MOV,
     LOAD_IMMEDIATE,
@@ -48,6 +48,7 @@ ip: u64 = 0,
 instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
 constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 registers: [256]Value = undefined,
+return_value: ?Value = null,
 
 pub fn deinit(self: *Vm, alloc: std.mem.Allocator) void {
     self.instructions.deinit(alloc);
@@ -81,9 +82,14 @@ pub fn run(self: *Vm) InterpretResult {
         .MOV => return self.mov(),
         .ADD => return self.add(),
         .LOAD_IMMEDIATE => return self.loadConst(),
-        .HALT => .HALT,
+        .RET => return self.ret(),
         else => .RUNTIME_ERR,
     };
+}
+
+fn ret(self: *Vm) InterpretResult {
+    self.return_value = self.getRegister(self.next());
+    return .HALT;
 }
 
 fn mov(self: *Vm) InterpretResult {
@@ -140,7 +146,7 @@ test "Simple addition bytecode" {
     try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(OpCodes.LOAD_IMMEDIATE), 0x01, 0x00, 0x01 });
     try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(OpCodes.LOAD_IMMEDIATE), 0x02, 0x00, 0x02 });
     try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(OpCodes.ADD), 0x03, 0x01, 0x02 });
-    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(OpCodes.HALT), 0x00, 0x00, 0x00 });
+    try instance.instructions.appendSlice(allocator, &[_]u8{ @intFromEnum(OpCodes.RET), 0x00, 0x00, 0x00 });
 
     // Post load imm in r1
     var result = instance.run();
@@ -156,5 +162,5 @@ test "Simple addition bytecode" {
     try std.testing.expect(instance.registers[3] == 0x03);
     // Post halt
     result = instance.run();
-    try std.testing.expect(result == .HALT);
+    try std.testing.expect(result == .RET);
 }
