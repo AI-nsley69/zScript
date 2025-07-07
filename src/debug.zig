@@ -1,7 +1,12 @@
 const std = @import("std");
-const runtime = @import("vm.zig");
+const Vm = @import("vm.zig");
+const types = @import("ast.zig");
 
-fn codeToString(opcode: runtime.OpCodes) []const u8 {
+const Stmt = types.Stmt;
+const Expression = types.Expression;
+const Value = Vm.Value;
+
+fn codeToString(opcode: Vm.OpCodes) []const u8 {
     return switch (opcode) {
         .HALT => "halt",
         .NOP => "nop",
@@ -27,52 +32,54 @@ fn codeToString(opcode: runtime.OpCodes) []const u8 {
     };
 }
 
-const Disassembler = @This();
+const Disassembler = struct {
+    const Self = @This();
 
-ip: u32 = 0,
-instructions: std.ArrayListUnmanaged(u8),
+    ip: u32 = 0,
+    instructions: std.ArrayListUnmanaged(u8),
 
-fn next(self: *Disassembler) u8 {
-    std.debug.assert(self.ip < self.instructions.items.len);
-    const instruction = self.instructions.items[self.ip];
-    self.ip += 1;
-    return instruction;
-}
-
-pub fn has_next(self: *Disassembler) bool {
-    return self.ip < self.instructions.items.len;
-}
-
-pub fn disassembleNextInstruction(self: *Disassembler, writer: std.fs.File.Writer) !void {
-    const opcode: runtime.OpCodes = @enumFromInt(self.next());
-    const name = codeToString(opcode);
-
-    switch (opcode) {
-        // no arg
-        .HALT, .NOP => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
-        // 1x reg with imm arg
-        .ADD_IMMEDIATE, .SUBTRACT_IMMEDIATE, .MULTIPLY_IMMEDIATE, .DIVIDE_IMMEDIATE => {
-            const reg = self.next();
-            const imm: u16 = @as(u16, self.next()) << 8 | self.next();
-            try writer.print("[{x:0>6}] {s} r{d} #{d}\n", .{ self.ip - 1, name, reg, imm });
-        },
-        // 1x reg arg
-        .JUMP => {
-            try writer.print("[{x:0>6}] {s} r{d}\n", .{ self.ip - 1, name, self.next() });
-        },
-        .LOAD_IMMEDIATE => {
-            try writer.print("[{x:0>6}] {s} r{d} c{d}\n", .{ self.ip - 1, name, self.next(), self.next() });
-        },
-        // 2x reg arg
-        .LOAD_WORD, .STORE_WORD, .MOV => {
-            try writer.print("[{x:0>6}] {s} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next() });
-        },
-        // 3x reg arg
-        .ADD, .SUBTRACT, .MULTIPLY, .DIVIDE, .BRANCH_IF_EQUAL, .BRANCH_IF_NOT_EQUAL, .XOR, .AND, .NOT, .OR => {
-            try writer.print("[{x:0>6}] {s} r{d} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next(), self.next() });
-        },
+    fn next(self: *Self) u8 {
+        std.debug.assert(self.ip < self.instructions.items.len);
+        const instruction = self.instructions.items[self.ip];
+        self.ip += 1;
+        return instruction;
     }
-}
+
+    pub fn has_next(self: *Self) bool {
+        return self.ip < self.instructions.items.len;
+    }
+
+    pub fn disassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {
+        const opcode: Vm.OpCodes = @enumFromInt(self.next());
+        const name = codeToString(opcode);
+
+        switch (opcode) {
+            // no arg
+            .HALT, .NOP => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
+            // 1x reg with imm arg
+            .ADD_IMMEDIATE, .SUBTRACT_IMMEDIATE, .MULTIPLY_IMMEDIATE, .DIVIDE_IMMEDIATE => {
+                const reg = self.next();
+                const imm: u16 = @as(u16, self.next()) << 8 | self.next();
+                try writer.print("[{x:0>6}] {s} r{d} #{d}\n", .{ self.ip - 1, name, reg, imm });
+            },
+            // 1x reg arg
+            .JUMP => {
+                try writer.print("[{x:0>6}] {s} r{d}\n", .{ self.ip - 1, name, self.next() });
+            },
+            .LOAD_IMMEDIATE => {
+                try writer.print("[{x:0>6}] {s} r{d} c{d}\n", .{ self.ip - 1, name, self.next(), self.next() });
+            },
+            // 2x reg arg
+            .LOAD_WORD, .STORE_WORD, .MOV => {
+                try writer.print("[{x:0>6}] {s} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next() });
+            },
+            // 3x reg arg
+            .ADD, .SUBTRACT, .MULTIPLY, .DIVIDE, .BRANCH_IF_EQUAL, .BRANCH_IF_NOT_EQUAL, .XOR, .AND, .NOT, .OR => {
+                try writer.print("[{x:0>6}] {s} r{d} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next(), self.next() });
+            },
+        }
+    }
+};
 
 // pub const Assembler = struct {
 //     allocator: std.mem.Allocator,
@@ -102,3 +109,55 @@ pub fn disassembleNextInstruction(self: *Disassembler, writer: std.fs.File.Write
 //         try self.createRaw(opcode, arg0, arg1, 0x00);
 //     }
 // };
+
+pub const Ast = struct {
+    const Self = @This();
+    writer: std.fs.File.Writer,
+    allocator: std.mem.Allocator,
+    const indent_step = 2;
+
+    pub fn print(self: *Self, input: Stmt) !void {
+        try self.writer.print("{s}\n", .{"(Stmt)"});
+        try self.printExpression(input.Expression, 2);
+        // self.io.("{any}", .{input});
+    }
+
+    fn printExpression(self: *Self, expr: Expression, indent: usize) !void {
+        const indent_msg = try self.allocator.alloc(u8, indent);
+        defer self.allocator.free(indent_msg);
+        @memset(indent_msg, ' ');
+
+        try self.writer.print("{s}(expr)\n", .{indent_msg});
+        const lhs = expr.lhs;
+        switch (lhs) {
+            .expr => try self.printExpression(lhs.expr.*, indent + indent_step),
+            .literal => try self.printLiteral(lhs.literal, indent),
+        }
+
+        const op = expr.operand;
+        if (op) |operand| {
+            try self.writer.print("{s} {s}\n", .{ indent_msg, @tagName(operand) });
+        }
+
+        if (expr.rhs) |rhs| {
+            switch (rhs) {
+                .expr => try self.printExpression(rhs.expr.*, indent + indent_step),
+                .literal => try self.printLiteral(rhs.literal, indent),
+            }
+        }
+    }
+
+    fn printLiteral(self: *Self, value: Value, indent: usize) !void {
+        const indent_msg = try self.allocator.alloc(u8, indent);
+        defer self.allocator.free(indent_msg);
+        @memset(indent_msg, ' ');
+
+        std.log.debug("{d}", .{indent_msg.len});
+        return switch (value) {
+            .int => try self.writer.print("{s}{d}\n", .{ indent_msg, value.int }),
+            .float => try self.writer.print("{s}{d}\n", .{ indent_msg, value.float }),
+            .string => try self.writer.print("{s}{s}\n", .{ indent_msg, value.string }),
+            .boolean => try self.writer.print("{s}{any}\n", .{ indent_msg, value.boolean }),
+        };
+    }
+};
