@@ -19,8 +19,11 @@ pub fn build(b: *std.Build) void {
     });
 
     // Zli
-    const zli_dep = b.dependency("zli", .{ .target = target });
+    const zli_dep = b.dependency("zli", .{ .target = target, .optimize = optimize });
     exe.root_module.addImport("zli", zli_dep.module("zli"));
+
+    const ansi_term_dep = b.dependency("ansi_term", .{ .target = target, .optimize = optimize });
+    exe.root_module.addImport("ansi_term", ansi_term_dep.module("ansi_term"));
 
     b.installArtifact(exe);
 

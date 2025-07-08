@@ -1,7 +1,10 @@
 const std = @import("std");
 const zli = @import("zli");
-
 const Flag = zli.Flag;
+
+const ansi = @import("ansi_term");
+const Style = ansi.style.Style;
+const format = ansi.format;
 
 const Scanner = @import("../scanner.zig");
 const Ast = @import("../ast.zig");
@@ -40,21 +43,32 @@ const ast_dump: Flag = .{ .name = "ast", .type = .Bool, .default_value = .{ .Boo
 const asm_dump: Flag = .{ .name = "asm", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
 
 fn printErr(allocator: std.mem.Allocator, writer: std.fs.File.Writer, token: Scanner.Token, src_file: []const u8, msg: []const u8) !void {
-    const err_msg = try std.fmt.allocPrint(allocator, "{s}:{d}:{d}: error: {s}\n", .{ src_file, token.line, token.pos, msg });
-    defer allocator.free(err_msg);
-    try writer.writeAll(err_msg);
-
+    // Print source file with line and position
+    try format.updateStyle(writer, .{ .font_style = .{ .bold = true } }, null);
+    const src_msg = try std.fmt.allocPrint(allocator, "{s}:{d}:{d}: ", .{ src_file, token.line, token.pos });
+    defer allocator.free(src_msg);
+    try writer.writeAll(src_msg);
+    // Print the "error" label
+    try format.updateStyle(writer, .{ .font_style = .{ .bold = true }, .foreground = .Red }, null);
+    try writer.writeAll("error: ");
+    // Print the message itself
+    try format.updateStyle(writer, .{ .font_style = .{ .bold = true } }, null);
+    try writer.writeAll(msg);
+    try writer.writeAll("\n");
+    try format.resetStyle(writer);
+    // Print the source line indented
     const source_aligned = try std.fmt.allocPrint(allocator, "  {s}\n", .{token.line_source});
     defer allocator.free(source_aligned);
     try writer.writeAll(source_aligned);
-
+    // Print a pointer to where the error occured
     const ptr_msg = try allocator.alloc(u8, 2 + token.line_source.len + 1);
     defer allocator.free(ptr_msg);
     @memset(ptr_msg, ' ');
-    // std.debug.print("{s}\n", .{token.line_source});
     ptr_msg[token.pos + 1] = '^';
     ptr_msg[ptr_msg.len - 1] = '\n';
+    try format.updateStyle(writer, .{ .foreground = .Green }, null);
     try writer.writeAll(ptr_msg);
+    try format.resetStyle(writer);
 }
 
 fn run(ctx: zli.CommandContext) !void {
