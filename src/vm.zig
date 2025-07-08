@@ -3,6 +3,7 @@ const debug = @import("debug.zig");
 
 pub const OpCodes = enum(u8) {
     RET,
+    HALT,
     NOP,
     MOV,
     LOAD_IMMEDIATE,
@@ -25,7 +26,12 @@ pub const OpCodes = enum(u8) {
     OR,
 };
 
-pub const InterpretResult = enum { OK, COMPILE_ERR, RUNTIME_ERR, HALT };
+// pub const InterpretResult = enum { OK, COMPILE_ERR, RUNTIME_ERR, HALT };
+
+pub const Error = error{
+    MismatchedTypes,
+    Unknown,
+};
 
 pub const ValueType = enum {
     int,
@@ -55,12 +61,12 @@ pub fn deinit(self: *Vm, alloc: std.mem.Allocator) void {
     self.constants.deinit(alloc);
 }
 
-pub fn has_next(self: *Vm) bool {
+fn has_next(self: *Vm) bool {
     return self.ip < self.instructions.items.len;
 }
 
 fn next(self: *Vm) u8 {
-    std.debug.assert(self.ip < self.instructions.items.len);
+    if (self.ip < self.instructions.items.len) return @intFromEnum(OpCodes.HALT);
     self.ip += 1;
     return self.instructions.items[self.ip - 1];
 }
@@ -77,148 +83,131 @@ fn setRegister(self: *Vm, index: u8, value: Value) void {
     self.registers[index] = value;
 }
 
-pub fn run(self: *Vm) InterpretResult {
-    if (!self.has_next()) return .HALT;
+pub fn run(self: *Vm) !void {
+    if (!self.has_next()) return;
 
     const opcode: OpCodes = self.nextOp();
 
     return blk: switch (opcode) {
         .MOV => {
-            const res = self.mov();
-            if (res != .OK) return res;
+            try self.mov();
             continue :blk self.nextOp();
         },
         .ADD => {
-            const res = self.add();
-            if (res != .OK) return res;
+            try self.add();
             continue :blk self.nextOp();
         },
         .SUBTRACT => {
-            const res = self.sub();
-            if (res != .OK) return res;
+            try self.sub();
             continue :blk self.nextOp();
         },
         .MULTIPLY => {
-            const res = self.mul();
-            if (res != .OK) return res;
+            try self.mul();
             continue :blk self.nextOp();
         },
         .DIVIDE => {
-            const res = self.div();
-            if (res != .OK) return res;
+            try self.div();
             continue :blk self.nextOp();
         },
         .LOAD_IMMEDIATE => {
-            const res = self.loadConst();
-            if (res != .OK) return res;
+            try self.loadConst();
             continue :blk self.nextOp();
         },
         .RET => {
-            const res = self.ret();
-            if (res != .OK) return res;
+            try self.ret();
             continue :blk self.nextOp();
         },
-        else => return .RUNTIME_ERR,
+        .HALT => return,
+        else => return Error.Unknown,
     };
 }
 
-fn ret(self: *Vm) InterpretResult {
+fn ret(self: *Vm) !void {
     self.return_value = self.getRegister(self.next());
-    return .HALT;
 }
 
-fn mov(self: *Vm) InterpretResult {
+fn mov(self: *Vm) !void {
     self.setRegister(self.next(), self.getRegister(self.next()));
-    return .OK;
 }
 
-fn add(self: *Vm) InterpretResult {
+fn add(self: *Vm) !void {
     const dst = self.next();
     const fst = self.getRegister(self.next());
     const snd = self.getRegister(self.next());
 
     return switch (fst) {
         .int => {
-            if (snd != .int) return .RUNTIME_ERR;
+            if (snd != .int) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .int = fst.int + snd.int });
-            return .OK;
         },
         .float => {
-            if (snd != .float) return .RUNTIME_ERR;
+            if (snd != .float) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .float = fst.float + snd.float });
-            return .OK;
         },
-        .string => return .RUNTIME_ERR,
-        .boolean => return .RUNTIME_ERR,
+        .string => return Error.Unknown,
+        .boolean => return Error.Unknown,
     };
 }
 
-fn sub(self: *Vm) InterpretResult {
+fn sub(self: *Vm) !void {
     const dst = self.next();
     const fst = self.getRegister(self.next());
     const snd = self.getRegister(self.next());
 
     return switch (fst) {
         .int => {
-            if (snd != .int) return .RUNTIME_ERR;
+            if (snd != .int) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .int = fst.int - snd.int });
-            return .OK;
         },
         .float => {
-            if (snd != .float) return .RUNTIME_ERR;
+            if (snd != .float) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .float = fst.float - snd.float });
-            return .OK;
         },
-        .string => return .RUNTIME_ERR,
-        .boolean => return .RUNTIME_ERR,
+        .string => return Error.Unknown,
+        .boolean => return Error.Unknown,
     };
 }
 
-fn mul(self: *Vm) InterpretResult {
+fn mul(self: *Vm) !void {
     const dst = self.next();
     const fst = self.getRegister(self.next());
     const snd = self.getRegister(self.next());
 
     return switch (fst) {
         .int => {
-            if (snd != .int) return .RUNTIME_ERR;
+            if (snd != .int) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .int = fst.int * snd.int });
-            return .OK;
         },
         .float => {
-            if (snd != .float) return .RUNTIME_ERR;
+            if (snd != .float) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .float = fst.float * snd.float });
-            return .OK;
         },
-        .string => return .RUNTIME_ERR,
-        .boolean => return .RUNTIME_ERR,
+        .string => return Error.Unknown,
+        .boolean => return Error.Unknown,
     };
 }
 
-fn div(self: *Vm) InterpretResult {
+fn div(self: *Vm) !void {
     const dst = self.next();
     const fst = self.getRegister(self.next());
     const snd = self.getRegister(self.next());
 
     return switch (fst) {
         .int => {
-            if (snd != .int) return .RUNTIME_ERR;
+            if (snd != .int) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .int = @divExact(fst.int, snd.int) });
-            return .OK;
         },
         .float => {
-            if (snd != .float) return .RUNTIME_ERR;
+            if (snd != .float) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .float = @divExact(fst.float, snd.float) });
-            return .OK;
         },
-        .string => return .RUNTIME_ERR,
-        .boolean => return .RUNTIME_ERR,
+        .string => return Error.Unknown,
+        .boolean => return Error.Unknown,
     };
 }
 
-fn loadConst(self: *Vm) InterpretResult {
+fn loadConst(self: *Vm) !void {
     const dst = self.next();
     const const_idx = self.next();
     self.setRegister(dst, self.constants.items[const_idx]);
-    return .OK;
 }

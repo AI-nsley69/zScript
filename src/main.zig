@@ -25,7 +25,7 @@ pub const runOpts = struct {
     printAst: bool = false,
 };
 
-pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !Vm.InterpretResult {
+pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Value {
     var scanner = Scanner{ .source = src, .arena = std.heap.ArenaAllocator.init(allocator) };
     const tokens = try scanner.scan();
     defer scanner.deinit();
@@ -41,7 +41,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !Vm.Inte
         for (parser_errors) |err| {
             try utils.printErr(allocator, std.io.getStdErr().writer(), err, opt.file, err.value);
         }
-        return .COMPILE_ERR;
+        return Vm.Error.Unknown;
     }
 
     if (opt.printAst) {
@@ -54,7 +54,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !Vm.Inte
     const successful = try compiler.compile();
     if (!successful) {
         try writer.writeAll("[err] AST -> Bytecode");
-        return .COMPILE_ERR;
+        return Vm.Error.Unknown;
     }
     // std.debug.print("Compiler success: {any}\n", .{successful});
 
@@ -66,12 +66,11 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !Vm.Inte
     var instance = Vm{ .instructions = compiler.instructions, .constants = compiler.constants };
     defer instance.deinit(allocator);
 
-    const result: Vm.InterpretResult = instance.run();
+    try instance.run();
 
-    std.log.info("Program exited with: {any}\n", .{result});
     if (instance.return_value) |ret_val| std.log.info("Return value: {}", .{ret_val});
 
-    return result;
+    return instance.return_value;
 }
 
 test "Addition" {

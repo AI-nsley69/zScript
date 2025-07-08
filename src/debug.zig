@@ -13,6 +13,7 @@ const Value = Vm.Value;
 fn codeToString(opcode: Vm.OpCodes) []const u8 {
     return switch (opcode) {
         .RET => "ret",
+        .HALT => "halt",
         .NOP => "nop",
         .MOV => "mov",
         .LOAD_IMMEDIATE => "li",
@@ -59,7 +60,7 @@ pub const Disassembler = struct {
 
         switch (opcode) {
             // no arg
-            .NOP => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
+            .NOP, .HALT => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
             // 1x reg with imm arg
             .ADD_IMMEDIATE, .SUBTRACT_IMMEDIATE, .MULTIPLY_IMMEDIATE, .DIVIDE_IMMEDIATE => {
                 const reg = self.next();
