@@ -8,6 +8,10 @@ const Stmt = Ast.Stmt;
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
 
+const Error = error{
+    OutOfRegisters,
+};
+
 const Compiler = @This();
 
 allocator: std.mem.Allocator,
@@ -43,7 +47,7 @@ fn expression(self: *Compiler, target: Expression) !u8 {
     const lhs_dst = try switch (lhs) {
         .expr => self.expression(lhs.expr.*),
         .literal => {
-            const dst = self.allocateRegister();
+            const dst = try self.allocateRegister();
             const const_idx = try self.addConstant(lhs.literal);
 
             try self.emitBytes(@intFromEnum(opcodes.LOAD_IMMEDIATE), dst);
@@ -61,7 +65,7 @@ fn expression(self: *Compiler, target: Expression) !u8 {
         rhs_dst = try switch (expr) {
             .expr => self.expression(expr.expr.*),
             .literal => {
-                const dst = self.allocateRegister();
+                const dst = try self.allocateRegister();
                 const const_idx = try self.addConstant(expr.literal);
 
                 try self.emitBytes(@intFromEnum(opcodes.LOAD_IMMEDIATE), dst);
@@ -72,7 +76,7 @@ fn expression(self: *Compiler, target: Expression) !u8 {
         };
     }
 
-    const dst = self.allocateRegister();
+    const dst = try self.allocateRegister();
     if (target.operand == null) {
         self.hadErr = true;
         self.panicMode = true;
@@ -92,7 +96,11 @@ fn expression(self: *Compiler, target: Expression) !u8 {
     return dst;
 }
 
-fn allocateRegister(self: *Compiler) u8 {
+fn allocateRegister(self: *Compiler) !u8 {
+    if (self.reg_ptr >= std.math.maxInt(u8)) {
+        // TODO: Report error on the compiler
+        return Error.OutOfRegisters;
+    }
     self.reg_ptr += 1;
     return self.reg_ptr - 1;
 }
