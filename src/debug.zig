@@ -1,9 +1,9 @@
 const std = @import("std");
 const Vm = @import("vm.zig");
 const types = @import("ast.zig");
-const Scanner = @import("scanner.zig");
+const Lexer = @import("lexer.zig");
 
-const TokenType = Scanner.TokenType;
+const TokenType = Lexer.TokenType;
 
 const Stmt = types.Stmt;
 const Program = types.Program;

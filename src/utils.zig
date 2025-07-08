@@ -1,9 +1,9 @@
 const std = @import("std");
-const Scanner = @import("scanner.zig");
+const Lexer = @import("lexer.zig");
 const ansi = @import("ansi_term");
 const format = ansi.format;
 
-pub fn printErr(allocator: std.mem.Allocator, writer: std.fs.File.Writer, token: Scanner.Token, src_file: []const u8, msg: []const u8) !void {
+pub fn printErr(allocator: std.mem.Allocator, writer: std.fs.File.Writer, token: Lexer.Token, src_file: []const u8, msg: []const u8) !void {
     // Print source file with line and position
     try format.updateStyle(writer, .{ .font_style = .{ .bold = true } }, null);
     const src_msg = try std.fmt.allocPrint(allocator, "{s}:{d}:{d}: ", .{ src_file, token.line, token.pos });

@@ -25,7 +25,7 @@ fn isDigit(char: u8) bool {
     return '0' <= char and char <= '9';
 }
 
-const Scanner = @This();
+const Lexer = @This();
 
 source: []const u8,
 current: usize = 0,
@@ -34,7 +34,7 @@ line_pos: usize = 0,
 tokens: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
 arena: std.heap.ArenaAllocator,
 
-pub fn scan(self: *Scanner) !std.ArrayListUnmanaged(Token) {
+pub fn scan(self: *Lexer) !std.ArrayListUnmanaged(Token) {
     while (true) {
         const token = self.scanToken();
         try self.tokens.append(self.arena.allocator(), token);
@@ -44,38 +44,38 @@ pub fn scan(self: *Scanner) !std.ArrayListUnmanaged(Token) {
     return self.tokens;
 }
 
-pub fn deinit(self: *Scanner) void {
+pub fn deinit(self: *Lexer) void {
     self.tokens.deinit(self.arena.allocator());
     self.arena.deinit();
 }
 
-fn isAtEnd(self: *Scanner) bool {
+fn isAtEnd(self: *Lexer) bool {
     return self.current >= self.source.len;
 }
 
-fn advance(self: *Scanner) u8 {
+fn advance(self: *Lexer) u8 {
     self.current += 1;
     return self.source[self.current - 1];
 }
 
-fn peek(self: *Scanner) u8 {
+fn peek(self: *Lexer) u8 {
     if (self.isAtEnd()) return 0;
     return self.source[self.current];
 }
 
-fn peekNext(self: *Scanner) u8 {
+fn peekNext(self: *Lexer) u8 {
     if (self.isAtEnd()) return 0;
     return self.source[self.current + 1];
 }
 
-fn match(self: *Scanner, expected: u8) bool {
+fn match(self: *Lexer, expected: u8) bool {
     if (self.isAtEnd()) return false;
     if (self.source[self.current] != expected) return false;
     self.current += 1;
     return true;
 }
 
-fn scanToken(self: *Scanner) Token {
+fn scanToken(self: *Lexer) Token {
     self.trimWhitespace();
 
     if (self.isAtEnd()) return self.makeToken(.eof, self.current);
@@ -97,7 +97,7 @@ fn scanToken(self: *Scanner) Token {
     }
 }
 
-fn trimWhitespace(self: *Scanner) void {
+fn trimWhitespace(self: *Lexer) void {
     while (!self.isAtEnd()) {
         switch (self.peek()) {
             ' ', '\r', '\t' => {
@@ -114,7 +114,7 @@ fn trimWhitespace(self: *Scanner) void {
     }
 }
 
-fn number(self: *Scanner, start: usize) Token {
+fn number(self: *Lexer, start: usize) Token {
     while (isDigit(self.peek())) {
         _ = self.advance();
     }
@@ -129,7 +129,7 @@ fn number(self: *Scanner, start: usize) Token {
     return self.makeToken(.number, start);
 }
 
-fn makeError(self: *Scanner, msg: []const u8) Token {
+fn makeError(self: *Lexer, msg: []const u8) Token {
     return Token{
         .tag = .err,
         .span = msg,
@@ -139,7 +139,7 @@ fn makeError(self: *Scanner, msg: []const u8) Token {
     };
 }
 
-fn makeToken(self: *Scanner, tokenType: TokenType, start: usize) Token {
+fn makeToken(self: *Lexer, tokenType: TokenType, start: usize) Token {
     return Token{
         .tag = tokenType,
         .span = self.source[start..self.current],
@@ -149,7 +149,7 @@ fn makeToken(self: *Scanner, tokenType: TokenType, start: usize) Token {
     };
 }
 
-fn getLineSource(self: *Scanner) []const u8 {
+fn getLineSource(self: *Lexer) []const u8 {
     var current = self.line_pos;
     var c = self.source[current];
     const endPos = while (true) {

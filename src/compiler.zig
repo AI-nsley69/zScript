@@ -1,5 +1,5 @@
 const std = @import("std");
-const Scanner = @import("scanner.zig");
+const Lexer = @import("lexer.zig");
 const Vm = @import("vm.zig");
 const Ast = @import("ast.zig");
 
@@ -11,7 +11,6 @@ const ExpressionValue = Ast.ExpressionValue;
 const Compiler = @This();
 
 allocator: std.mem.Allocator,
-// tokens: std.ArrayListUnmanaged(scanner.Token),
 ast: Program,
 instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
 constants: std.ArrayListUnmanaged(Vm.Value) = std.ArrayListUnmanaged(Vm.Value){},
@@ -109,7 +108,7 @@ fn addConstant(self: *Compiler, value: Vm.Value) !u8 {
     return ret;
 }
 
-fn err(self: *Compiler, token: Scanner.Token, msg: []const u8) void {
+fn err(self: *Compiler, token: Lexer.Token, msg: []const u8) void {
     if (self.panicMode) return;
     std.log.err("[line {d}] {s}", .{ token.line, msg });
     self.hadErr = true;

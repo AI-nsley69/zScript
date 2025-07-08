@@ -1,5 +1,5 @@
 const std = @import("std");
-const Scanner = @import("scanner.zig");
+const Lexer = @import("lexer.zig");
 const Ast = @import("ast.zig");
 const Parser = @import("parser.zig");
 const Compiler = @import("compiler.zig");
@@ -26,9 +26,9 @@ pub const runOpts = struct {
 };
 
 pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Value {
-    var scanner = Scanner{ .source = src, .arena = std.heap.ArenaAllocator.init(allocator) };
-    const tokens = try scanner.scan();
-    defer scanner.deinit();
+    var lexer = Lexer{ .source = src, .arena = std.heap.ArenaAllocator.init(allocator) };
+    const tokens = try lexer.scan();
+    defer lexer.deinit();
 
     const writer = std.io.getStdOut().writer();
 

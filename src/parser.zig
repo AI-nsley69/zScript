@@ -1,15 +1,15 @@
 const std = @import("std");
-const ast = @import("ast.zig");
-const scanner = @import("scanner.zig");
-const vm = @import("vm.zig");
+const Ast = @import("ast.zig");
+const Lexer = @import("lexer.zig");
+const Vm = @import("vm.zig");
 
-const Expression = ast.Expression;
-const ExpressionValue = ast.ExpressionValue;
-const Stmt = ast.Stmt;
-const Program = ast.Program;
-const Token = scanner.Token;
-const TokenType = scanner.TokenType;
-const Value = vm.Value;
+const Expression = Ast.Expression;
+const ExpressionValue = Ast.ExpressionValue;
+const Stmt = Ast.Stmt;
+const Program = Ast.Program;
+const Token = Lexer.Token;
+const TokenType = Lexer.TokenType;
+const Value = Vm.Value;
 
 pub const Error = error{
     ExpressionExpected,

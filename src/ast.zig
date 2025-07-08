@@ -1,10 +1,10 @@
 const std = @import("std");
 const Runtime = @import("vm.zig");
-const Scanner = @import("scanner.zig");
+const Lexer = @import("lexer.zig");
 
 const Value = Runtime.Value;
-const TokenType = Scanner.TokenType;
-const Token = Scanner.Token;
+const TokenType = Lexer.TokenType;
+const Token = Lexer.Token;
 
 pub const ExpressionType = enum {
     expr,
