@@ -142,7 +142,7 @@ fn primary(self: *Parser) !Expression {
     }
 
     const token = self.peek();
-    const err_msg = try std.fmt.allocPrint(self.allocator, "[L{d}] Invalid primary token: {any} (has value: {s})\n", .{ token.line, token.type, token.value });
+    const err_msg = try std.fmt.allocPrint(self.allocator, "[L{d}:{d}] Invalid primary token: {any} (has value: {s})\n", .{ token.line, token.pos, token.type, token.value });
     // errdefer self.allocator.free(err_msg);
     try self.err(err_msg);
     return ParseError.ExpressionExpected;

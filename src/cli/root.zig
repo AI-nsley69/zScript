@@ -39,6 +39,12 @@ fn showHelp(ctx: zli.CommandContext) !void {
 const ast_dump: Flag = .{ .name = "ast", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump AST tree" };
 const asm_dump: Flag = .{ .name = "asm", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
 
+fn printErr(allocator: std.mem.Allocator, writer: std.fs.File.Writer, token: Scanner.Token, src_file: []const u8, msg: []const u8) !void {
+    const err_msg = try std.fmt.allocPrint(allocator, "{s}:{d}:{d}: error: {s}\n", .{ src_file, token.line, token.pos, msg });
+    defer allocator.free(err_msg);
+    try writer.writeAll(err_msg);
+}
+
 fn run(ctx: zli.CommandContext) !void {
     // Test files for development
 
@@ -54,13 +60,19 @@ fn run(ctx: zli.CommandContext) !void {
 
     var scanner = Scanner{ .source = contents, .arena = std.heap.ArenaAllocator.init(allocator) };
     const tokens = try scanner.scan();
-    defer scanner.deinit(allocator);
+    defer scanner.deinit();
+
+    const writer = std.io.getStdOut().writer();
+
+    for (tokens.items) |token| {
+        if (token.type != .err) continue;
+        try printErr(allocator, std.io.getStdErr().writer(), token, ctx.positional_args[0], token.value);
+        std.process.exit(1);
+    }
 
     var parser = Parser{ .tokens = tokens };
     const parsed = try parser.parse(allocator);
     defer parsed.arena.deinit();
-
-    const writer = std.io.getStdOut().writer();
 
     const parser_errors = parser.errors.items;
     if (parser_errors.len > 0) {

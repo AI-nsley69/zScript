@@ -14,6 +14,7 @@ pub const Token = struct {
     type: TokenType,
     value: []const u8,
     line: usize,
+    pos: usize,
 };
 
 fn isDigit(char: u8) bool {
@@ -26,6 +27,7 @@ source: []const u8,
 start: usize = 0,
 current: usize = 0,
 line: usize = 1,
+line_pos: usize = 0,
 tokens: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
 arena: std.heap.ArenaAllocator,
 
@@ -39,8 +41,8 @@ pub fn scan(self: *Scanner) !std.ArrayListUnmanaged(Token) {
     return self.tokens;
 }
 
-pub fn deinit(self: *Scanner, allocator: std.mem.Allocator) void {
-    self.tokens.deinit(allocator);
+pub fn deinit(self: *Scanner) void {
+    self.tokens.deinit(self.arena.allocator());
     self.arena.deinit();
 }
 
@@ -100,6 +102,7 @@ fn trimWhitespace(self: *Scanner) void {
             },
             '\n' => {
                 self.line += 1;
+                self.line_pos = self.current;
                 continue;
             },
             else => return,
@@ -123,7 +126,12 @@ fn number(self: *Scanner) Token {
 }
 
 fn makeError(self: *Scanner, msg: []const u8) Token {
-    return Token{ .type = .err, .value = msg, .line = self.line };
+    return Token{
+        .type = .err,
+        .value = msg,
+        .line = self.line,
+        .pos = self.current - self.line_pos,
+    };
 }
 
 fn makeToken(self: *Scanner, tokenType: TokenType) Token {
@@ -131,5 +139,6 @@ fn makeToken(self: *Scanner, tokenType: TokenType) Token {
         .type = tokenType,
         .value = self.source[self.start..self.current],
         .line = self.line,
+        .pos = self.current - self.line_pos,
     };
 }
