@@ -149,7 +149,7 @@ fn call(self: *Parser) !Expression {
 fn primary(self: *Parser) !Expression {
     if (self.match(.number)) {
         const str_val = self.previous().value;
-        if (std.mem.containsAtLeast(u8, str_val, 0, ".")) {
+        if (std.mem.containsAtLeast(u8, str_val, 1, ".")) {
             const value = try std.fmt.parseFloat(f64, str_val);
             return .{ .lhs = .{ .literal = .{ .float = value } }, .src = self.previous() };
         }
