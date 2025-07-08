@@ -13,8 +13,9 @@ pub const TokenType = enum {
 };
 
 pub const Token = struct {
-    type: TokenType,
-    value: []const u8,
+    tag: TokenType,
+    span: []const u8,
+    // TODO: move these to a seperate token info list
     line: usize,
     pos: usize,
     line_source: []const u8,
@@ -37,7 +38,7 @@ pub fn scan(self: *Scanner) !std.ArrayListUnmanaged(Token) {
     while (true) {
         const token = self.scanToken();
         try self.tokens.append(self.arena.allocator(), token);
-        if (token.type == .eof or token.type == .err) break;
+        if (token.tag == .eof or token.tag == .err) break;
     }
 
     return self.tokens;
@@ -82,13 +83,13 @@ fn scanToken(self: *Scanner) Token {
     const c: u8 = self.advance();
 
     switch (c) {
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => return self.number(self.current),
-        '+' => return self.makeToken(.add),
-        '-' => return self.makeToken(.sub),
-        '*' => return self.makeToken(.mul),
-        '/' => return self.makeToken(.div),
-        '(' => return self.makeToken(.left_paren),
-        ')' => return self.makeToken(.right_paren),
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => return self.number(self.current - 1),
+        '+' => return self.makeToken(.add, self.current - 1),
+        '-' => return self.makeToken(.sub, self.current - 1),
+        '*' => return self.makeToken(.mul, self.current - 1),
+        '/' => return self.makeToken(.div, self.current - 1),
+        '(' => return self.makeToken(.left_paren, self.current - 1),
+        ')' => return self.makeToken(.right_paren, self.current - 1),
         else => {
             const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
             return self.makeError(msg);
@@ -130,8 +131,8 @@ fn number(self: *Scanner, start: usize) Token {
 
 fn makeError(self: *Scanner, msg: []const u8) Token {
     return Token{
-        .type = .err,
-        .value = msg,
+        .tag = .err,
+        .span = msg,
         .line = self.line,
         .pos = self.current - self.line_pos,
         .line_source = self.getLineSource(),
@@ -140,8 +141,8 @@ fn makeError(self: *Scanner, msg: []const u8) Token {
 
 fn makeToken(self: *Scanner, tokenType: TokenType, start: usize) Token {
     return Token{
-        .type = tokenType,
-        .value = self.source[start..self.current],
+        .tag = tokenType,
+        .span = self.source[start..self.current],
         .line = self.line,
         .pos = self.current - self.line_pos,
         .line_source = self.getLineSource(),

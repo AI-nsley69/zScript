@@ -30,7 +30,7 @@ const dummy_stmt = Stmt{
         .lhs = .{
             .literal = .{ .boolean = false },
         },
-        .src = Token{ .line = 0, .line_source = "", .pos = 0, .type = .err, .value = "" },
+        .src = Token{ .line = 0, .line_source = "", .pos = 0, .tag = .err, .span = "" },
     },
 };
 
@@ -100,7 +100,7 @@ fn term(self: *Parser) Errors!Expression {
         errdefer self.allocator.destroy(lhs);
         lhs.* = expr;
 
-        const op = self.previous().type;
+        const op = self.previous().tag;
 
         const rhs = try self.allocator.create(Expression);
         errdefer self.allocator.destroy(rhs);
@@ -122,7 +122,7 @@ fn factor(self: *Parser) Errors!Expression {
         errdefer self.allocator.destroy(lhs);
         lhs.* = expr;
 
-        const op = self.previous().type;
+        const op = self.previous().tag;
 
         const rhs = try self.allocator.create(Expression);
         errdefer self.allocator.destroy(rhs);
@@ -151,7 +151,7 @@ fn call(self: *Parser) Errors!Expression {
 
 fn primary(self: *Parser) Errors!Expression {
     if (self.match(.number)) {
-        const str_val = self.previous().value;
+        const str_val = self.previous().span;
         if (std.mem.containsAtLeast(u8, str_val, 1, ".")) {
             const value = try std.fmt.parseFloat(f64, str_val);
             return .{ .lhs = .{ .literal = .{ .float = value } }, .src = self.previous() };
@@ -168,7 +168,7 @@ fn primary(self: *Parser) Errors!Expression {
     }
 
     const token = self.peek();
-    const err_msg = try std.fmt.allocPrint(self.allocator, "Unable to parse expression: {s}", .{token.value});
+    const err_msg = try std.fmt.allocPrint(self.allocator, "Unable to parse expression: {s}", .{token.span});
     // errdefer self.allocator.free(err_msg);
     try self.err(err_msg);
     return Error.ExpressionExpected;
@@ -194,14 +194,14 @@ fn consume(self: *Parser, token: TokenType, err_msg: []u8) !Token {
 
 fn err(self: *Parser, err_msg: []u8) !void {
     const tkn = self.peek();
-    try self.errors.append(self.allocator, Token{ .line = tkn.line, .line_source = tkn.line_source, .pos = tkn.pos, .type = .err, .value = err_msg });
+    try self.errors.append(self.allocator, Token{ .line = tkn.line, .line_source = tkn.line_source, .pos = tkn.pos, .tag = .err, .span = err_msg });
 }
 
 fn check(self: *Parser, token: TokenType) bool {
     if (self.isEof()) {
         return false;
     }
-    return self.peek().type == token;
+    return self.peek().tag == token;
 }
 
 fn advance(self: *Parser) Token {
@@ -213,7 +213,7 @@ fn advance(self: *Parser) Token {
 }
 
 fn isEof(self: *Parser) bool {
-    return self.peek().type == .eof;
+    return self.peek().tag == .eof;
 }
 
 fn peek(self: *Parser) Token {
