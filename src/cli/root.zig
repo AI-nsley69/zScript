@@ -45,8 +45,8 @@ fn run(ctx: zli.CommandContext) !void {
 
     std.log.debug("Source: {s}", .{contents});
 
-    try main.run(allocator, contents, .{
-        .file = file,
+    _ = try main.run(allocator, contents, .{
+        .file = ctx.positional_args[0],
         .printAsm = ctx.flag("asm", bool),
         .printAst = ctx.flag("ast", bool),
     });
