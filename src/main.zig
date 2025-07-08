@@ -41,7 +41,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
         for (parser_errors) |err| {
             try utils.printErr(allocator, std.io.getStdErr().writer(), err, opt.file, err.value);
         }
-        return Vm.Error.Unknown;
+        return null;
     }
 
     if (opt.printAst) {
@@ -54,7 +54,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
     const successful = try compiler.compile();
     if (!successful) {
         try writer.writeAll("[err] AST -> Bytecode");
-        return Vm.Error.Unknown;
+        return null;
     }
     // std.debug.print("Compiler success: {any}\n", .{successful});
 
