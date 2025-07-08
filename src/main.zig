@@ -56,7 +56,6 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
         try writer.writeAll("[err] AST -> Bytecode");
         return null;
     }
-    // std.debug.print("Compiler success: {any}\n", .{successful});
 
     if (opt.printAsm) {
         var disasm = Debug.Disassembler{ .instructions = compiler.instructions };
@@ -73,18 +72,20 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
     return instance.return_value;
 }
 
+const expect = std.testing.expect;
 test "Addition" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer {
         const deinit_status = gpa.deinit();
         //fail test; can't try in defer as defer is executed after we return
-        if (deinit_status == .leak) std.testing.expect(false) catch @panic("TEST FAIL");
+        if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
     }
 
-    const src = @embedFile("test/001_addition.zs");
+    const src = "1 + 1 + 1";
     const res = try run(allocator, src, .{});
-    try std.testing.expect(res == .HALT);
+    try expect(res != null);
+    try expect(res.?.int == 3);
 }
 
 test "Arithmetic" {
@@ -93,11 +94,12 @@ test "Arithmetic" {
     defer {
         const deinit_status = gpa.deinit();
         //fail test; can't try in defer as defer is executed after we return
-        if (deinit_status == .leak) std.testing.expect(false) catch @panic("TEST FAIL");
+        if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
     }
-    const src = @embedFile("test/002_arithmetic.zs");
+    const src = "1 * 2 - 4 / 2 + 1";
     const res = try run(allocator, src, .{});
-    try std.testing.expect(res == .HALT);
+    try expect(res != null);
+    try expect(res.?.int == 1);
 }
 
 test "Float" {
@@ -106,9 +108,10 @@ test "Float" {
     defer {
         const deinit_status = gpa.deinit();
         //fail test; can't try in defer as defer is executed after we return
-        if (deinit_status == .leak) std.testing.expect(false) catch @panic("TEST FAIL");
+        if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
     }
-    const src = @embedFile("test/003_float.zs");
+    const src = "1.5 + 1.5";
     const res = try run(allocator, src, .{});
-    try std.testing.expect(res == .HALT);
+    try expect(res != null);
+    try expect(res.?.float == 3.0);
 }
