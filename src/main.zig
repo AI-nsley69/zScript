@@ -46,7 +46,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
 
     if (opt.printAst) {
         var ast = Debug.Ast{ .writer = writer, .allocator = allocator };
-        try ast.print(parsed);
+        ast.print(parsed) catch {};
     }
 
     var compiler = Compiler{ .allocator = allocator, .ast = parsed };
@@ -59,7 +59,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
 
     if (opt.printAsm) {
         var disasm = Debug.Disassembler{ .instructions = compiler.instructions };
-        try disasm.disassemble(writer);
+        disasm.disassemble(writer) catch {};
     }
 
     var instance = Vm{ .instructions = compiler.instructions, .constants = compiler.constants };
