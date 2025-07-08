@@ -2,6 +2,8 @@ const std = @import("std");
 const zli = @import("zli");
 const Flag = zli.Flag;
 
+const version = @import("version.zig");
+
 const ansi = @import("ansi_term");
 const Style = ansi.style.Style;
 const format = ansi.format;
@@ -27,10 +29,9 @@ pub fn build(allocator: std.mem.Allocator) !*zli.Command {
         .description = "Source file to be executed",
     });
 
-    // try root.addCommands(&.{
-    //     try run.register(allocator),
-    //     try version.register(allocator),
-    // });
+    try root.addCommands(&.{
+        try version.register(allocator),
+    });
 
     return root;
 }

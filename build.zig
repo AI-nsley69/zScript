@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const build_zig_zon = @embedFile("build.zig.zon");
+
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
@@ -24,6 +26,11 @@ pub fn build(b: *std.Build) void {
 
     const ansi_term_dep = b.dependency("ansi_term", .{ .target = target, .optimize = optimize });
     exe.root_module.addImport("ansi_term", ansi_term_dep.module("ansi_term"));
+
+    // https://renerocks.ai/blog/2025-04-27--version-in-zig/
+    var build_conf = std.Build.Step.Options.create(b);
+    build_conf.addOption([]const u8, "contents", build_zig_zon);
+    exe.root_module.addOptions("build.zig.zon", build_conf);
 
     b.installArtifact(exe);
 
