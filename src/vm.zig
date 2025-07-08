@@ -66,7 +66,7 @@ fn has_next(self: *Vm) bool {
 }
 
 fn next(self: *Vm) u8 {
-    if (self.ip < self.instructions.items.len) return @intFromEnum(OpCodes.HALT);
+    if (self.ip >= self.instructions.items.len) return @intFromEnum(OpCodes.HALT);
     self.ip += 1;
     return self.instructions.items[self.ip - 1];
 }
