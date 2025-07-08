@@ -19,15 +19,24 @@ const Parser = @This();
 
 tokens: std.ArrayListUnmanaged(Token),
 current: usize = 0,
-errors: std.ArrayListUnmanaged([]const u8) = std.ArrayListUnmanaged([]const u8){},
+errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
 allocator: std.mem.Allocator = undefined,
+
+const dummy_stmt = Stmt{
+    .expr = .{
+        .lhs = .{
+            .literal = .{ .boolean = false },
+        },
+        .src = Token{ .line = 0, .line_source = "", .pos = 0, .type = .err, .value = "" },
+    },
+};
 
 pub fn parse(self: *Parser, alloc: std.mem.Allocator) !Program {
     var arena = std.heap.ArenaAllocator.init(alloc);
     self.allocator = arena.allocator();
     var statements = std.ArrayListUnmanaged(Stmt){};
     while (!self.isEof() and self.errors.items.len < 1) {
-        const stmt = self.declaration() catch Stmt{ .expr = .{ .lhs = .{ .literal = .{ .boolean = false } } } };
+        const stmt = self.declaration() catch dummy_stmt;
         try statements.append(self.allocator, stmt);
     }
 
@@ -97,6 +106,7 @@ fn term(self: *Parser) !Expression {
         expr.lhs = .{ .expr = lhs };
         expr.operand = op;
         expr.rhs = .{ .expr = rhs };
+        expr.src = self.previous();
         // expr = lhs.*;
     }
     return expr;
@@ -118,6 +128,7 @@ fn factor(self: *Parser) !Expression {
         expr.lhs = .{ .expr = lhs };
         expr.operand = op;
         expr.rhs = .{ .expr = rhs };
+        expr.src = self.previous();
         // expr = lhs.*;
     }
     return expr;
@@ -138,11 +149,11 @@ fn call(self: *Parser) !Expression {
 fn primary(self: *Parser) !Expression {
     if (self.match(.number)) {
         const value = try std.fmt.parseInt(i64, self.previous().value, 0);
-        return .{ .lhs = .{ .literal = .{ .int = value } } };
+        return .{ .lhs = .{ .literal = .{ .int = value } }, .src = self.previous() };
     }
 
     const token = self.peek();
-    const err_msg = try std.fmt.allocPrint(self.allocator, "[L{d}:{d}] Invalid primary token: {any} (has value: {s})\n", .{ token.line, token.pos, token.type, token.value });
+    const err_msg = try std.fmt.allocPrint(self.allocator, "Unable to parse expression: {s}", .{token.value});
     // errdefer self.allocator.free(err_msg);
     try self.err(err_msg);
     return ParseError.ExpressionExpected;
@@ -167,7 +178,8 @@ fn consume(self: *Parser, token: TokenType, err_msg: []const u8) !Token {
 }
 
 fn err(self: *Parser, err_msg: []u8) !void {
-    try self.errors.append(self.allocator, err_msg);
+    const tkn = self.peek();
+    try self.errors.append(self.allocator, Token{ .line = tkn.line, .line_source = tkn.line_source, .pos = tkn.pos, .type = .err, .value = err_msg });
 }
 
 fn check(self: *Parser, token: TokenType) bool {

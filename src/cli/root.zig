@@ -76,11 +76,11 @@ fn run(ctx: zli.CommandContext) !void {
 
     const writer = std.io.getStdOut().writer();
 
-    for (tokens.items) |token| {
-        if (token.type != .err) continue;
-        try printErr(allocator, std.io.getStdErr().writer(), token, ctx.positional_args[0], token.value);
-        std.process.exit(1);
-    }
+    // for (tokens.items) |token| {
+    //     if (token.type != .err) continue;
+    //     try printErr(allocator, std.io.getStdErr().writer(), token, ctx.positional_args[0], token.value);
+    //     std.process.exit(1);
+    // }
 
     var parser = Parser{ .tokens = tokens };
     const parsed = try parser.parse(allocator);
@@ -89,7 +89,7 @@ fn run(ctx: zli.CommandContext) !void {
     const parser_errors = parser.errors.items;
     if (parser_errors.len > 0) {
         for (parser_errors) |err| {
-            try writer.writeAll(err);
+            try printErr(allocator, std.io.getStdErr().writer(), err, ctx.positional_args[0], err.value);
         }
         std.process.exit(1);
     }
