@@ -23,20 +23,15 @@ panicMode: bool = false,
 const opcodes = Vm.OpCodes;
 
 pub fn compile(self: *Compiler) !bool {
-    // try self.advance();
-    // _ = try self.expression();
-
     const statements = self.ast.stmts.items;
     var final_dst: u8 = 0;
     for (statements) |elem| {
         final_dst = try self.statement(elem);
     }
 
-    // std.log.debug("Final dst: {}", .{final_dst});
-
     // Emit halt instruction at the end
     try self.emitBytes(@intFromEnum(opcodes.RET), final_dst);
-    // try self.consume(.eof, "Expect end of expression.");
+
     return !self.hadErr;
 }
 
@@ -98,24 +93,6 @@ fn expression(self: *Compiler, target: Expression) !u8 {
     return dst;
 }
 
-fn advance(self: *Compiler) !void {
-    if (self.next().type != .err) {
-        std.debug.print("Advanced to: {any}\n", .{self.peek().type});
-        return;
-    }
-
-    self.err(self.peek(), self.peek().value);
-}
-
-fn consume(self: *Compiler, token: Scanner.TokenType, msg: []const u8) !void {
-    if (self.peek().type == token) {
-        try self.advance();
-        return;
-    }
-
-    self.err(self.peek(), msg);
-}
-
 fn allocateRegister(self: *Compiler) u8 {
     self.reg_ptr += 1;
     return self.reg_ptr - 1;
@@ -123,8 +100,7 @@ fn allocateRegister(self: *Compiler) u8 {
 
 fn addConstant(self: *Compiler, value: Vm.Value) !u8 {
     try self.constants.append(self.allocator, value);
-    if (self.constants.items.len > std.math.maxInt(u8)) {
-        // self.err(self.previous(), "Out of capacity!");
+    if (self.constants.items.len >= std.math.maxInt(u8)) {
         self.hadErr = true;
         self.panicMode = true;
         return 0;
@@ -133,46 +109,11 @@ fn addConstant(self: *Compiler, value: Vm.Value) !u8 {
     return ret;
 }
 
-// fn binary(self: *Compiler) !u8 {
-//     const optype = self.previous().type;
-
-//     const rule = getRule(optype);
-//     _ = try self.parsePrecedence(rule.prec);
-
-//     return switch (optype) {
-//         .add => {
-//             self.deferEmit(@intFromEnum(opcodes.ADD));
-//             return 0;
-//         },
-//         else => {
-//             self.err(self.peek(), "Unknown operation type");
-//             return 0;
-//         },
-//     };
-// }
-
-fn number(self: *Compiler) !u8 {
-    std.debug.print("str to int: {any}\n", .{self.previous().type});
-    const value: i64 = try std.fmt.parseInt(i64, self.previous().value, 10);
-    const dst = self.allocateRegister();
-    const const_idx = try self.addConstant(value);
-
-    try self.emitBytes(@intFromEnum(opcodes.LOAD_IMMEDIATE), dst);
-    // Load the const index into the allocated register
-    try self.emitByte(const_idx);
-
-    return dst;
-}
-
 fn err(self: *Compiler, token: Scanner.Token, msg: []const u8) void {
     if (self.panicMode) return;
     std.log.err("[line {d}] {s}", .{ token.line, msg });
     self.hadErr = true;
     self.panicMode = true;
-}
-
-fn deferEmit(self: *Compiler, byte: u8) void {
-    self.deferred = byte;
 }
 
 fn emitBytes(self: *Compiler, byte1: u8, byte2: u8) !void {
