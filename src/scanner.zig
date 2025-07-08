@@ -15,6 +15,7 @@ pub const Token = struct {
     value: []const u8,
     line: usize,
     pos: usize,
+    line_source: []const u8,
 };
 
 fn isDigit(char: u8) bool {
@@ -131,6 +132,7 @@ fn makeError(self: *Scanner, msg: []const u8) Token {
         .value = msg,
         .line = self.line,
         .pos = self.current - self.line_pos,
+        .line_source = self.getLineSource(),
     };
 }
 
@@ -140,5 +142,18 @@ fn makeToken(self: *Scanner, tokenType: TokenType) Token {
         .value = self.source[self.start..self.current],
         .line = self.line,
         .pos = self.current - self.line_pos,
+        .line_source = self.getLineSource(),
     };
+}
+
+fn getLineSource(self: *Scanner) []const u8 {
+    var current = self.line_pos;
+    var c = self.source[current];
+    const endPos = while (true) {
+        current += 1;
+        if (c == '\n' or self.source.len == current) break current;
+        c = self.source[current];
+    };
+
+    return self.source[self.line_pos..endPos];
 }

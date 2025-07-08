@@ -43,6 +43,18 @@ fn printErr(allocator: std.mem.Allocator, writer: std.fs.File.Writer, token: Sca
     const err_msg = try std.fmt.allocPrint(allocator, "{s}:{d}:{d}: error: {s}\n", .{ src_file, token.line, token.pos, msg });
     defer allocator.free(err_msg);
     try writer.writeAll(err_msg);
+
+    const source_aligned = try std.fmt.allocPrint(allocator, "  {s}\n", .{token.line_source});
+    defer allocator.free(source_aligned);
+    try writer.writeAll(source_aligned);
+
+    const ptr_msg = try allocator.alloc(u8, 2 + token.line_source.len + 1);
+    defer allocator.free(ptr_msg);
+    @memset(ptr_msg, ' ');
+    // std.debug.print("{s}\n", .{token.line_source});
+    ptr_msg[token.pos + 1] = '^';
+    ptr_msg[ptr_msg.len - 1] = '\n';
+    try writer.writeAll(ptr_msg);
 }
 
 fn run(ctx: zli.CommandContext) !void {
