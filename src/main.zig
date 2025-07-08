@@ -98,3 +98,16 @@ test "Addition" {
     const res = try run(allocator, src, .{});
     try std.testing.expect(res == .HALT);
 }
+
+test "Arithmetic" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer {
+        const deinit_status = gpa.deinit();
+        //fail test; can't try in defer as defer is executed after we return
+        if (deinit_status == .leak) std.testing.expect(false) catch @panic("TEST FAIL");
+    }
+    const src = @embedFile("test/002_arithmetic.zs");
+    const res = try run(allocator, src, .{});
+    try std.testing.expect(res == .HALT);
+}
