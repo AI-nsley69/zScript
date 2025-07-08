@@ -6,6 +6,8 @@ pub const TokenType = enum {
     sub,
     mul,
     div,
+    left_paren,
+    right_paren,
     eof,
     err,
 };
@@ -87,6 +89,8 @@ fn scanToken(self: *Scanner) Token {
         '-' => return self.makeToken(.sub),
         '*' => return self.makeToken(.mul),
         '/' => return self.makeToken(.div),
+        '(' => return self.makeToken(.left_paren),
+        ')' => return self.makeToken(.right_paren),
         else => {
             const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
             return self.makeError(msg);

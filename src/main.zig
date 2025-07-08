@@ -34,12 +34,6 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !Vm.Inte
 
     const writer = std.io.getStdOut().writer();
 
-    // for (tokens.items) |token| {
-    //     if (token.type != .err) continue;
-    //     try printErr(allocator, std.io.getStdErr().writer(), token, ctx.positional_args[0], token.value);
-    //     std.process.exit(1);
-    // }
-
     var parser = Parser{ .tokens = tokens };
     const parsed = try parser.parse(allocator);
     defer parsed.arena.deinit();
@@ -108,6 +102,19 @@ test "Arithmetic" {
         if (deinit_status == .leak) std.testing.expect(false) catch @panic("TEST FAIL");
     }
     const src = @embedFile("test/002_arithmetic.zs");
+    const res = try run(allocator, src, .{});
+    try std.testing.expect(res == .HALT);
+}
+
+test "Float" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer {
+        const deinit_status = gpa.deinit();
+        //fail test; can't try in defer as defer is executed after we return
+        if (deinit_status == .leak) std.testing.expect(false) catch @panic("TEST FAIL");
+    }
+    const src = @embedFile("test/003_float.zs");
     const res = try run(allocator, src, .{});
     try std.testing.expect(res == .HALT);
 }

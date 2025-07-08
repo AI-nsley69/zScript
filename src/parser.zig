@@ -11,9 +11,12 @@ const Token = scanner.Token;
 const TokenType = scanner.TokenType;
 const Value = vm.Value;
 
-pub const ParseError = error{
+pub const Error = error{
     ExpressionExpected,
+    UnexpectedToken,
 };
+
+const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError);
 
 const Parser = @This();
 
@@ -31,7 +34,7 @@ const dummy_stmt = Stmt{
     },
 };
 
-pub fn parse(self: *Parser, alloc: std.mem.Allocator) !Program {
+pub fn parse(self: *Parser, alloc: std.mem.Allocator) Errors!Program {
     var arena = std.heap.ArenaAllocator.init(alloc);
     self.allocator = arena.allocator();
     var statements = std.ArrayListUnmanaged(Stmt){};
@@ -46,49 +49,49 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator) !Program {
     };
 }
 
-fn declaration(self: *Parser) !Stmt {
+fn declaration(self: *Parser) Errors!Stmt {
     return try self.statement();
 }
 
-fn statement(self: *Parser) !Stmt {
+fn statement(self: *Parser) Errors!Stmt {
     return .{ .expr = try self.expression() };
 }
 
-fn expression(self: *Parser) !Expression {
+fn expression(self: *Parser) Errors!Expression {
     return try self.assignment();
 }
 
-fn assignment(self: *Parser) !Expression {
+fn assignment(self: *Parser) Errors!Expression {
     const expr = try self.logicalOr();
     // TODO, implement assignment
     return expr;
 }
 
-fn logicalOr(self: *Parser) !Expression {
+fn logicalOr(self: *Parser) Errors!Expression {
     const lhs = try self.logicalAnd();
     // TODO: Implement checking for or
     return lhs;
 }
 
-fn logicalAnd(self: *Parser) !Expression {
+fn logicalAnd(self: *Parser) Errors!Expression {
     const lhs = try self.equality();
     // TODO: Implement checking for and
     return lhs;
 }
 
-fn equality(self: *Parser) !Expression {
+fn equality(self: *Parser) Errors!Expression {
     const lhs = try self.comparison();
     // TODO: Implement checking for neq and eq
     return lhs;
 }
 
-fn comparison(self: *Parser) !Expression {
+fn comparison(self: *Parser) Errors!Expression {
     const lhs = try self.term();
     // TODO: Implement checking for comparisons
     return lhs;
 }
 
-fn term(self: *Parser) !Expression {
+fn term(self: *Parser) Errors!Expression {
     var expr = try self.factor();
 
     // TODO: Implement for sub
@@ -112,7 +115,7 @@ fn term(self: *Parser) !Expression {
     return expr;
 }
 
-fn factor(self: *Parser) !Expression {
+fn factor(self: *Parser) Errors!Expression {
     var expr = try self.unary();
     while (self.match(.mul) or self.match(.div)) {
         const lhs = try self.allocator.create(Expression);
@@ -134,19 +137,19 @@ fn factor(self: *Parser) !Expression {
     return expr;
 }
 
-fn unary(self: *Parser) !Expression {
+fn unary(self: *Parser) Errors!Expression {
     // TODO: check for ! and subtract
 
     return self.call();
 }
 
-fn call(self: *Parser) !Expression {
+fn call(self: *Parser) Errors!Expression {
     const lhs = try self.primary();
     // TODO: implement checking for calls
     return lhs;
 }
 
-fn primary(self: *Parser) !Expression {
+fn primary(self: *Parser) Errors!Expression {
     if (self.match(.number)) {
         const str_val = self.previous().value;
         if (std.mem.containsAtLeast(u8, str_val, 1, ".")) {
@@ -157,11 +160,18 @@ fn primary(self: *Parser) !Expression {
         return .{ .lhs = .{ .literal = .{ .int = value } }, .src = self.previous() };
     }
 
+    if (self.match(.left_paren)) {
+        const expr = try self.expression();
+        const err_msg = try self.allocator.dupe(u8, "Expected closing bracket");
+        _ = try self.consume(.right_paren, err_msg);
+        return expr;
+    }
+
     const token = self.peek();
     const err_msg = try std.fmt.allocPrint(self.allocator, "Unable to parse expression: {s}", .{token.value});
     // errdefer self.allocator.free(err_msg);
     try self.err(err_msg);
-    return ParseError.ExpressionExpected;
+    return Error.ExpressionExpected;
 }
 
 fn match(self: *Parser, token: TokenType) bool {
@@ -173,13 +183,13 @@ fn match(self: *Parser, token: TokenType) bool {
     return true;
 }
 
-fn consume(self: *Parser, token: TokenType, err_msg: []const u8) !Token {
+fn consume(self: *Parser, token: TokenType, err_msg: []u8) !Token {
     if (self.check(token)) {
-        return advance();
+        return self.advance();
     }
 
-    self.err(err_msg);
-    return error.ParserError;
+    try self.err(err_msg);
+    return Error.UnexpectedToken;
 }
 
 fn err(self: *Parser, err_msg: []u8) !void {
