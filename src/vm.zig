@@ -127,7 +127,9 @@ fn ret(self: *Vm) !void {
 }
 
 fn mov(self: *Vm) !void {
-    self.setRegister(self.next(), self.getRegister(self.next()));
+    const src = self.next();
+    const dst = self.next();
+    self.setRegister(src, self.getRegister(dst));
 }
 
 fn add(self: *Vm) !void {
