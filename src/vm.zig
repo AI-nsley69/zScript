@@ -65,6 +65,10 @@ fn next(self: *Vm) u8 {
     return self.instructions.items[self.ip - 1];
 }
 
+fn nextOp(self: *Vm) OpCodes {
+    return @enumFromInt(self.next());
+}
+
 fn getRegister(self: *Vm, index: u8) Value {
     return self.registers[index];
 }
@@ -76,17 +80,45 @@ fn setRegister(self: *Vm, index: u8, value: Value) void {
 pub fn run(self: *Vm) InterpretResult {
     if (!self.has_next()) return .HALT;
 
-    const opcode: OpCodes = @enumFromInt(self.next());
+    const opcode: OpCodes = self.nextOp();
 
-    return switch (opcode) {
-        .MOV => return self.mov(),
-        .ADD => return self.add(),
-        .SUBTRACT => return self.sub(),
-        .MULTIPLY => return self.mul(),
-        .DIVIDE => return self.div(),
-        .LOAD_IMMEDIATE => return self.loadConst(),
-        .RET => return self.ret(),
-        else => .RUNTIME_ERR,
+    return blk: switch (opcode) {
+        .MOV => {
+            const res = self.mov();
+            if (res != .OK) return res;
+            continue :blk self.nextOp();
+        },
+        .ADD => {
+            const res = self.add();
+            if (res != .OK) return res;
+            continue :blk self.nextOp();
+        },
+        .SUBTRACT => {
+            const res = self.sub();
+            if (res != .OK) return res;
+            continue :blk self.nextOp();
+        },
+        .MULTIPLY => {
+            const res = self.mul();
+            if (res != .OK) return res;
+            continue :blk self.nextOp();
+        },
+        .DIVIDE => {
+            const res = self.div();
+            if (res != .OK) return res;
+            continue :blk self.nextOp();
+        },
+        .LOAD_IMMEDIATE => {
+            const res = self.loadConst();
+            if (res != .OK) return res;
+            continue :blk self.nextOp();
+        },
+        .RET => {
+            const res = self.ret();
+            if (res != .OK) return res;
+            continue :blk self.nextOp();
+        },
+        else => return .RUNTIME_ERR,
     };
 }
 

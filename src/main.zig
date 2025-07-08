@@ -15,8 +15,6 @@ pub fn main() !void {
     defer root.deinit();
 
     try root.execute(.{});
-    // std.log.debug("Register dump: {any}\n", .{instance.registers});
-    // std.log.debug("Constants dump: {any}\n", .{instance.constants});
 
     return;
 }
@@ -68,10 +66,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !Vm.Inte
     var instance = Vm{ .instructions = compiler.instructions, .constants = compiler.constants };
     defer instance.deinit(allocator);
 
-    var result: Vm.InterpretResult = .OK;
-    while (result == .OK) {
-        result = instance.run();
-    }
+    const result: Vm.InterpretResult = instance.run();
 
     std.log.info("Program exited with: {any}\n", .{result});
     if (instance.return_value) |ret_val| std.log.info("Return value: {}", .{ret_val});
