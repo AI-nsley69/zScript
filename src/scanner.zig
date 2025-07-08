@@ -27,15 +27,21 @@ start: usize = 0,
 current: usize = 0,
 line: usize = 1,
 tokens: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
+arena: std.heap.ArenaAllocator,
 
-pub fn scan(self: *Scanner, allocator: std.mem.Allocator) !std.ArrayListUnmanaged(Token) {
+pub fn scan(self: *Scanner) !std.ArrayListUnmanaged(Token) {
     while (true) {
         const token = self.scanToken();
-        try self.tokens.append(allocator, token);
+        try self.tokens.append(self.arena.allocator(), token);
         if (token.type == .eof or token.type == .err) break;
     }
 
     return self.tokens;
+}
+
+pub fn deinit(self: *Scanner, allocator: std.mem.Allocator) void {
+    self.tokens.deinit(allocator);
+    self.arena.deinit();
 }
 
 fn isAtEnd(self: *Scanner) bool {
@@ -78,7 +84,10 @@ fn scanToken(self: *Scanner) Token {
         '-' => return self.makeToken(.sub),
         '*' => return self.makeToken(.mul),
         '/' => return self.makeToken(.div),
-        else => return self.makeError("Unrecognized token: " ++ [_]u8{c}),
+        else => {
+            const msg = std.fmt.allocPrint(self.arena.allocator(), "Unrecognized token: {s}", .{[_]u8{c}}) catch "Unable to create msg";
+            return self.makeError(msg);
+        },
     }
 }
 

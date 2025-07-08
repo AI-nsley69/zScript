@@ -26,8 +26,8 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator) !Program {
     var arena = std.heap.ArenaAllocator.init(alloc);
     self.allocator = arena.allocator();
     var statements = std.ArrayListUnmanaged(Stmt){};
-    while (!self.isEof()) {
-        const stmt = try self.declaration();
+    while (!self.isEof() and self.errors.items.len < 1) {
+        const stmt = self.declaration() catch Stmt{ .expr = .{ .lhs = .{ .literal = .{ .boolean = false } } } };
         try statements.append(self.allocator, stmt);
     }
 
@@ -141,7 +141,10 @@ fn primary(self: *Parser) !Expression {
         return .{ .lhs = .{ .literal = .{ .int = value } } };
     }
 
-    std.log.debug("Token found at primary: {any}", .{self.peek().type});
+    const token = self.peek();
+    const err_msg = try std.fmt.allocPrint(self.allocator, "[L{d}] Invalid primary token: {any} (has value: {s})\n", .{ token.line, token.type, token.value });
+    // errdefer self.allocator.free(err_msg);
+    try self.err(err_msg);
     return ParseError.ExpressionExpected;
 }
 
@@ -159,9 +162,12 @@ fn consume(self: *Parser, token: TokenType, err_msg: []const u8) !Token {
         return advance();
     }
 
-    // TODO: Implement error handling
-    _ = err_msg;
+    self.err(err_msg);
     return error.ParserError;
+}
+
+fn err(self: *Parser, err_msg: []u8) !void {
+    try self.errors.append(self.allocator, err_msg);
 }
 
 fn check(self: *Parser, token: TokenType) bool {

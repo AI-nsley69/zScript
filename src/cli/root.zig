@@ -52,16 +52,24 @@ fn run(ctx: zli.CommandContext) !void {
 
     std.log.debug("Source: {s}", .{contents});
 
-    var scanner = Scanner{ .source = contents };
-
-    var tokens = try scanner.scan(allocator);
-    defer tokens.deinit(allocator);
+    var scanner = Scanner{ .source = contents, .arena = std.heap.ArenaAllocator.init(allocator) };
+    const tokens = try scanner.scan();
+    defer scanner.deinit(allocator);
 
     var parser = Parser{ .tokens = tokens };
     const parsed = try parser.parse(allocator);
     defer parsed.arena.deinit();
 
     const writer = std.io.getStdOut().writer();
+
+    const parser_errors = parser.errors.items;
+    if (parser_errors.len > 0) {
+        for (parser_errors) |err| {
+            try writer.writeAll(err);
+        }
+        std.process.exit(1);
+    }
+
     if (ctx.flag("ast", bool)) {
         var ast = Debug.Ast{ .writer = writer, .allocator = allocator };
         try ast.print(parsed);
