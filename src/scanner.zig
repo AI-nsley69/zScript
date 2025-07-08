@@ -27,7 +27,6 @@ fn isDigit(char: u8) bool {
 const Scanner = @This();
 
 source: []const u8,
-start: usize = 0,
 current: usize = 0,
 line: usize = 1,
 line_pos: usize = 0,
@@ -77,14 +76,13 @@ fn match(self: *Scanner, expected: u8) bool {
 
 fn scanToken(self: *Scanner) Token {
     self.trimWhitespace();
-    self.start = self.current;
 
-    if (self.isAtEnd()) return self.makeToken(.eof);
+    if (self.isAtEnd()) return self.makeToken(.eof, self.current);
 
     const c: u8 = self.advance();
 
     switch (c) {
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => return self.number(),
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => return self.number(self.current),
         '+' => return self.makeToken(.add),
         '-' => return self.makeToken(.sub),
         '*' => return self.makeToken(.mul),
@@ -115,7 +113,7 @@ fn trimWhitespace(self: *Scanner) void {
     }
 }
 
-fn number(self: *Scanner) Token {
+fn number(self: *Scanner, start: usize) Token {
     while (isDigit(self.peek())) {
         _ = self.advance();
     }
@@ -127,7 +125,7 @@ fn number(self: *Scanner) Token {
         }
     }
 
-    return self.makeToken(.number);
+    return self.makeToken(.number, start);
 }
 
 fn makeError(self: *Scanner, msg: []const u8) Token {
@@ -140,10 +138,10 @@ fn makeError(self: *Scanner, msg: []const u8) Token {
     };
 }
 
-fn makeToken(self: *Scanner, tokenType: TokenType) Token {
+fn makeToken(self: *Scanner, tokenType: TokenType, start: usize) Token {
     return Token{
         .type = tokenType,
-        .value = self.source[self.start..self.current],
+        .value = self.source[start..self.current],
         .line = self.line,
         .pos = self.current - self.line_pos,
         .line_source = self.getLineSource(),
