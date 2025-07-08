@@ -1,4 +1,11 @@
 const std = @import("std");
+const Scanner = @import("scanner.zig");
+const Ast = @import("ast.zig");
+const Parser = @import("parser.zig");
+const Compiler = @import("compiler.zig");
+const Vm = @import("vm.zig");
+const Debug = @import("debug.zig");
+const utils = @import("utils.zig");
 
 const cli = @import("cli/root.zig");
 
@@ -12,4 +19,82 @@ pub fn main() !void {
     // std.log.debug("Constants dump: {any}\n", .{instance.constants});
 
     return;
+}
+
+pub const runOpts = struct {
+    file: []const u8 = "",
+    printAsm: bool = false,
+    printAst: bool = false,
+};
+
+pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !Vm.InterpretResult {
+    var scanner = Scanner{ .source = src, .arena = std.heap.ArenaAllocator.init(allocator) };
+    const tokens = try scanner.scan();
+    defer scanner.deinit();
+
+    const writer = std.io.getStdOut().writer();
+
+    // for (tokens.items) |token| {
+    //     if (token.type != .err) continue;
+    //     try printErr(allocator, std.io.getStdErr().writer(), token, ctx.positional_args[0], token.value);
+    //     std.process.exit(1);
+    // }
+
+    var parser = Parser{ .tokens = tokens };
+    const parsed = try parser.parse(allocator);
+    defer parsed.arena.deinit();
+
+    const parser_errors = parser.errors.items;
+    if (parser_errors.len > 0) {
+        for (parser_errors) |err| {
+            try utils.printErr(allocator, std.io.getStdErr().writer(), err, opt.file, err.value);
+        }
+        std.process.exit(1);
+    }
+
+    if (opt.printAst) {
+        var ast = Debug.Ast{ .writer = writer, .allocator = allocator };
+        try ast.print(parsed);
+    }
+
+    var compiler = Compiler{ .allocator = allocator, .ast = parsed };
+
+    const successful = try compiler.compile();
+    if (!successful) {
+        try writer.writeAll("[err] AST -> Bytecode");
+        std.process.exit(1);
+    }
+    // std.debug.print("Compiler success: {any}\n", .{successful});
+
+    if (opt.printAsm) {
+        var disasm = Debug.Disassembler{ .instructions = compiler.instructions };
+        try disasm.disassemble(writer);
+    }
+
+    var instance = Vm{ .instructions = compiler.instructions, .constants = compiler.constants };
+    defer instance.deinit(allocator);
+
+    var result: Vm.InterpretResult = .OK;
+    while (result == .OK) {
+        result = instance.run();
+    }
+
+    std.log.info("Program exited with: {any}\n", .{result});
+    if (instance.return_value) |ret_val| std.log.info("Return value: {}", .{ret_val});
+
+    return result;
+}
+
+test "Addition" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer {
+        const deinit_status = gpa.deinit();
+        //fail test; can't try in defer as defer is executed after we return
+        if (deinit_status == .leak) std.testing.expect(false) catch @panic("TEST FAIL");
+    }
+
+    const src = @embedFile("test/001_addition.zs");
+    const res = try run(allocator, src, .{});
+    try std.testing.expect(res == .HALT);
 }
