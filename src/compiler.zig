@@ -14,6 +14,7 @@ const TokenType = Lexer.TokenType;
 
 const Error = error{
     OutOfRegisters,
+    OutOfConstants,
 };
 
 const Errors = (Error || std.mem.Allocator.Error);
@@ -26,12 +27,11 @@ instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
 constants: std.ArrayListUnmanaged(Vm.Value) = std.ArrayListUnmanaged(Vm.Value){},
 ptr: usize = 0,
 reg_ptr: u8 = 1,
-hadErr: bool = false,
-panicMode: bool = false,
+err_msg: ?[]u8 = null,
 
 const opcodes = Vm.OpCodes;
 
-pub fn compile(self: *Compiler) !bool {
+pub fn compile(self: *Compiler) !void {
     const statements = self.ast.stmts.items;
     var final_dst: u8 = 0;
     for (statements) |elem| {
@@ -40,8 +40,6 @@ pub fn compile(self: *Compiler) !bool {
 
     // Emit halt instruction at the end
     try self.emitBytes(@intFromEnum(opcodes.RET), final_dst);
-
-    return !self.hadErr;
 }
 
 fn statement(self: *Compiler, target: Stmt) !u8 {
@@ -98,7 +96,7 @@ fn literal(self: *Compiler, val: Value) !u8 {
 
 fn allocateRegister(self: *Compiler) !u8 {
     if (self.reg_ptr >= std.math.maxInt(u8)) {
-        // TODO: Report error on the compiler
+        try self.err("Out of registers");
         return Error.OutOfRegisters;
     }
     self.reg_ptr += 1;
@@ -106,21 +104,19 @@ fn allocateRegister(self: *Compiler) !u8 {
 }
 
 fn addConstant(self: *Compiler, value: Vm.Value) !u8 {
-    try self.constants.append(self.allocator, value);
     if (self.constants.items.len >= std.math.maxInt(u8)) {
-        self.hadErr = true;
-        self.panicMode = true;
-        return 0;
+        try self.err("Out of constants");
+        return Error.OutOfConstants;
     }
+    try self.constants.append(self.allocator, value);
     const ret: u8 = @intCast(self.constants.items.len - 1);
     return ret;
 }
 
-fn err(self: *Compiler, token: Lexer.Token, msg: []const u8) void {
-    if (self.panicMode) return;
-    std.log.err("[line {d}] {s}", .{ token.line, msg });
-    self.hadErr = true;
-    self.panicMode = true;
+fn err(self: *Compiler, msg: []const u8) !void {
+    const err_msg = try self.allocator.dupe(u8, msg);
+    errdefer self.allocator.free(err_msg);
+    self.err_msg = err_msg;
 }
 
 fn emitBytes(self: *Compiler, byte1: u8, byte2: u8) !void {

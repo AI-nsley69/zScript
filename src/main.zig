@@ -41,7 +41,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
         for (parser_errors) |err| {
             const err_writer = std.io.getStdErr().writer();
             const tokenInfo = lexer.tokenInfo.items[err.idx];
-            try utils.printErr(allocator, err_writer, tokenInfo, opt.file, err.span);
+            try utils.printParseError(allocator, err_writer, err, tokenInfo, opt.file, err.span);
         }
         return null;
     }
@@ -53,11 +53,11 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
 
     var compiler = Compiler{ .allocator = allocator, .ast = parsed };
 
-    const successful = try compiler.compile();
-    if (!successful) {
-        try writer.writeAll("[err] AST -> Bytecode");
+    compiler.compile() catch {
+        const stderr = std.io.getStdErr().writer();
+        try utils.printCompileErr(stderr, compiler.err_msg.?);
         return null;
-    }
+    };
 
     if (opt.printAsm) {
         var disasm = Debug.Disassembler{ .instructions = compiler.instructions };
