@@ -64,10 +64,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
 
     var instance = Vm{ .instructions = compiler.instructions, .constants = compiler.constants };
     defer instance.deinit(allocator);
-
     try instance.run();
-
-    if (instance.return_value) |ret_val| std.log.info("Return value: {}", .{ret_val});
 
     return instance.return_value;
 }

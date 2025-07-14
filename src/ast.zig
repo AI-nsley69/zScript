@@ -8,16 +8,23 @@ const Token = Lexer.Token;
 
 pub const ExpressionType = enum {
     infix,
+    unary,
     literal,
 };
 
 pub const ExpressionValue = union(ExpressionType) {
     infix: *Infix,
+    unary: *Unary,
     literal: Value,
 };
 
 pub const Infix = struct {
     lhs: Expression,
+    op: TokenType,
+    rhs: Expression,
+};
+
+pub const Unary = struct {
     op: TokenType,
     rhs: Expression,
 };
@@ -49,6 +56,17 @@ pub fn createInfix(allocator: std.mem.Allocator, op: TokenType, lhs: Expression,
 
     return .{
         .node = .{ .infix = infix },
+        .src = src,
+    };
+}
+
+pub fn createUnary(allocator: std.mem.Allocator, op: TokenType, rhs: Expression, src: Token) !Expression {
+    const unary = try allocator.create(Unary);
+    errdefer allocator.destroy(unary);
+    unary.* = .{ .op = op, .rhs = rhs };
+
+    return .{
+        .node = .{ .unary = unary },
         .src = src,
     };
 }

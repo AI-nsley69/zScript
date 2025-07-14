@@ -108,7 +108,13 @@ fn factor(self: *Parser) Errors!Expression {
 }
 
 fn unary(self: *Parser) Errors!Expression {
-    // TODO: check for ! and subtract
+    // TODO: check for !
+    if (self.match(.sub)) {
+        const op = self.previous().tag;
+        const rhs = try self.unary();
+
+        return Ast.createUnary(self.allocator, op, rhs, self.previous());
+    }
 
     return self.call();
 }

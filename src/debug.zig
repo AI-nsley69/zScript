@@ -10,6 +10,7 @@ const Program = types.Program;
 const Expression = types.Expression;
 const ExpressionValue = types.ExpressionValue;
 const Infix = types.Infix;
+const Unary = types.Unary;
 const Value = Vm.Value;
 
 fn codeToString(opcode: Vm.OpCodes) []const u8 {
@@ -94,6 +95,15 @@ pub const Disassembler = struct {
     }
 };
 
+fn createIndent(allocator: std.mem.Allocator, indent_step: usize) ![]u8 {
+    const indent_msg = try allocator.alloc(u8, indent_step);
+    errdefer allocator.free(indent_msg);
+    @memset(indent_msg, ' ');
+    return indent_msg;
+}
+
+const Errors = (std.mem.Allocator.Error || std.fs.File.WriteError);
+
 pub const Ast = struct {
     const Self = @This();
     writer: std.fs.File.Writer,
@@ -101,58 +111,57 @@ pub const Ast = struct {
     const indent_step = 2;
 
     pub fn print(self: *Self, input: Program) !void {
-        const indent_msg = try self.allocator.alloc(u8, indent_step);
+        const indent_msg = try createIndent(self.allocator, indent_step);
         defer self.allocator.free(indent_msg);
-        @memset(indent_msg, ' ');
 
         const list = input.stmts.items;
         try self.writer.print("(program)\n", .{});
         for (list) |stmt| {
             try self.writer.print("{s}stmt:\n", .{indent_msg});
-            switch (stmt.expr.node) {
-                .infix => try self.printExpression(stmt.expr, indent_step * 2),
-                .literal => try self.printLiteral(stmt.expr.node.literal, indent_step * 2),
-            }
+            try self.printHelper(stmt.expr, indent_step * 2);
         }
         // self.io.("{any}", .{input});
     }
 
-    fn printExpression(self: *Self, expr: Expression, indent: usize) !void {
-        const indent_msg = try self.allocator.alloc(u8, indent);
-        defer self.allocator.free(indent_msg);
-        @memset(indent_msg, ' ');
-
+    fn printHelper(self: *Self, expr: Expression, indent: usize) Errors!void {
         const node = expr.node;
-        try self.writer.print("{s}expr:\n", .{indent_msg});
-        // switch (node) {
-        //     .infix => try self.printExpression(node, indent + indent_step),
-        //     .literal => {
-        //         try self.printLiteral(node.literal, indent + indent_step);
-        //         return;
-        //     },
-        // }
+        return switch (node) {
+            .infix => try self.printInfix(node.infix, indent),
+            .literal => try self.printLiteral(node.literal, indent),
+            .unary => try self.printUnary(node.unary, indent),
+        };
+    }
 
-        const infix = node.infix.*;
+    fn printInfix(self: *Self, infix: *Infix, indent: usize) !void {
+        const indent_msg = try createIndent(self.allocator, indent);
+        defer self.allocator.free(indent_msg);
+        try self.writer.print("{s}infix:\n", .{indent_msg});
+
         const lhs = infix.lhs;
-        switch (lhs.node) {
-            .infix => try self.printExpression(lhs, indent + indent_step),
-            .literal => try self.printLiteral(lhs.node.literal, indent + indent_step),
-        }
+        try self.printHelper(lhs, indent + indent_step);
 
         const op = infix.op;
         try self.printOperand(op, indent + indent_step);
 
         const rhs = infix.rhs;
-        switch (rhs.node) {
-            .infix => try self.printExpression(rhs, indent + indent_step),
-            .literal => try self.printLiteral(rhs.node.literal, indent + indent_step),
-        }
+        try self.printHelper(rhs, indent + indent_step);
+    }
+
+    fn printUnary(self: *Self, unary: *Unary, indent: usize) !void {
+        const indent_msg = try createIndent(self.allocator, indent);
+        defer self.allocator.free(indent_msg);
+        try self.writer.print("{s}unary:\n", .{indent_msg});
+
+        const op = unary.op;
+        try self.printOperand(op, indent + indent_step);
+
+        const rhs = unary.rhs;
+        try self.printHelper(rhs, indent + indent_step);
     }
 
     fn printLiteral(self: *Self, value: Value, indent: usize) !void {
-        const indent_msg = try self.allocator.alloc(u8, indent);
+        const indent_msg = try createIndent(self.allocator, indent);
         defer self.allocator.free(indent_msg);
-        @memset(indent_msg, ' ');
 
         return switch (value) {
             .int => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.int }),

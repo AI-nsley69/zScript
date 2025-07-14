@@ -8,6 +8,7 @@ const Stmt = Ast.Stmt;
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
 const Infix = Ast.Infix;
+const Unary = Ast.Unary;
 const Value = Vm.Value;
 
 const Error = error{
@@ -43,27 +44,26 @@ pub fn compile(self: *Compiler) !bool {
 }
 
 fn statement(self: *Compiler, target: Stmt) !u8 {
-    const node = target.expr.node;
-    return switch (node) {
-        .infix => try self.expression(node.infix.*),
+    return try self.expression(target.expr);
+}
+
+fn expression(self: *Compiler, target: Expression) !u8 {
+    const node = target.node;
+    return switch (target.node) {
+        .infix => try self.infix(node.infix),
+        .unary => try self.unary(node.unary),
         .literal => try self.literal(node.literal),
     };
 }
 
-fn expression(self: *Compiler, target: Infix) Errors!u8 {
-    const lhs: ExpressionValue = target.lhs.node;
-    const lhs_dst = try switch (lhs) {
-        .infix => self.expression(lhs.infix.*),
-        .literal => self.literal(lhs.literal),
-    };
+fn infix(self: *Compiler, target: *Infix) Errors!u8 {
+    const lhs = target.lhs;
+    const lhs_dst = try self.expression(lhs);
     // Early return if it cannot load the destination
     // if (lhs == .literal) return lhs_dst;
 
-    const rhs = target.rhs.node;
-    const rhs_dst = try switch (rhs) {
-        .infix => self.expression(rhs.infix.*),
-        .literal => self.literal(rhs.literal),
-    };
+    const rhs = target.rhs;
+    const rhs_dst = try self.expression(rhs);
 
     const dst = try self.allocateRegister();
     const opcode = switch (target.op) {
@@ -75,6 +75,25 @@ fn expression(self: *Compiler, target: Infix) Errors!u8 {
     };
     try self.emitBytes(@intFromEnum(opcode), dst);
     try self.emitBytes(lhs_dst, rhs_dst);
+    return dst;
+}
+
+fn unary(self: *Compiler, target: *Unary) Errors!u8 {
+    const rhs = target.rhs;
+    const rhs_dst = try self.expression(rhs);
+
+    const dst = try self.allocateRegister();
+    const opcode = switch (target.op) {
+        .add => opcodes.ADD,
+        .sub => opcodes.SUBTRACT,
+        .mul => opcodes.MULTIPLY,
+        .div => opcodes.DIVIDE,
+        else => opcodes.NOP,
+    };
+
+    try self.emitBytes(@intFromEnum(opcode), dst);
+    try self.emitBytes(0x00, rhs_dst);
+
     return dst;
 }
 
