@@ -58,7 +58,7 @@ fn expression(self: *Compiler, target: Expression) !u8 {
 }
 
 fn opcode(target: TokenType) u8 {
-    const op = switch (target.op) {
+    const op = switch (target) {
         .add => opcodes.ADD,
         .sub => opcodes.SUBTRACT,
         .mul => opcodes.MULTIPLY,
@@ -72,7 +72,7 @@ fn infix(self: *Compiler, target: *Infix) Errors!u8 {
     const lhs = try self.expression(target.lhs);
     const rhs = try self.expression(target.rhs);
     const dst = try self.allocateRegister();
-    const op = self.opcode(target.op);
+    const op = opcode(target.op);
     try self.emitBytes(op, dst);
     try self.emitBytes(lhs, rhs);
     return dst;
@@ -82,7 +82,7 @@ fn unary(self: *Compiler, target: *Unary) Errors!u8 {
     const zero_reg = 0x00;
     const rhs = try self.expression(target.rhs);
     const dst = try self.allocateRegister();
-    const op = self.opcode(target.op);
+    const op = opcode(target.op);
     try self.emitBytes(op, dst);
     try self.emitBytes(zero_reg, rhs);
     return dst;
