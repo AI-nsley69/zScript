@@ -10,6 +10,7 @@ const ExpressionValue = Ast.ExpressionValue;
 const Infix = Ast.Infix;
 const Unary = Ast.Unary;
 const Value = Vm.Value;
+const TokenType = Lexer.TokenType;
 
 const Error = error{
     OutOfRegisters,
@@ -56,53 +57,41 @@ fn expression(self: *Compiler, target: Expression) !u8 {
     };
 }
 
-fn infix(self: *Compiler, target: *Infix) Errors!u8 {
-    const lhs = target.lhs;
-    const lhs_dst = try self.expression(lhs);
-    // Early return if it cannot load the destination
-    // if (lhs == .literal) return lhs_dst;
-
-    const rhs = target.rhs;
-    const rhs_dst = try self.expression(rhs);
-
-    const dst = try self.allocateRegister();
-    const opcode = switch (target.op) {
+fn opcode(target: TokenType) u8 {
+    const op = switch (target.op) {
         .add => opcodes.ADD,
         .sub => opcodes.SUBTRACT,
         .mul => opcodes.MULTIPLY,
         .div => opcodes.DIVIDE,
         else => opcodes.NOP,
     };
-    try self.emitBytes(@intFromEnum(opcode), dst);
-    try self.emitBytes(lhs_dst, rhs_dst);
+    return @intFromEnum(op);
+}
+
+fn infix(self: *Compiler, target: *Infix) Errors!u8 {
+    const lhs = try self.expression(target.lhs);
+    const rhs = try self.expression(target.rhs);
+    const dst = try self.allocateRegister();
+    const op = self.opcode(target.op);
+    try self.emitBytes(op, dst);
+    try self.emitBytes(lhs, rhs);
     return dst;
 }
 
 fn unary(self: *Compiler, target: *Unary) Errors!u8 {
-    const rhs = target.rhs;
-    const rhs_dst = try self.expression(rhs);
-
+    const zero_reg = 0x00;
+    const rhs = try self.expression(target.rhs);
     const dst = try self.allocateRegister();
-    const opcode = switch (target.op) {
-        .add => opcodes.ADD,
-        .sub => opcodes.SUBTRACT,
-        .mul => opcodes.MULTIPLY,
-        .div => opcodes.DIVIDE,
-        else => opcodes.NOP,
-    };
-
-    try self.emitBytes(@intFromEnum(opcode), dst);
-    try self.emitBytes(0x00, rhs_dst);
-
+    const op = self.opcode(target.op);
+    try self.emitBytes(op, dst);
+    try self.emitBytes(zero_reg, rhs);
     return dst;
 }
 
 fn literal(self: *Compiler, val: Value) !u8 {
     const dst = try self.allocateRegister();
     const const_idx = try self.addConstant(val);
-
     try self.emitBytes(@intFromEnum(opcodes.LOAD_IMMEDIATE), dst);
-    // Load the const index into the allocated register
     try self.emitByte(const_idx);
     return dst;
 }
