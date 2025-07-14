@@ -47,6 +47,8 @@ pub const Value = union(ValueType) {
     boolean: bool,
 };
 
+// pub const RegisterSize = std.math.maxInt(u16);
+
 const Vm = @This();
 
 trace: bool = true,

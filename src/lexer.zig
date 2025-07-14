@@ -9,8 +9,12 @@ pub const TokenType = enum {
     div,
     logical_or,
     logical_and,
+    eql,
     left_paren,
     right_paren,
+    semi_colon,
+    var_declaration,
+    identifier,
     eof,
     err,
 };
@@ -29,6 +33,10 @@ pub const TokenInfo = struct {
 };
 
 const Tokens = std.ArrayListUnmanaged(Token);
+
+fn isAlpha(char: u8) bool {
+    return ('a' <= char and char <= 'z') or ('A' <= char and char <= 'Z');
+}
 
 fn isDigit(char: u8) bool {
     return '0' <= char and char <= '9';
@@ -81,6 +89,15 @@ fn peekNext(self: *Lexer) u8 {
     return self.source[self.current + 1];
 }
 
+fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
+    for (expected) |c| {
+        if (self.match(c)) continue;
+        return false;
+    }
+
+    return true;
+}
+
 fn match(self: *Lexer, expected: u8) bool {
     if (self.isAtEnd()) return false;
     if (self.source[self.current] != expected) return false;
@@ -101,6 +118,8 @@ fn scanToken(self: *Lexer) Token {
         '/' => return self.makeToken(.div, self.current - 1),
         '(' => return self.makeToken(.left_paren, self.current - 1),
         ')' => return self.makeToken(.right_paren, self.current - 1),
+        ';' => return self.makeToken(.semi_colon, self.current - 1),
+        '=' => return self.makeToken(.eql, self.current - 1),
         '|' => {
             const start = self.current - 1;
             if (!self.match(c)) {
@@ -119,31 +138,22 @@ fn scanToken(self: *Lexer) Token {
 
             return self.makeToken(.logical_and, start);
         },
-        't' => {
-            const curr = self.current - 1;
-            const true_str = self.source[curr .. curr + 4];
-            if (!std.mem.eql(u8, true_str, "true")) {
-                const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
-                return self.makeError(msg);
-            }
-            self.current = curr + 4;
-            return self.makeToken(.bool, curr);
-        },
-        'f' => {
-            const curr = self.current - 1;
-            const false_str = self.source[curr .. curr + 5];
-            if (!std.mem.eql(u8, false_str, "false")) {
-                const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
-                return self.makeError(msg);
-            }
-            self.current = curr + 5;
-            return self.makeToken(.bool, curr);
-        },
+        'a'...'z', 'A'...'Z' => return self.alpha(c, self.current - 1),
         else => {
             const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
             return self.makeError(msg);
         },
     }
+}
+
+fn takeWhile(self: *Lexer, comptime prec: anytype) !usize {
+    const start = self.current - 1;
+    var next = self.advance();
+    while (prec(next)) {
+        next = self.advance();
+    }
+
+    return start;
 }
 
 fn trimWhitespace(self: *Lexer) void {
@@ -154,6 +164,7 @@ fn trimWhitespace(self: *Lexer) void {
                 continue;
             },
             '\n' => {
+                _ = self.advance();
                 self.line += 1;
                 self.line_pos = self.current;
                 continue;
@@ -176,6 +187,34 @@ fn number(self: *Lexer, start: usize) Token {
     }
 
     return self.makeToken(.number, start);
+}
+
+fn alpha(self: *Lexer, current: u8, start: usize) Token {
+    if (current == 't') {
+        if (self.matchFull("rue")) {
+            return self.makeToken(.bool, start);
+        }
+    }
+
+    if (current == 'f') {
+        if (self.matchFull("alse")) {
+            return self.makeToken(.bool, start);
+        }
+    }
+
+    if (current == 'm') {
+        if (self.matchFull("ut")) {
+            return self.makeToken(.var_declaration, start);
+        }
+    }
+
+    if (current == 'i') {
+        if (self.matchFull("mmut")) {
+            return self.makeToken(.var_declaration, start);
+        }
+    }
+
+    return self.makeToken(.identifier, try self.takeWhile(isAlpha));
 }
 
 fn makeError(self: *Lexer, msg: []const u8) Token {

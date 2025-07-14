@@ -44,6 +44,7 @@ fn isFoldable(self: *Optimizer, expr: Expression) bool {
                 .string => false,
             };
         },
+        .variable => false,
     };
 }
 
@@ -92,6 +93,7 @@ fn eval(self: *Optimizer, expr: Expression) !Value {
         },
 
         .literal => return expr.node.literal,
+        else => Error.UnsupportedValue,
     };
 }
 
@@ -102,21 +104,22 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
         switch (expr.node) {
             .infix => {
                 const infix = expr.node.infix.*;
-                var lhs = infix.lhs;
-                if (self.isFoldable(infix.lhs)) {
-                    lhs = try Ast.createLiteral(try self.eval(lhs), expr.src);
-                }
+                const lhs = try self.constantFold(infix.lhs);
 
-                var rhs = infix.rhs;
-                if (self.isFoldable(infix.rhs)) {
-                    rhs = try Ast.createLiteral(try self.eval(rhs), expr.src);
-                }
+                const rhs = try self.constantFold(infix.rhs);
 
                 return try Ast.createInfix(self.allocator, infix.op, lhs, rhs, expr.src);
             },
 
             .unary => return expr,
             .literal => return expr,
+            .variable => {
+                const variable = expr.node.variable.*;
+                if (variable.initializer == null) return expr;
+                const init = try self.constantFold(variable.initializer.?);
+
+                return try Ast.createVariable(self.allocator, init, variable.name, variable.mutable, expr.src);
+            },
         }
     }
 }

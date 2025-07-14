@@ -69,7 +69,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
 
     if (opt.printAsm) {
         var disasm = Debug.Disassembler{ .output = compiled };
-        disasm.disassemble(writer) catch {};
+        disasm.disassemble(allocator, writer) catch {};
     }
 
     var instance = Vm{ .instructions = compiled.instructions, .constants = compiled.constants };

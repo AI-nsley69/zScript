@@ -14,6 +14,7 @@ const Expression = types.Expression;
 const ExpressionValue = types.ExpressionValue;
 const Infix = types.Infix;
 const Unary = types.Unary;
+const Variable = types.Variable;
 const Value = Vm.Value;
 
 fn codeToString(opcode: Vm.OpCodes) []const u8 {
@@ -69,7 +70,7 @@ pub const Disassembler = struct {
         return self.ip < self.output.instructions.len;
     }
 
-    pub fn disassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {
+    pub fn disassembleNextInstruction(self: *Self, allocator: std.mem.Allocator, writer: std.fs.File.Writer) !void {
         const opcode: Vm.OpCodes = @enumFromInt(self.next());
         const name = codeToString(opcode);
 
@@ -87,7 +88,7 @@ pub const Disassembler = struct {
                 try writer.print("[{x:0>6}] {s} r{d}\n", .{ self.ip - 1, name, self.next() });
             },
             .LOAD_IMMEDIATE => {
-                try writer.print("[{x:0>6}] {s} r{d} {any}\n", .{ self.ip - 1, name, self.next(), self.output.constants[self.next()] });
+                try writer.print("[{x:0>6}] {s} r{d} {s}\n", .{ self.ip - 1, name, self.next(), try valueToString(allocator, self.output.constants[self.next()]) });
             },
             // 2x reg arg
             .LOAD_WORD, .STORE_WORD, .MOV => {
@@ -100,9 +101,12 @@ pub const Disassembler = struct {
         }
     }
 
-    pub fn disassemble(self: *Disassembler, writer: std.fs.File.Writer) !void {
+    pub fn disassemble(self: *Disassembler, allocator: std.mem.Allocator, writer: std.fs.File.Writer) !void {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        defer arena.deinit();
+
         while (self.has_next()) {
-            try self.disassembleNextInstruction(writer);
+            try self.disassembleNextInstruction(arena.allocator(), writer);
         }
     }
 };
@@ -141,6 +145,7 @@ pub const Ast = struct {
             .infix => try self.printInfix(node.infix, indent),
             .literal => try self.printLiteral(node.literal, indent),
             .unary => try self.printUnary(node.unary, indent),
+            .variable => try self.printVariable(node.variable, indent),
         };
     }
 
@@ -181,6 +186,21 @@ pub const Ast = struct {
             .string => try self.writer.print("{s}lit: {s}\n", .{ indent_msg, value.string }),
             .boolean => try self.writer.print("{s}lit: {any}\n", .{ indent_msg, value.boolean }),
         };
+    }
+
+    fn printVariable(self: *Self, variable: *Variable, indent: usize) !void {
+        var indent_msg = try createIndent(self.allocator, indent);
+        defer self.allocator.free(indent_msg);
+
+        try self.writer.print("{s}var:\n", .{indent_msg});
+
+        indent_msg = try createIndent(self.allocator, indent + indent_step);
+        try self.writer.print("{s}name: {s}\n", .{ indent_msg, variable.name });
+
+        if (variable.initializer) |init| {
+            try self.writer.print("{s}init:\n", .{indent_msg});
+            try self.printHelper(init, indent + indent_step * 2);
+        }
     }
 
     fn printOperand(self: *Self, op: TokenType, indent: usize) !void {

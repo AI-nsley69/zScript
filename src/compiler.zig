@@ -9,6 +9,7 @@ const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
 const Infix = Ast.Infix;
 const Unary = Ast.Unary;
+const Variable = Ast.Variable;
 const Value = Vm.Value;
 const TokenType = Lexer.TokenType;
 
@@ -36,6 +37,7 @@ allocator: std.mem.Allocator,
 ast: Program,
 instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
 constants: std.ArrayListUnmanaged(Vm.Value) = std.ArrayListUnmanaged(Vm.Value){},
+variables: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 ptr: usize = 0,
 reg_ptr: u8 = 1,
 err_msg: ?[]u8 = null,
@@ -43,6 +45,8 @@ err_msg: ?[]u8 = null,
 const opcodes = Vm.OpCodes;
 
 pub fn compile(self: *Compiler) !CompilerOutput {
+    defer self.variables.deinit(self.allocator);
+
     const statements = self.ast.stmts.items;
     var final_dst: u8 = 0;
     for (statements) |elem| {
@@ -68,6 +72,7 @@ fn expression(self: *Compiler, target: Expression) !u8 {
         .infix => try self.infix(node.infix),
         .unary => try self.unary(node.unary),
         .literal => try self.literal(node.literal),
+        .variable => try self.variable(node.variable),
     };
 }
 
@@ -82,6 +87,20 @@ fn opcode(target: TokenType) u8 {
         else => opcodes.NOP,
     };
     return @intFromEnum(op);
+}
+
+fn variable(self: *Compiler, target: *Variable) Errors!u8 {
+    if (self.variables.contains(target.name)) {
+        return self.variables.get(target.name).?;
+    }
+    const dst = try self.allocateRegister();
+    _ = try self.variables.fetchPut(self.allocator, target.name, dst);
+    const expr = try self.expression(target.initializer.?);
+
+    try self.emitBytes(@intFromEnum(opcodes.MOV), dst);
+    try self.emitByte(expr);
+
+    return dst;
 }
 
 fn infix(self: *Compiler, target: *Infix) Errors!u8 {

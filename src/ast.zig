@@ -7,15 +7,23 @@ const TokenType = Lexer.TokenType;
 const Token = Lexer.Token;
 
 pub const ExpressionType = enum {
+    variable,
     infix,
     unary,
     literal,
 };
 
 pub const ExpressionValue = union(ExpressionType) {
+    variable: *Variable,
     infix: *Infix,
     unary: *Unary,
     literal: Value,
+};
+
+pub const Variable = struct {
+    mutable: bool,
+    name: []const u8,
+    initializer: ?Expression,
 };
 
 pub const Infix = struct {
@@ -48,6 +56,17 @@ pub const Program = struct {
 };
 
 // Helper functions
+
+pub fn createVariable(allocator: std.mem.Allocator, init: ?Expression, name: []const u8, mutable: bool, src: Token) !Expression {
+    const variable = try allocator.create(Variable);
+    errdefer allocator.destroy(variable);
+    variable.* = .{ .initializer = init, .mutable = mutable, .name = name };
+
+    return .{
+        .node = .{ .variable = variable },
+        .src = src,
+    };
+}
 
 pub fn createInfix(allocator: std.mem.Allocator, op: TokenType, lhs: Expression, rhs: Expression, src: Token) !Expression {
     const infix = try allocator.create(Infix);

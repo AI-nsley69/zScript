@@ -44,15 +44,27 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator) Errors!Program {
 }
 
 fn declaration(self: *Parser) Errors!Stmt {
+    if (self.match(.var_declaration)) return .{ .expr = try self.variableDeclaration() };
     return try self.statement();
 }
 
 fn statement(self: *Parser) Errors!Stmt {
-    return .{ .expr = try self.expression() };
+    const expr = try self.expression();
+    _ = try self.consume(.semi_colon, try self.allocator.dupe(u8, "Expected semi-colon after expression."));
+    return .{ .expr = expr };
+}
+
+fn variableDeclaration(self: *Parser) Errors!Expression {
+    const name = try self.consume(.identifier, try self.allocator.dupe(u8, "Expected variable name."));
+    _ = try self.consume(.eql, try self.allocator.dupe(u8, "Expected assignment: '='"));
+    const init = try self.expression();
+    _ = try self.consume(.semi_colon, try self.allocator.dupe(u8, "Expected semi-colon after expression."));
+    return Ast.createVariable(self.allocator, init, name.span, true, self.previous());
 }
 
 fn expression(self: *Parser) Errors!Expression {
-    return try self.assignment();
+    const expr = try self.assignment();
+    return expr;
 }
 
 fn assignment(self: *Parser) Errors!Expression {
@@ -136,6 +148,12 @@ fn call(self: *Parser) Errors!Expression {
 }
 
 fn primary(self: *Parser) Errors!Expression {
+    if (self.match(.bool)) {
+        // Lexer only spits out bool token if 'true' or 'false' is found
+        const val = std.mem.eql(u8, "true", self.previous().span);
+        return Ast.createLiteral(.{ .boolean = val }, self.previous());
+    }
+
     if (self.match(.number)) {
         const str_val = self.previous().span;
         if (std.mem.containsAtLeast(u8, str_val, 1, ".")) {
@@ -146,17 +164,15 @@ fn primary(self: *Parser) Errors!Expression {
         return Ast.createLiteral(.{ .int = value }, self.previous());
     }
 
+    if (self.match(.identifier)) {
+        return Ast.createVariable(self.allocator, null, self.previous().span, false, self.previous());
+    }
+
     if (self.match(.left_paren)) {
         const expr = try self.expression();
         const err_msg = try self.allocator.dupe(u8, "Expected closing bracket");
         _ = try self.consume(.right_paren, err_msg);
         return expr;
-    }
-
-    if (self.match(.bool)) {
-        // Lexer only spits out bool token if 'true' or 'false' is found
-        const val = std.mem.eql(u8, "true", self.previous().span);
-        return Ast.createLiteral(.{ .boolean = val }, self.previous());
     }
 
     const token = self.peek();
