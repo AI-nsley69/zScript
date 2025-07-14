@@ -148,9 +148,8 @@ fn scanToken(self: *Lexer) Token {
 
 fn takeWhile(self: *Lexer, comptime prec: anytype) !usize {
     const start = self.current - 1;
-    var next = self.advance();
-    while (prec(next)) {
-        next = self.advance();
+    while (prec(self.peek())) {
+        _ = self.advance();
     }
 
     return start;

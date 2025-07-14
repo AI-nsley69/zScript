@@ -111,7 +111,11 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
                 return try Ast.createInfix(self.allocator, infix.op, lhs, rhs, expr.src);
             },
 
-            .unary => return expr,
+            .unary => {
+                const unary = expr.node.unary.*;
+                const rhs = try self.constantFold(unary.rhs);
+                return try Ast.createUnary(self.allocator, unary.op, rhs, expr.src);
+            },
             .literal => return expr,
             .variable => {
                 const variable = expr.node.variable.*;

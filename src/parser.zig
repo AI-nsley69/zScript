@@ -165,6 +165,7 @@ fn primary(self: *Parser) Errors!Expression {
     }
 
     if (self.match(.identifier)) {
+        std.debug.print("{s}", .{self.previous().span});
         return Ast.createVariable(self.allocator, null, self.previous().span, false, self.previous());
     }
 
