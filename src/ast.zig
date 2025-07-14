@@ -39,3 +39,23 @@ pub const Program = struct {
     stmts: std.ArrayListUnmanaged(Stmt),
     arena: std.heap.ArenaAllocator,
 };
+
+// Helper functions
+
+pub fn createInfix(allocator: std.mem.Allocator, op: TokenType, lhs: Expression, rhs: Expression, src: Token) !Expression {
+    const infix = try allocator.create(Infix);
+    errdefer allocator.destroy(infix);
+    infix.* = .{ .op = op, .lhs = lhs, .rhs = rhs };
+
+    return .{
+        .node = .{ .infix = infix },
+        .src = src,
+    };
+}
+
+pub fn createLiteral(value: Value, src: Token) !Expression {
+    return .{
+        .node = .{ .literal = value },
+        .src = src,
+    };
+}

@@ -94,15 +94,7 @@ fn term(self: *Parser) Errors!Expression {
         const op = self.previous().tag;
         const rhs = try self.factor();
 
-        const newExpr = try self.allocator.create(Infix);
-        errdefer self.allocator.destroy(newExpr);
-
-        newExpr.* = .{
-            .lhs = lhs,
-            .op = op,
-            .rhs = rhs,
-        };
-        expr = .{ .node = .{ .infix = newExpr }, .src = self.previous() };
+        expr = try Ast.createInfix(self.allocator, op, lhs, rhs, self.previous());
     }
     return expr;
 }
@@ -112,17 +104,9 @@ fn factor(self: *Parser) Errors!Expression {
     while (self.match(.mul) or self.match(.div)) {
         const lhs = expr;
         const op = self.previous().tag;
-        const rhs = try self.factor();
+        const rhs = try self.unary();
 
-        const newExpr = try self.allocator.create(Infix);
-        errdefer self.allocator.destroy(newExpr);
-
-        newExpr.* = .{
-            .lhs = lhs,
-            .op = op,
-            .rhs = rhs,
-        };
-        expr = .{ .node = .{ .infix = newExpr }, .src = self.previous() };
+        expr = try Ast.createInfix(self.allocator, op, lhs, rhs, self.previous());
     }
     return expr;
 }
@@ -144,10 +128,10 @@ fn primary(self: *Parser) Errors!Expression {
         const str_val = self.previous().span;
         if (std.mem.containsAtLeast(u8, str_val, 1, ".")) {
             const value = try std.fmt.parseFloat(f64, str_val);
-            return .{ .node = .{ .literal = .{ .float = value } }, .src = self.previous() };
+            return Ast.createLiteral(.{ .float = value }, self.previous());
         }
         const value = try std.fmt.parseInt(i64, str_val, 0);
-        return .{ .node = .{ .literal = .{ .int = value } }, .src = self.previous() };
+        return Ast.createLiteral(.{ .int = value }, self.previous());
     }
 
     if (self.match(.left_paren)) {
