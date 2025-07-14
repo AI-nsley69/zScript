@@ -61,6 +61,8 @@ fn opcode(target: TokenType) u8 {
         .sub => opcodes.SUBTRACT,
         .mul => opcodes.MULTIPLY,
         .div => opcodes.DIVIDE,
+        .logical_and => opcodes.AND,
+        .logical_or => opcodes.OR,
         else => opcodes.NOP,
     };
     return @intFromEnum(op);

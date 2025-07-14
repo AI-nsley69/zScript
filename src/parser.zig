@@ -62,15 +62,25 @@ fn assignment(self: *Parser) Errors!Expression {
 }
 
 fn logicalOr(self: *Parser) Errors!Expression {
-    const lhs = try self.logicalAnd();
-    // TODO: Implement checking for or
-    return lhs;
+    var expr = try self.logicalAnd();
+    if (self.match(.logical_or)) {
+        const op = self.previous().tag;
+        const rhs = try self.logicalAnd();
+
+        expr = try Ast.createInfix(self.allocator, op, expr, rhs, self.previous());
+    }
+    return expr;
 }
 
 fn logicalAnd(self: *Parser) Errors!Expression {
-    const lhs = try self.equality();
-    // TODO: Implement checking for and
-    return lhs;
+    var expr = try self.equality();
+    if (self.match(.logical_and)) {
+        const op = self.previous().tag;
+        const rhs = try self.equality();
+
+        expr = try Ast.createInfix(self.allocator, op, expr, rhs, self.previous());
+    }
+    return expr;
 }
 
 fn equality(self: *Parser) Errors!Expression {
@@ -141,6 +151,12 @@ fn primary(self: *Parser) Errors!Expression {
         const err_msg = try self.allocator.dupe(u8, "Expected closing bracket");
         _ = try self.consume(.right_paren, err_msg);
         return expr;
+    }
+
+    if (self.match(.bool)) {
+        // Lexer only spits out bool token if 'true' or 'false' is found
+        const val = std.mem.eql(u8, "true", self.previous().span);
+        return Ast.createLiteral(.{ .boolean = val }, self.previous());
     }
 
     const token = self.peek();

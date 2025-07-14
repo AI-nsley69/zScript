@@ -109,6 +109,14 @@ pub fn run(self: *Vm) !void {
             try self.div();
             continue :blk self.nextOp();
         },
+        .OR => {
+            try self.logicalOr();
+            continue :blk self.nextOp();
+        },
+        .AND => {
+            try self.logicalAnd();
+            continue :blk self.nextOp();
+        },
         .LOAD_IMMEDIATE => {
             try self.loadConst();
             continue :blk self.nextOp();
@@ -206,6 +214,24 @@ fn div(self: *Vm) !void {
         .string => return Error.Unknown,
         .boolean => return Error.Unknown,
     };
+}
+
+fn logicalAnd(self: *Vm) !void {
+    const dst = self.next();
+    const fst = self.getRegister(self.next());
+    const snd = self.getRegister(self.next());
+
+    if (fst != .boolean and snd != .boolean) return Error.MismatchedTypes;
+    self.setRegister(dst, .{ .boolean = fst.boolean and snd.boolean });
+}
+
+fn logicalOr(self: *Vm) !void {
+    const dst = self.next();
+    const fst = self.getRegister(self.next());
+    const snd = self.getRegister(self.next());
+
+    if (fst != .boolean and snd != .boolean) return Error.MismatchedTypes;
+    self.setRegister(dst, .{ .boolean = fst.boolean or snd.boolean });
 }
 
 fn loadConst(self: *Vm) !void {

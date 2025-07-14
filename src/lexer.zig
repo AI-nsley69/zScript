@@ -2,10 +2,13 @@ const std = @import("std");
 
 pub const TokenType = enum {
     number,
+    bool,
     add,
     sub,
     mul,
     div,
+    logical_or,
+    logical_and,
     left_paren,
     right_paren,
     eof,
@@ -21,6 +24,7 @@ pub const Token = struct {
 pub const TokenInfo = struct {
     line: usize,
     pos: usize,
+    len: usize,
     line_source: []const u8,
 };
 
@@ -43,7 +47,7 @@ arena: std.heap.ArenaAllocator,
 pub fn scan(self: *Lexer) !Tokens {
     while (true) {
         var token = self.scanToken();
-        try self.tokenInfo.append(self.arena.allocator(), self.makeTokenInfo());
+        try self.tokenInfo.append(self.arena.allocator(), self.makeTokenInfo(token));
         token.idx = self.tokenInfo.items.len - 1;
         try self.tokens.append(self.arena.allocator(), token);
 
@@ -86,9 +90,7 @@ fn match(self: *Lexer, expected: u8) bool {
 
 fn scanToken(self: *Lexer) Token {
     self.trimWhitespace();
-
     if (self.isAtEnd()) return self.makeToken(.eof, self.current);
-
     const c: u8 = self.advance();
 
     switch (c) {
@@ -99,6 +101,44 @@ fn scanToken(self: *Lexer) Token {
         '/' => return self.makeToken(.div, self.current - 1),
         '(' => return self.makeToken(.left_paren, self.current - 1),
         ')' => return self.makeToken(.right_paren, self.current - 1),
+        '|' => {
+            const start = self.current - 1;
+            if (!self.match(c)) {
+                const msg = std.fmt.allocPrint(self.arena.allocator(), "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
+                return self.makeError(msg);
+            }
+
+            return self.makeToken(.logical_or, start);
+        },
+        '&' => {
+            const start = self.current - 1;
+            if (!self.match(c)) {
+                const msg = std.fmt.allocPrint(self.arena.allocator(), "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
+                return self.makeError(msg);
+            }
+
+            return self.makeToken(.logical_and, start);
+        },
+        't' => {
+            const curr = self.current - 1;
+            const true_str = self.source[curr .. curr + 4];
+            if (!std.mem.eql(u8, true_str, "true")) {
+                const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
+                return self.makeError(msg);
+            }
+            self.current = curr + 4;
+            return self.makeToken(.bool, curr);
+        },
+        'f' => {
+            const curr = self.current - 1;
+            const false_str = self.source[curr .. curr + 5];
+            if (!std.mem.eql(u8, false_str, "false")) {
+                const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
+                return self.makeError(msg);
+            }
+            self.current = curr + 5;
+            return self.makeToken(.bool, curr);
+        },
         else => {
             const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
             return self.makeError(msg);
@@ -146,10 +186,11 @@ fn makeError(self: *Lexer, msg: []const u8) Token {
     };
 }
 
-fn makeTokenInfo(self: *Lexer) TokenInfo {
+fn makeTokenInfo(self: *Lexer, token: Token) TokenInfo {
     return .{
         .line = self.line,
         .pos = self.current - self.line_pos,
+        .len = token.span.len,
         .line_source = self.getLineSource(),
     };
 }

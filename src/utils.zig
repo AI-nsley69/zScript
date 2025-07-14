@@ -9,6 +9,7 @@ const Allocator = std.mem.Allocator;
 const Writer = std.fs.File.Writer;
 
 pub fn printParseError(allocator: Allocator, writer: Writer, token: Token, tokenInfo: TokenInfo, src_file: []const u8, msg: []const u8) !void {
+    _ = token;
     // Print source file with line and position
     try format.updateStyle(writer, .{ .font_style = .{ .bold = true } }, null);
     const src_msg = try std.fmt.allocPrint(allocator, "{s}:{d}:{d}: ", .{ src_file, tokenInfo.line, tokenInfo.pos });
@@ -30,8 +31,11 @@ pub fn printParseError(allocator: Allocator, writer: Writer, token: Token, token
     const ptr_msg = try allocator.alloc(u8, 2 + tokenInfo.line_source.len + 1);
     defer allocator.free(ptr_msg);
     @memset(ptr_msg, ' ');
-    const pos = tokenInfo.pos + 1;
-    @memset(ptr_msg[pos .. pos + token.span.len], '^');
+    const start_pos = (tokenInfo.pos + 1) - (tokenInfo.len - 1);
+    const end_pos = start_pos + (tokenInfo.len);
+    @memset(ptr_msg[start_pos..end_pos], '^');
+    // std.debug.print("{d} - {d}\n", .{ end_pos, ptr_msg.len });
+    // ptr_msg[pos] = '^';
     ptr_msg[ptr_msg.len - 1] = '\n';
     try format.updateStyle(writer, .{ .foreground = .Green }, null);
     try writer.writeAll(ptr_msg);
