@@ -87,8 +87,6 @@ fn comparison(self: *Parser) Errors!Expression {
 
 fn term(self: *Parser) Errors!Expression {
     var expr = try self.factor();
-
-    // TODO: Implement for sub
     while (self.match(.add) or self.match(.sub)) {
         const lhs = expr;
         const op = self.previous().tag;
