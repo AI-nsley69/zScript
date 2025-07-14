@@ -88,11 +88,10 @@ fn comparison(self: *Parser) Errors!Expression {
 fn term(self: *Parser) Errors!Expression {
     var expr = try self.factor();
     while (self.match(.add) or self.match(.sub)) {
-        const lhs = expr;
         const op = self.previous().tag;
         const rhs = try self.factor();
 
-        expr = try Ast.createInfix(self.allocator, op, lhs, rhs, self.previous());
+        expr = try Ast.createInfix(self.allocator, op, expr, rhs, self.previous());
     }
     return expr;
 }
@@ -100,11 +99,10 @@ fn term(self: *Parser) Errors!Expression {
 fn factor(self: *Parser) Errors!Expression {
     var expr = try self.unary();
     while (self.match(.mul) or self.match(.div)) {
-        const lhs = expr;
         const op = self.previous().tag;
         const rhs = try self.unary();
 
-        expr = try Ast.createInfix(self.allocator, op, lhs, rhs, self.previous());
+        expr = try Ast.createInfix(self.allocator, op, expr, rhs, self.previous());
     }
     return expr;
 }
