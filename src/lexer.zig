@@ -9,12 +9,17 @@ pub const TokenType = enum {
     div,
     logical_or,
     logical_and,
-    eql,
+    assign,
     left_paren,
     right_paren,
+    left_bracket,
+    right_bracket,
     semi_colon,
     var_declaration,
     identifier,
+    if_stmt,
+    else_stmt,
+    eql,
     eof,
     err,
 };
@@ -118,8 +123,15 @@ fn scanToken(self: *Lexer) Token {
         '/' => return self.makeToken(.div, self.current - 1),
         '(' => return self.makeToken(.left_paren, self.current - 1),
         ')' => return self.makeToken(.right_paren, self.current - 1),
+        '{' => return self.makeToken(.left_bracket, self.current - 1),
+        '}' => return self.makeToken(.right_bracket, self.current - 1),
         ';' => return self.makeToken(.semi_colon, self.current - 1),
-        '=' => return self.makeToken(.eql, self.current - 1),
+        '=' => {
+            if (self.match('=')) {
+                return self.makeToken(.eql, self.current - 2);
+            }
+            return self.makeToken(.assign, self.current - 1);
+        },
         '|' => {
             const start = self.current - 1;
             if (!self.match(c)) {
@@ -210,6 +222,10 @@ fn alpha(self: *Lexer, current: u8, start: usize) Token {
     if (current == 'i') {
         if (self.matchFull("mmut")) {
             return self.makeToken(.var_declaration, start);
+        }
+
+        if (self.match('f')) {
+            return self.makeToken(.if_stmt, start);
         }
     }
 

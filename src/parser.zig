@@ -6,7 +6,7 @@ const Vm = @import("vm.zig");
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
 const Infix = Ast.Infix;
-const Stmt = Ast.Stmt;
+const Statement = Ast.Statement;
 const Program = Ast.Program;
 const Token = Lexer.Token;
 const TokenType = Lexer.TokenType;
@@ -26,39 +26,67 @@ current: usize = 0,
 errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
 allocator: std.mem.Allocator = undefined,
 
-const dummy_stmt = Stmt{ .expr = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } };
+const dummy_Statement = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
 
 pub fn parse(self: *Parser, alloc: std.mem.Allocator) Errors!Program {
     var arena = std.heap.ArenaAllocator.init(alloc);
     self.allocator = arena.allocator();
-    var statements = std.ArrayListUnmanaged(Stmt){};
+    var statements = std.ArrayListUnmanaged(Statement){};
     while (!self.isEof() and self.errors.items.len < 1) {
-        const stmt = self.declaration() catch dummy_stmt;
+        const stmt = self.declaration() catch dummy_Statement;
         try statements.append(self.allocator, stmt);
     }
 
     return .{
         .arena = arena,
-        .stmts = statements,
+        .statements = statements,
     };
 }
 
-fn declaration(self: *Parser) Errors!Stmt {
-    if (self.match(.var_declaration)) return .{ .expr = try self.variableDeclaration() };
+fn declaration(self: *Parser) Errors!Statement {
+    if (self.match(.var_declaration)) return try Ast.createExpressionStatement(try self.variableDeclaration());
     return try self.statement();
 }
 
-fn statement(self: *Parser) Errors!Stmt {
+fn statement(self: *Parser) Errors!Statement {
+    if (self.match(.if_stmt)) return try self.ifStatement();
+    if (self.match(.left_bracket)) return try self.block();
     const expr = try self.expression();
-    _ = try self.consume(.semi_colon, try self.allocator.dupe(u8, "Expected semi-colon after expression."));
-    return .{ .expr = expr };
+    _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
+    return Ast.createExpressionStatement(expr);
+}
+
+fn ifStatement(self: *Parser) Errors!Statement {
+    _ = try self.consume(.left_paren, "Expected left parentheses after if-statement.");
+    const condition = try self.expression();
+    _ = try self.consume(.right_paren, "Expected right parentheses after if-statement.");
+    const body = try self.statement();
+
+    var otherwise: ?Statement = null;
+    if (self.match(.else_stmt)) {
+        otherwise = try self.statement();
+    }
+
+    return try Ast.createConditional(self.allocator, condition, body, otherwise);
+}
+
+fn block(self: *Parser) Errors!Statement {
+    var stmts = std.ArrayListUnmanaged(Statement){};
+
+    while (!self.check(.right_bracket) and !self.isEof()) {
+        try stmts.append(self.allocator, try self.declaration());
+    }
+
+    _ = try self.consume(.right_bracket, "Expected end of block.");
+
+    return try Ast.createBlockStatement(try stmts.toOwnedSlice(self.allocator));
 }
 
 fn variableDeclaration(self: *Parser) Errors!Expression {
-    const name = try self.consume(.identifier, try self.allocator.dupe(u8, "Expected variable name."));
-    _ = try self.consume(.eql, try self.allocator.dupe(u8, "Expected assignment: '='"));
+    const name = try self.consume(.identifier, "Expected variable name.");
+    _ = try self.consume(.assign, "Expected assignment: '='");
     const init = try self.expression();
-    _ = try self.consume(.semi_colon, try self.allocator.dupe(u8, "Expected semi-colon after expression."));
+    _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
     return Ast.createVariable(self.allocator, init, name.span, true, self.previous());
 }
 
@@ -68,8 +96,13 @@ fn expression(self: *Parser) Errors!Expression {
 }
 
 fn assignment(self: *Parser) Errors!Expression {
-    const expr = try self.logicalOr();
-    // TODO, implement assignment
+    var expr = try self.logicalOr();
+    if (self.match(.assign)) {
+        const op = self.previous().tag;
+        const rhs = try self.logicalOr();
+
+        expr = try Ast.createInfix(self.allocator, op, expr, rhs, self.previous());
+    }
     return expr;
 }
 
@@ -96,9 +129,15 @@ fn logicalAnd(self: *Parser) Errors!Expression {
 }
 
 fn equality(self: *Parser) Errors!Expression {
-    const lhs = try self.comparison();
-    // TODO: Implement checking for neq and eq
-    return lhs;
+    var expr = try self.comparison();
+    // TODO: implement not assign
+    while (self.match(.eql)) {
+        const op = self.previous().tag;
+        const rhs = try self.comparison();
+
+        expr = try Ast.createInfix(self.allocator, op, expr, rhs, self.previous());
+    }
+    return expr;
 }
 
 fn comparison(self: *Parser) Errors!Expression {
@@ -170,8 +209,7 @@ fn primary(self: *Parser) Errors!Expression {
 
     if (self.match(.left_paren)) {
         const expr = try self.expression();
-        const err_msg = try self.allocator.dupe(u8, "Expected closing bracket");
-        _ = try self.consume(.right_paren, err_msg);
+        _ = try self.consume(.right_paren, "Expected closing bracket");
         return expr;
     }
 
@@ -191,7 +229,7 @@ fn match(self: *Parser, token: TokenType) bool {
     return true;
 }
 
-fn consume(self: *Parser, token: TokenType, err_msg: []u8) !Token {
+fn consume(self: *Parser, token: TokenType, err_msg: []const u8) !Token {
     if (self.check(token)) {
         return self.advance();
     }
@@ -200,7 +238,7 @@ fn consume(self: *Parser, token: TokenType, err_msg: []u8) !Token {
     return Error.UnexpectedToken;
 }
 
-fn err(self: *Parser, err_msg: []u8) !void {
+fn err(self: *Parser, err_msg: []const u8) !void {
     const tkn = self.peek();
     try self.errors.append(self.allocator, .{ .tag = .err, .span = err_msg, .idx = tkn.idx });
 }

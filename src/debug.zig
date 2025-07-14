@@ -8,7 +8,7 @@ const TokenType = Lexer.TokenType;
 
 const CompilerOutput = Compiler.CompilerOutput;
 
-const Stmt = types.Stmt;
+const Statement = types.Statement;
 const Program = types.Program;
 const Expression = types.Expression;
 const ExpressionValue = types.ExpressionValue;
@@ -35,12 +35,16 @@ fn codeToString(opcode: Vm.OpCodes) []const u8 {
         .DIVIDE => "div",
         .DIVIDE_IMMEDIATE => "divi",
         .JUMP => "jmp",
+        .JMP_EQL => "jeq",
+        .JMP_NEQ => "jne",
         .BRANCH_IF_EQUAL => "beq",
         .BRANCH_IF_NOT_EQUAL => "bne",
         .XOR => "xor",
         .AND => "and",
         .NOT => "not",
         .OR => "or",
+        .EQL => "eql",
+        .NEQ => "neq",
     };
 }
 
@@ -78,13 +82,18 @@ pub const Disassembler = struct {
             // no arg
             .NOP, .HALT => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
             // 1x reg with imm arg
-            .ADD_IMMEDIATE, .SUBTRACT_IMMEDIATE, .MULTIPLY_IMMEDIATE, .DIVIDE_IMMEDIATE => {
+            .ADD_IMMEDIATE, .SUBTRACT_IMMEDIATE, .MULTIPLY_IMMEDIATE, .DIVIDE_IMMEDIATE, .JMP_EQL, .JMP_NEQ => {
                 const reg = self.next();
                 const imm: u16 = @as(u16, self.next()) << 8 | self.next();
                 try writer.print("[{x:0>6}] {s} r{d} #{d}\n", .{ self.ip - 1, name, reg, imm });
             },
+            // imm arg
+            .JUMP => {
+                const imm = @as(u16, self.next()) << 8 | self.next();
+                try writer.print("[{x:0>6}] {s} #{d}\n", .{ self.ip - 1, name, imm });
+            },
             // 1x reg arg
-            .JUMP, .RET => {
+            .RET => {
                 try writer.print("[{x:0>6}] {s} r{d}\n", .{ self.ip - 1, name, self.next() });
             },
             .LOAD_IMMEDIATE => {
@@ -95,7 +104,7 @@ pub const Disassembler = struct {
                 try writer.print("[{x:0>6}] {s} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next() });
             },
             // 3x reg arg
-            .ADD, .SUBTRACT, .MULTIPLY, .DIVIDE, .BRANCH_IF_EQUAL, .BRANCH_IF_NOT_EQUAL, .XOR, .AND, .NOT, .OR => {
+            .ADD, .SUBTRACT, .MULTIPLY, .DIVIDE, .BRANCH_IF_EQUAL, .BRANCH_IF_NOT_EQUAL, .XOR, .AND, .NOT, .OR, .EQL, .NEQ => {
                 try writer.print("[{x:0>6}] {s} r{d} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next(), self.next() });
             },
         }
@@ -130,16 +139,17 @@ pub const Ast = struct {
         const indent_msg = try createIndent(self.allocator, indent_step);
         defer self.allocator.free(indent_msg);
 
-        const list = input.stmts.items;
+        const list = input.statements.items;
         try self.writer.print("(program)\n", .{});
         for (list) |stmt| {
-            try self.writer.print("{s}stmt:\n", .{indent_msg});
-            try self.printHelper(stmt.expr, indent_step * 2);
+            try self.writer.print("{s}Statement:\n", .{indent_msg});
+            if (stmt.node != .expression) continue;
+            try self.printExpressionHelper(stmt.node.expression, indent_step * 2);
         }
         // self.io.("{any}", .{input});
     }
 
-    fn printHelper(self: *Self, expr: Expression, indent: usize) Errors!void {
+    fn printExpressionHelper(self: *Self, expr: Expression, indent: usize) Errors!void {
         const node = expr.node;
         return switch (node) {
             .infix => try self.printInfix(node.infix, indent),
@@ -155,13 +165,13 @@ pub const Ast = struct {
         try self.writer.print("{s}infix:\n", .{indent_msg});
 
         const lhs = infix.lhs;
-        try self.printHelper(lhs, indent + indent_step);
+        try self.printExpressionHelper(lhs, indent + indent_step);
 
         const op = infix.op;
         try self.printOperand(op, indent + indent_step);
 
         const rhs = infix.rhs;
-        try self.printHelper(rhs, indent + indent_step);
+        try self.printExpressionHelper(rhs, indent + indent_step);
     }
 
     fn printUnary(self: *Self, unary: *Unary, indent: usize) !void {
@@ -173,7 +183,7 @@ pub const Ast = struct {
         try self.printOperand(op, indent + indent_step);
 
         const rhs = unary.rhs;
-        try self.printHelper(rhs, indent + indent_step);
+        try self.printExpressionHelper(rhs, indent + indent_step);
     }
 
     fn printLiteral(self: *Self, value: Value, indent: usize) !void {
@@ -199,7 +209,7 @@ pub const Ast = struct {
 
         if (variable.initializer) |init| {
             try self.writer.print("{s}init:\n", .{indent_msg});
-            try self.printHelper(init, indent + indent_step * 2);
+            try self.printExpressionHelper(init, indent + indent_step * 2);
         }
     }
 

@@ -24,6 +24,7 @@ pub const runOpts = struct {
     file: []const u8 = "",
     printAsm: bool = false,
     printAst: bool = false,
+    printTokens: bool = false,
     optimize: bool = false,
 };
 
@@ -33,6 +34,14 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
     defer lexer.deinit();
 
     const writer = std.io.getStdOut().writer();
+
+    if (opt.printTokens) {
+        for (tokens.items) |token| {
+            try writer.print("{s}, ", .{@tagName(token.tag)});
+        }
+
+        try writer.writeAll("\n");
+    }
 
     var parser = Parser{ .tokens = tokens };
     var parsed = try parser.parse(allocator);

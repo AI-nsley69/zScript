@@ -3,7 +3,7 @@ const Ast = @import("ast.zig");
 const Vm = @import("vm.zig");
 
 const Program = Ast.Program;
-const Stmt = Ast.Stmt;
+const Statement = Ast.Statement;
 const Expression = Ast.Expression;
 const Value = Vm.Value;
 
@@ -19,16 +19,19 @@ pub fn optimize(self: *Optimizer, allocator: std.mem.Allocator, program: Program
     var arena = std.heap.ArenaAllocator.init(allocator);
     self.allocator = arena.allocator();
 
-    var stmts = std.ArrayListUnmanaged(Stmt){};
+    var stmts = std.ArrayListUnmanaged(Statement){};
 
-    for (program.stmts.items) |stmt| {
-        try stmts.append(self.allocator, .{ .expr = try self.constantFold(stmt.expr) });
+    for (program.statements.items) |stmt| {
+        const node = stmt.node;
+        if (node != .expression) continue;
+        const expr = try self.constantFold(node.expression);
+        try stmts.append(self.allocator, try Ast.createExpressionStatement(expr));
     }
 
     errdefer arena.deinit();
     defer program.arena.deinit();
 
-    return .{ .arena = arena, .stmts = stmts };
+    return .{ .arena = arena, .statements = stmts };
 }
 
 fn isFoldable(self: *Optimizer, expr: Expression) bool {

@@ -6,7 +6,7 @@ const Value = Runtime.Value;
 const TokenType = Lexer.TokenType;
 const Token = Lexer.Token;
 
-pub const ExpressionType = enum {
+const ExpressionType = enum {
     variable,
     infix,
     unary,
@@ -42,20 +42,38 @@ pub const Expression = struct {
     src: Token,
 };
 
-pub const StmtType = enum {
-    expr,
+const StatementType = enum {
+    conditional,
+    expression,
+    block,
 };
 
-pub const Stmt = union(StmtType) {
-    expr: Expression,
+pub const StatementValue = union(StatementType) {
+    conditional: *Conditional,
+    expression: Expression,
+    block: Block,
+};
+
+pub const Block = struct {
+    statements: []Statement,
+};
+
+pub const Conditional = struct {
+    expression: Expression,
+    body: Statement,
+    otherwise: ?Statement,
+};
+
+pub const Statement = struct {
+    node: StatementValue,
 };
 
 pub const Program = struct {
-    stmts: std.ArrayListUnmanaged(Stmt),
+    statements: std.ArrayListUnmanaged(Statement),
     arena: std.heap.ArenaAllocator,
 };
 
-// Helper functions
+// Expression helpers
 
 pub fn createVariable(allocator: std.mem.Allocator, init: ?Expression, name: []const u8, mutable: bool, src: Token) !Expression {
     const variable = try allocator.create(Variable);
@@ -94,5 +112,33 @@ pub fn createLiteral(value: Value, src: Token) !Expression {
     return .{
         .node = .{ .literal = value },
         .src = src,
+    };
+}
+
+// Statement helpers
+
+pub fn createConditional(allocator: std.mem.Allocator, expr: Expression, body: Statement, otherwise: ?Statement) !Statement {
+    const conditional = try allocator.create(Conditional);
+    conditional.* = .{
+        .expression = expr,
+        .body = body,
+        .otherwise = otherwise,
+    };
+
+    return .{
+        .node = .{ .conditional = conditional },
+    };
+}
+
+pub fn createExpressionStatement(expr: Expression) !Statement {
+    return .{
+        .node = .{ .expression = expr },
+    };
+}
+
+pub fn createBlockStatement(stmts: []Statement) !Statement {
+    const block: Block = .{ .statements = stmts };
+    return .{
+        .node = .{ .block = block },
     };
 }

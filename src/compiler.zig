@@ -4,7 +4,8 @@ const Vm = @import("vm.zig");
 const Ast = @import("ast.zig");
 
 const Program = Ast.Program;
-const Stmt = Ast.Stmt;
+const Statement = Ast.Statement;
+const Conditional = Ast.Conditional;
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
 const Infix = Ast.Infix;
@@ -16,6 +17,8 @@ const TokenType = Lexer.TokenType;
 const Error = error{
     OutOfRegisters,
     OutOfConstants,
+    InvalidJmpTarget,
+    Unknown,
 };
 
 const Errors = (Error || std.mem.Allocator.Error);
@@ -44,10 +47,10 @@ err_msg: ?[]u8 = null,
 
 const opcodes = Vm.OpCodes;
 
-pub fn compile(self: *Compiler) !CompilerOutput {
+pub fn compile(self: *Compiler) Errors!CompilerOutput {
     defer self.variables.deinit(self.allocator);
 
-    const statements = self.ast.stmts.items;
+    const statements = self.ast.statements.items;
     var final_dst: u8 = 0;
     for (statements) |elem| {
         final_dst = try self.statement(elem);
@@ -62,11 +65,54 @@ pub fn compile(self: *Compiler) !CompilerOutput {
     };
 }
 
-fn statement(self: *Compiler, target: Stmt) !u8 {
-    return try self.expression(target.expr);
+fn statement(self: *Compiler, target: Statement) Errors!u8 {
+    const node = target.node;
+    return switch (node) {
+        .expression => try self.expression(node.expression),
+        .conditional => try self.conditional(node.conditional),
+        .block => {
+            var dst: u8 = undefined;
+            for (node.block.statements) |stmt| {
+                dst = try self.statement(stmt);
+            }
+
+            return dst;
+        },
+    };
 }
 
-fn expression(self: *Compiler, target: Expression) !u8 {
+fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
+    const cmp = try self.expression(target.expression);
+    if (self.instructions.items.len > std.math.maxInt(u16)) {
+        try self.err("Invalid jump target");
+        return Error.InvalidJmpTarget;
+    }
+    try self.emitBytes(@intFromEnum(opcodes.JMP_NEQ), cmp);
+    try self.emitBytes(0x00, 0x00);
+    const current_ip = self.instructions.items.len - 1;
+    const body = try self.statement(target.body);
+    const target_ip = self.instructions.items.len;
+    // TODO, replace this opcode, here to prevent jumping to nothing.
+    try self.emitByte(@intFromEnum(opcodes.NOP));
+    // Patch the bytecode with the new target to jump to
+    self.instructions.items[current_ip - 1] = @truncate((target_ip & 0xff00) >> 8);
+    self.instructions.items[current_ip] = @truncate(target_ip);
+
+    if (target.otherwise) |else_blk| {
+        if (self.instructions.items.len > std.math.maxInt(u16)) {
+            try self.err("Invalid jump target");
+            return Error.InvalidJmpTarget;
+        }
+        const else_ip: u16 = @truncate(self.instructions.items.len + 3);
+        try self.emitBytes(@intFromEnum(opcodes.JUMP), @truncate((else_ip & 0xff00) >> 8));
+        try self.emitByte(@truncate((else_ip & 0x00ff)));
+        _ = try self.statement(else_blk);
+    }
+
+    return body;
+}
+
+fn expression(self: *Compiler, target: Expression) Errors!u8 {
     const node = target.node;
     return switch (target.node) {
         .infix => try self.infix(node.infix),
@@ -84,6 +130,7 @@ fn opcode(target: TokenType) u8 {
         .div => opcodes.DIVIDE,
         .logical_and => opcodes.AND,
         .logical_or => opcodes.OR,
+        .eql => opcodes.EQL,
         else => opcodes.NOP,
     };
     return @intFromEnum(op);
@@ -104,6 +151,8 @@ fn variable(self: *Compiler, target: *Variable) Errors!u8 {
 }
 
 fn infix(self: *Compiler, target: *Infix) Errors!u8 {
+    if (target.op == .assign) return try self.assignment(target);
+
     const lhs = try self.expression(target.lhs);
     const rhs = try self.expression(target.rhs);
     const dst = try self.allocateRegister();
@@ -111,6 +160,15 @@ fn infix(self: *Compiler, target: *Infix) Errors!u8 {
     try self.emitBytes(op, dst);
     try self.emitBytes(lhs, rhs);
     return dst;
+}
+
+fn assignment(self: *Compiler, target: *Infix) Errors!u8 {
+    const lhs = try self.variable(target.lhs.node.variable);
+    const rhs = try self.expression(target.rhs);
+    try self.emitBytes(@intFromEnum(opcodes.MOV), lhs);
+    try self.emitByte(rhs);
+
+    return lhs;
 }
 
 fn unary(self: *Compiler, target: *Unary) Errors!u8 {
@@ -123,7 +181,7 @@ fn unary(self: *Compiler, target: *Unary) Errors!u8 {
     return dst;
 }
 
-fn literal(self: *Compiler, val: Value) !u8 {
+fn literal(self: *Compiler, val: Value) Errors!u8 {
     const dst = try self.allocateRegister();
     const const_idx = try self.addConstant(val);
     try self.emitBytes(@intFromEnum(opcodes.LOAD_IMMEDIATE), dst);
@@ -131,7 +189,7 @@ fn literal(self: *Compiler, val: Value) !u8 {
     return dst;
 }
 
-fn allocateRegister(self: *Compiler) !u8 {
+fn allocateRegister(self: *Compiler) Errors!u8 {
     if (self.reg_ptr >= std.math.maxInt(u8)) {
         try self.err("Out of registers");
         return Error.OutOfRegisters;
@@ -140,7 +198,7 @@ fn allocateRegister(self: *Compiler) !u8 {
     return self.reg_ptr - 1;
 }
 
-fn addConstant(self: *Compiler, value: Vm.Value) !u8 {
+fn addConstant(self: *Compiler, value: Vm.Value) Errors!u8 {
     if (self.constants.items.len >= std.math.maxInt(u8)) {
         try self.err("Out of constants");
         return Error.OutOfConstants;
@@ -150,17 +208,17 @@ fn addConstant(self: *Compiler, value: Vm.Value) !u8 {
     return ret;
 }
 
-fn err(self: *Compiler, msg: []const u8) !void {
+fn err(self: *Compiler, msg: []const u8) Errors!void {
     const err_msg = try self.allocator.dupe(u8, msg);
     errdefer self.allocator.free(err_msg);
     self.err_msg = err_msg;
 }
 
-fn emitBytes(self: *Compiler, byte1: u8, byte2: u8) !void {
+fn emitBytes(self: *Compiler, byte1: u8, byte2: u8) Errors!void {
     try self.emitByte(byte1);
     try self.emitByte(byte2);
 }
 
-fn emitByte(self: *Compiler, byte: u8) !void {
+fn emitByte(self: *Compiler, byte: u8) Errors!void {
     try self.instructions.append(self.allocator, byte);
 }
