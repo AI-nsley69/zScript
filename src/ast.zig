@@ -7,19 +7,23 @@ const TokenType = Lexer.TokenType;
 const Token = Lexer.Token;
 
 pub const ExpressionType = enum {
-    expr,
+    infix,
     literal,
 };
 
 pub const ExpressionValue = union(ExpressionType) {
-    expr: *Expression,
+    infix: *Infix,
     literal: Value,
 };
 
+pub const Infix = struct {
+    lhs: Expression,
+    op: TokenType,
+    rhs: Expression,
+};
+
 pub const Expression = struct {
-    lhs: ExpressionValue,
-    operand: ?TokenType = null,
-    rhs: ?ExpressionValue = null,
+    node: ExpressionValue,
     src: Token,
 };
 

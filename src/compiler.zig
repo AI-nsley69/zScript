@@ -7,10 +7,14 @@ const Program = Ast.Program;
 const Stmt = Ast.Stmt;
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
+const Infix = Ast.Infix;
+const Value = Vm.Value;
 
 const Error = error{
     OutOfRegisters,
 };
+
+const Errors = (Error || std.mem.Allocator.Error);
 
 const Compiler = @This();
 
@@ -39,60 +43,48 @@ pub fn compile(self: *Compiler) !bool {
 }
 
 fn statement(self: *Compiler, target: Stmt) !u8 {
-    return try self.expression(target.expr);
+    const node = target.expr.node;
+    return switch (node) {
+        .infix => try self.expression(node.infix.*),
+        .literal => try self.literal(node.literal),
+    };
 }
 
-fn expression(self: *Compiler, target: Expression) !u8 {
-    const lhs: ExpressionValue = target.lhs;
+fn expression(self: *Compiler, target: Infix) Errors!u8 {
+    const lhs: ExpressionValue = target.lhs.node;
     const lhs_dst = try switch (lhs) {
-        .expr => self.expression(lhs.expr.*),
-        .literal => {
-            const dst = try self.allocateRegister();
-            const const_idx = try self.addConstant(lhs.literal);
-
-            try self.emitBytes(@intFromEnum(opcodes.LOAD_IMMEDIATE), dst);
-            // Load the const index into the allocated register
-            try self.emitByte(const_idx);
-            return dst;
-        },
+        .infix => self.expression(lhs.infix.*),
+        .literal => self.literal(lhs.literal),
     };
     // Early return if it cannot load the destination
-    if (lhs == .literal) return lhs_dst;
+    // if (lhs == .literal) return lhs_dst;
 
-    const rhs = target.rhs;
-    var rhs_dst: ?u8 = null;
-    if (rhs) |expr| {
-        rhs_dst = try switch (expr) {
-            .expr => self.expression(expr.expr.*),
-            .literal => {
-                const dst = try self.allocateRegister();
-                const const_idx = try self.addConstant(expr.literal);
-
-                try self.emitBytes(@intFromEnum(opcodes.LOAD_IMMEDIATE), dst);
-                // Load the const index into the allocated register
-                try self.emitByte(const_idx);
-                return dst;
-            },
-        };
-    }
+    const rhs = target.rhs.node;
+    const rhs_dst = try switch (rhs) {
+        .infix => self.expression(rhs.infix.*),
+        .literal => self.literal(rhs.literal),
+    };
 
     const dst = try self.allocateRegister();
-    if (target.operand == null) {
-        self.hadErr = true;
-        self.panicMode = true;
-        return dst;
-    }
-
-    const opcode = switch (target.operand.?) {
+    const opcode = switch (target.op) {
         .add => opcodes.ADD,
         .sub => opcodes.SUBTRACT,
         .mul => opcodes.MULTIPLY,
         .div => opcodes.DIVIDE,
         else => opcodes.NOP,
     };
-
     try self.emitBytes(@intFromEnum(opcode), dst);
-    try self.emitBytes(lhs_dst, rhs_dst.?);
+    try self.emitBytes(lhs_dst, rhs_dst);
+    return dst;
+}
+
+fn literal(self: *Compiler, val: Value) !u8 {
+    const dst = try self.allocateRegister();
+    const const_idx = try self.addConstant(val);
+
+    try self.emitBytes(@intFromEnum(opcodes.LOAD_IMMEDIATE), dst);
+    // Load the const index into the allocated register
+    try self.emitByte(const_idx);
     return dst;
 }
 

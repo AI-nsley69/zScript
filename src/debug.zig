@@ -8,6 +8,8 @@ const TokenType = Lexer.TokenType;
 const Stmt = types.Stmt;
 const Program = types.Program;
 const Expression = types.Expression;
+const ExpressionValue = types.ExpressionValue;
+const Infix = types.Infix;
 const Value = Vm.Value;
 
 fn codeToString(opcode: Vm.OpCodes) []const u8 {
@@ -107,7 +109,10 @@ pub const Ast = struct {
         try self.writer.print("(program)\n", .{});
         for (list) |stmt| {
             try self.writer.print("{s}stmt:\n", .{indent_msg});
-            try self.printExpression(stmt.expr, indent_step * 2);
+            switch (stmt.expr.node) {
+                .infix => try self.printExpression(stmt.expr, indent_step * 2),
+                .literal => try self.printLiteral(stmt.expr.node.literal, indent_step * 2),
+            }
         }
         // self.io.("{any}", .{input});
     }
@@ -117,23 +122,30 @@ pub const Ast = struct {
         defer self.allocator.free(indent_msg);
         @memset(indent_msg, ' ');
 
+        const node = expr.node;
         try self.writer.print("{s}expr:\n", .{indent_msg});
-        const lhs = expr.lhs;
-        switch (lhs) {
-            .expr => try self.printExpression(lhs.expr.*, indent + indent_step),
-            .literal => try self.printLiteral(lhs.literal, indent + indent_step),
+        // switch (node) {
+        //     .infix => try self.printExpression(node, indent + indent_step),
+        //     .literal => {
+        //         try self.printLiteral(node.literal, indent + indent_step);
+        //         return;
+        //     },
+        // }
+
+        const infix = node.infix.*;
+        const lhs = infix.lhs;
+        switch (lhs.node) {
+            .infix => try self.printExpression(lhs, indent + indent_step),
+            .literal => try self.printLiteral(lhs.node.literal, indent + indent_step),
         }
 
-        const op = expr.operand;
-        if (op) |operand| {
-            try self.printOperand(operand, indent + indent_step);
-        }
+        const op = infix.op;
+        try self.printOperand(op, indent + indent_step);
 
-        if (expr.rhs) |rhs| {
-            switch (rhs) {
-                .expr => try self.printExpression(rhs.expr.*, indent + indent_step),
-                .literal => try self.printLiteral(rhs.literal, indent + indent_step),
-            }
+        const rhs = infix.rhs;
+        switch (rhs.node) {
+            .infix => try self.printExpression(rhs, indent + indent_step),
+            .literal => try self.printLiteral(rhs.node.literal, indent + indent_step),
         }
     }
 

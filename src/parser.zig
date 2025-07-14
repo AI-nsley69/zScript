@@ -5,6 +5,7 @@ const Vm = @import("vm.zig");
 
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
+const Infix = Ast.Infix;
 const Stmt = Ast.Stmt;
 const Program = Ast.Program;
 const Token = Lexer.Token;
@@ -25,14 +26,7 @@ current: usize = 0,
 errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
 allocator: std.mem.Allocator = undefined,
 
-const dummy_stmt = Stmt{
-    .expr = .{
-        .lhs = .{
-            .literal = .{ .boolean = false },
-        },
-        .src = Token{ .line = 0, .line_source = "", .pos = 0, .tag = .err, .span = "" },
-    },
-};
+const dummy_stmt = Stmt{ .expr = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .line = 0, .line_source = "", .pos = 0, .tag = .err, .span = "" } } };
 
 pub fn parse(self: *Parser, alloc: std.mem.Allocator) Errors!Program {
     var arena = std.heap.ArenaAllocator.init(alloc);
@@ -96,21 +90,19 @@ fn term(self: *Parser) Errors!Expression {
 
     // TODO: Implement for sub
     while (self.match(.add) or self.match(.sub)) {
-        const lhs = try self.allocator.create(Expression);
-        errdefer self.allocator.destroy(lhs);
-        lhs.* = expr;
-
+        const lhs = expr;
         const op = self.previous().tag;
+        const rhs = try self.factor();
 
-        const rhs = try self.allocator.create(Expression);
-        errdefer self.allocator.destroy(rhs);
-        rhs.* = try self.factor();
+        const newExpr = try self.allocator.create(Infix);
+        errdefer self.allocator.destroy(newExpr);
 
-        expr.lhs = .{ .expr = lhs };
-        expr.operand = op;
-        expr.rhs = .{ .expr = rhs };
-        expr.src = self.previous();
-        // expr = lhs.*;
+        newExpr.* = .{
+            .lhs = lhs,
+            .op = op,
+            .rhs = rhs,
+        };
+        expr = .{ .node = .{ .infix = newExpr }, .src = self.previous() };
     }
     return expr;
 }
@@ -118,21 +110,19 @@ fn term(self: *Parser) Errors!Expression {
 fn factor(self: *Parser) Errors!Expression {
     var expr = try self.unary();
     while (self.match(.mul) or self.match(.div)) {
-        const lhs = try self.allocator.create(Expression);
-        errdefer self.allocator.destroy(lhs);
-        lhs.* = expr;
-
+        const lhs = expr;
         const op = self.previous().tag;
+        const rhs = try self.factor();
 
-        const rhs = try self.allocator.create(Expression);
-        errdefer self.allocator.destroy(rhs);
-        rhs.* = try self.factor();
+        const newExpr = try self.allocator.create(Infix);
+        errdefer self.allocator.destroy(newExpr);
 
-        expr.lhs = .{ .expr = lhs };
-        expr.operand = op;
-        expr.rhs = .{ .expr = rhs };
-        expr.src = self.previous();
-        // expr = lhs.*;
+        newExpr.* = .{
+            .lhs = lhs,
+            .op = op,
+            .rhs = rhs,
+        };
+        expr = .{ .node = .{ .infix = newExpr }, .src = self.previous() };
     }
     return expr;
 }
@@ -154,10 +144,10 @@ fn primary(self: *Parser) Errors!Expression {
         const str_val = self.previous().span;
         if (std.mem.containsAtLeast(u8, str_val, 1, ".")) {
             const value = try std.fmt.parseFloat(f64, str_val);
-            return .{ .lhs = .{ .literal = .{ .float = value } }, .src = self.previous() };
+            return .{ .node = .{ .literal = .{ .float = value } }, .src = self.previous() };
         }
         const value = try std.fmt.parseInt(i64, str_val, 0);
-        return .{ .lhs = .{ .literal = .{ .int = value } }, .src = self.previous() };
+        return .{ .node = .{ .literal = .{ .int = value } }, .src = self.previous() };
     }
 
     if (self.match(.left_paren)) {
