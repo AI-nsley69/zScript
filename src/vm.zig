@@ -72,11 +72,11 @@ fn nextOp(self: *Vm) OpCodes {
     return @enumFromInt(self.next());
 }
 
-fn getRegister(self: *Vm, index: u8) Value {
+inline fn getRegister(self: *Vm, index: u8) Value {
     return self.registers[index];
 }
 
-fn setRegister(self: *Vm, index: u8, value: Value) void {
+inline fn setRegister(self: *Vm, index: u8, value: Value) void {
     self.registers[index] = value;
 }
 

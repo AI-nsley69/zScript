@@ -1,2 +1,3 @@
 mut foo = 3 + 2;
-foo + 1;
+mut bar = 8;
+foo + bar;

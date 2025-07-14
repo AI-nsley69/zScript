@@ -44,7 +44,11 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator) Errors!Program {
 }
 
 fn declaration(self: *Parser) Errors!Stmt {
-    if (self.match(.var_declaration)) return .{ .expr = try self.variableDeclaration() };
+    if (self.match(.var_declaration)) {
+        const expr = try self.variableDeclaration();
+        _ = try self.consume(.semi_colon, try self.allocator.dupe(u8, "Expected semi-colon after expression."));
+        return .{ .expr = expr };
+    }
     return try self.statement();
 }
 
@@ -58,7 +62,6 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
     const name = try self.consume(.identifier, try self.allocator.dupe(u8, "Expected variable name."));
     _ = try self.consume(.eql, try self.allocator.dupe(u8, "Expected assignment: '='"));
     const init = try self.expression();
-    _ = try self.consume(.semi_colon, try self.allocator.dupe(u8, "Expected semi-colon after expression."));
     return Ast.createVariable(self.allocator, init, name.span, true, self.previous());
 }
 
