@@ -202,11 +202,11 @@ fn div(self: *Vm) !void {
     return switch (fst) {
         .int => {
             if (snd != .int) return Error.MismatchedTypes;
-            self.setRegister(dst, .{ .int = @divExact(fst.int, snd.int) });
+            self.setRegister(dst, .{ .int = @divFloor(fst.int, snd.int) });
         },
         .float => {
             if (snd != .float) return Error.MismatchedTypes;
-            self.setRegister(dst, .{ .float = @divExact(fst.float, snd.float) });
+            self.setRegister(dst, .{ .float = @divFloor(fst.float, snd.float) });
         },
         .string => return Error.Unknown,
         .boolean => return Error.Unknown,

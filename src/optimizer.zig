@@ -80,8 +80,8 @@ fn eval(self: *Optimizer, expr: Expression) !Value {
                 },
                 .div => {
                     return switch (lhs) {
-                        .int => .{ .int = @divExact(lhs.int, rhs.int) },
-                        .float => .{ .float = @divExact(lhs.float, rhs.float) },
+                        .int => .{ .int = @divFloor(lhs.int, rhs.int) },
+                        .float => .{ .float = @divFloor(lhs.float, rhs.float) },
                         else => Error.UnsupportedValue,
                     };
                 },
