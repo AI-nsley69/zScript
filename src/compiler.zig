@@ -19,7 +19,7 @@ const Error = error{
 
 const Errors = (Error || std.mem.Allocator.Error);
 
-const CompilerOutput = struct {
+pub const CompilerOutput = struct {
     const Self = @This();
     instructions: []u8,
     constants: []Value,

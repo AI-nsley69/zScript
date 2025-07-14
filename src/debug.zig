@@ -1,9 +1,12 @@
 const std = @import("std");
 const Vm = @import("vm.zig");
+const Compiler = @import("compiler.zig");
 const types = @import("ast.zig");
 const Lexer = @import("lexer.zig");
 
 const TokenType = Lexer.TokenType;
+
+const CompilerOutput = Compiler.CompilerOutput;
 
 const Stmt = types.Stmt;
 const Program = types.Program;
@@ -40,21 +43,30 @@ fn codeToString(opcode: Vm.OpCodes) []const u8 {
     };
 }
 
+fn valueToString(allocator: std.mem.Allocator, value: Value) ![]u8 {
+    return switch (value) {
+        .int => std.fmt.allocPrint(allocator, "(int){d}", .{value.int}),
+        .float => std.fmt.allocPrint(allocator, "(float){d}", .{value.float}),
+        .string => std.fmt.allocPrint(allocator, "\"{s}\"", .{value.string}),
+        .boolean => std.fmt.allocPrint(allocator, "(bool){any}", .{value.boolean}),
+    };
+}
+
 pub const Disassembler = struct {
     const Self = @This();
 
     ip: u32 = 0,
-    instructions: []u8,
+    output: CompilerOutput,
 
     fn next(self: *Self) u8 {
-        std.debug.assert(self.ip < self.instructions.len);
-        const instruction = self.instructions[self.ip];
+        std.debug.assert(self.ip < self.output.instructions.len);
+        const instruction = self.output.instructions[self.ip];
         self.ip += 1;
         return instruction;
     }
 
     pub fn has_next(self: *Self) bool {
-        return self.ip < self.instructions.len;
+        return self.ip < self.output.instructions.len;
     }
 
     pub fn disassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {
@@ -75,7 +87,7 @@ pub const Disassembler = struct {
                 try writer.print("[{x:0>6}] {s} r{d}\n", .{ self.ip - 1, name, self.next() });
             },
             .LOAD_IMMEDIATE => {
-                try writer.print("[{x:0>6}] {s} r{d} c{d}\n", .{ self.ip - 1, name, self.next(), self.next() });
+                try writer.print("[{x:0>6}] {s} r{d} {any}\n", .{ self.ip - 1, name, self.next(), self.output.constants[self.next()] });
             },
             // 2x reg arg
             .LOAD_WORD, .STORE_WORD, .MOV => {
