@@ -44,17 +44,17 @@ pub const Disassembler = struct {
     const Self = @This();
 
     ip: u32 = 0,
-    instructions: std.ArrayListUnmanaged(u8),
+    instructions: []u8,
 
     fn next(self: *Self) u8 {
-        std.debug.assert(self.ip < self.instructions.items.len);
-        const instruction = self.instructions.items[self.ip];
+        std.debug.assert(self.ip < self.instructions.len);
+        const instruction = self.instructions[self.ip];
         self.ip += 1;
         return instruction;
     }
 
     pub fn has_next(self: *Self) bool {
-        return self.ip < self.instructions.items.len;
+        return self.ip < self.instructions.len;
     }
 
     pub fn disassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {

@@ -2,6 +2,7 @@ const std = @import("std");
 const Lexer = @import("lexer.zig");
 const Ast = @import("ast.zig");
 const Parser = @import("parser.zig");
+const Optimizer = @import("optimizer.zig");
 const Compiler = @import("compiler.zig");
 const Vm = @import("vm.zig");
 const Debug = @import("debug.zig");
@@ -23,6 +24,7 @@ pub const runOpts = struct {
     file: []const u8 = "",
     printAsm: bool = false,
     printAst: bool = false,
+    optimize: bool = false,
 };
 
 pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Value {
@@ -33,8 +35,13 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
     const writer = std.io.getStdOut().writer();
 
     var parser = Parser{ .tokens = tokens };
-    const parsed = try parser.parse(allocator);
+    var parsed = try parser.parse(allocator);
     defer parsed.arena.deinit();
+
+    if (opt.optimize) {
+        var optimizer = Optimizer{};
+        parsed = try optimizer.optimize(allocator, parsed);
+    }
 
     const parser_errors = parser.errors.items;
     if (parser_errors.len > 0) {
@@ -61,7 +68,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
     defer compiled.deinit(allocator);
 
     if (opt.printAsm) {
-        var disasm = Debug.Disassembler{ .instructions = compiler.instructions };
+        var disasm = Debug.Disassembler{ .instructions = compiled.instructions };
         disasm.disassemble(writer) catch {};
     }
 

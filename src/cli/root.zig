@@ -12,6 +12,7 @@ pub fn build(allocator: std.mem.Allocator) !*zli.Command {
     }, run);
     try root.addFlag(ast_dump);
     try root.addFlag(asm_dump);
+    try root.addFlag(optimize);
     try root.addPositionalArg(.{
         .name = "source",
         .required = true,
@@ -31,6 +32,7 @@ fn showHelp(ctx: zli.CommandContext) !void {
 
 const ast_dump: Flag = .{ .name = "ast", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump AST tree" };
 const asm_dump: Flag = .{ .name = "asm", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
+const optimize: Flag = .{ .name = "optimize", .shortcut = "O", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Apply optimization [WIP]" };
 
 fn run(ctx: zli.CommandContext) !void {
     // Test files for development
@@ -49,6 +51,7 @@ fn run(ctx: zli.CommandContext) !void {
         .file = ctx.positional_args[0],
         .printAsm = ctx.flag("asm", bool),
         .printAst = ctx.flag("ast", bool),
+        .optimize = ctx.flag("optimize", bool),
     });
 
     std.log.debug("Return val: {?}", .{res});
