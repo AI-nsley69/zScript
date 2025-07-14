@@ -221,7 +221,7 @@ fn logicalAnd(self: *Vm) !void {
     const fst = self.getRegister(self.next());
     const snd = self.getRegister(self.next());
 
-    if (fst != .boolean and snd != .boolean) return Error.MismatchedTypes;
+    if (fst != .boolean or snd != .boolean) return Error.MismatchedTypes;
     self.setRegister(dst, .{ .boolean = fst.boolean and snd.boolean });
 }
 
@@ -230,7 +230,7 @@ fn logicalOr(self: *Vm) !void {
     const fst = self.getRegister(self.next());
     const snd = self.getRegister(self.next());
 
-    if (fst != .boolean and snd != .boolean) return Error.MismatchedTypes;
+    if (fst != .boolean or snd != .boolean) return Error.MismatchedTypes;
     self.setRegister(dst, .{ .boolean = fst.boolean or snd.boolean });
 }
 
