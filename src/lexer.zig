@@ -15,11 +15,16 @@ pub const TokenType = enum {
 pub const Token = struct {
     tag: TokenType,
     span: []const u8,
-    // TODO: move these to a seperate token info list
+    idx: usize = 0, // Consider a better way to look up token info
+};
+
+pub const TokenInfo = struct {
     line: usize,
     pos: usize,
     line_source: []const u8,
 };
+
+const Tokens = std.ArrayListUnmanaged(Token);
 
 fn isDigit(char: u8) bool {
     return '0' <= char and char <= '9';
@@ -31,13 +36,17 @@ source: []const u8,
 current: usize = 0,
 line: usize = 1,
 line_pos: usize = 0,
-tokens: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
+tokens: Tokens = Tokens{},
+tokenInfo: std.ArrayListUnmanaged(TokenInfo) = std.ArrayListUnmanaged(TokenInfo){},
 arena: std.heap.ArenaAllocator,
 
-pub fn scan(self: *Lexer) !std.ArrayListUnmanaged(Token) {
+pub fn scan(self: *Lexer) !Tokens {
     while (true) {
-        const token = self.scanToken();
+        var token = self.scanToken();
+        try self.tokenInfo.append(self.arena.allocator(), self.makeTokenInfo());
+        token.idx = self.tokenInfo.items.len - 1;
         try self.tokens.append(self.arena.allocator(), token);
+
         if (token.tag == .eof or token.tag == .err) break;
     }
 
@@ -130,9 +139,15 @@ fn number(self: *Lexer, start: usize) Token {
 }
 
 fn makeError(self: *Lexer, msg: []const u8) Token {
-    return Token{
+    _ = self;
+    return .{
         .tag = .err,
         .span = msg,
+    };
+}
+
+fn makeTokenInfo(self: *Lexer) TokenInfo {
+    return .{
         .line = self.line,
         .pos = self.current - self.line_pos,
         .line_source = self.getLineSource(),
@@ -140,12 +155,9 @@ fn makeError(self: *Lexer, msg: []const u8) Token {
 }
 
 fn makeToken(self: *Lexer, tokenType: TokenType, start: usize) Token {
-    return Token{
+    return .{
         .tag = tokenType,
         .span = self.source[start..self.current],
-        .line = self.line,
-        .pos = self.current - self.line_pos,
-        .line_source = self.getLineSource(),
     };
 }
 

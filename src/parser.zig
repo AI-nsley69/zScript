@@ -26,7 +26,7 @@ current: usize = 0,
 errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
 allocator: std.mem.Allocator = undefined,
 
-const dummy_stmt = Stmt{ .expr = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .line = 0, .line_source = "", .pos = 0, .tag = .err, .span = "" } } };
+const dummy_stmt = Stmt{ .expr = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } };
 
 pub fn parse(self: *Parser, alloc: std.mem.Allocator) Errors!Program {
     var arena = std.heap.ArenaAllocator.init(alloc);
@@ -144,7 +144,7 @@ fn primary(self: *Parser) Errors!Expression {
     }
 
     const token = self.peek();
-    const err_msg = try std.fmt.allocPrint(self.allocator, "Unable to parse expression: {s}", .{token.span});
+    const err_msg = try std.fmt.allocPrint(self.allocator, "Expected expression, found: {s}", .{token.span});
     // errdefer self.allocator.free(err_msg);
     try self.err(err_msg);
     return Error.ExpressionExpected;
@@ -170,7 +170,7 @@ fn consume(self: *Parser, token: TokenType, err_msg: []u8) !Token {
 
 fn err(self: *Parser, err_msg: []u8) !void {
     const tkn = self.peek();
-    try self.errors.append(self.allocator, Token{ .line = tkn.line, .line_source = tkn.line_source, .pos = tkn.pos, .tag = .err, .span = err_msg });
+    try self.errors.append(self.allocator, .{ .tag = .err, .span = err_msg, .idx = tkn.idx });
 }
 
 fn check(self: *Parser, token: TokenType) bool {

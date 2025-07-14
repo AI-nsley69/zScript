@@ -39,7 +39,9 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
     const parser_errors = parser.errors.items;
     if (parser_errors.len > 0) {
         for (parser_errors) |err| {
-            try utils.printErr(allocator, std.io.getStdErr().writer(), err, opt.file, err.span);
+            const err_writer = std.io.getStdErr().writer();
+            const tokenInfo = lexer.tokenInfo.items[err.idx];
+            try utils.printErr(allocator, err_writer, tokenInfo, opt.file, err.span);
         }
         return null;
     }
