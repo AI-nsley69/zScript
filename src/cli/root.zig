@@ -45,7 +45,7 @@ fn run(ctx: zli.CommandContext) !void {
     const contents = try file.readToEndAlloc(allocator, 1 << 24);
     defer allocator.free(contents);
 
-    std.log.debug("Source: {s}", .{contents});
+    std.log.debug("Source: {s}\n", .{contents});
 
     const res = try main.run(allocator, contents, .{
         .file = ctx.positional_args[0],
@@ -54,5 +54,5 @@ fn run(ctx: zli.CommandContext) !void {
         .optimize = ctx.flag("optimize", bool),
     });
 
-    std.log.debug("Return val: {?}", .{res});
+    std.log.debug("Return val: {?}\n", .{res});
 }
