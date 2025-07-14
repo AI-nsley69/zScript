@@ -19,6 +19,17 @@ const Error = error{
 
 const Errors = (Error || std.mem.Allocator.Error);
 
+const CompilerOutput = struct {
+    const Self = @This();
+    instructions: []u8,
+    constants: []Value,
+
+    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+        allocator.free(self.instructions);
+        allocator.free(self.constants);
+    }
+};
+
 const Compiler = @This();
 
 allocator: std.mem.Allocator,
@@ -31,7 +42,7 @@ err_msg: ?[]u8 = null,
 
 const opcodes = Vm.OpCodes;
 
-pub fn compile(self: *Compiler) !void {
+pub fn compile(self: *Compiler) !CompilerOutput {
     const statements = self.ast.stmts.items;
     var final_dst: u8 = 0;
     for (statements) |elem| {
@@ -40,6 +51,11 @@ pub fn compile(self: *Compiler) !void {
 
     // Emit halt instruction at the end
     try self.emitBytes(@intFromEnum(opcodes.RET), final_dst);
+
+    return .{
+        .instructions = try self.instructions.toOwnedSlice(self.allocator),
+        .constants = try self.constants.toOwnedSlice(self.allocator),
+    };
 }
 
 fn statement(self: *Compiler, target: Stmt) !u8 {

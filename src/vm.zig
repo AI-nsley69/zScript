@@ -51,24 +51,19 @@ const Vm = @This();
 
 trace: bool = true,
 ip: u64 = 0,
-instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
-constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+instructions: []u8,
+constants: []Value,
 registers: [256]Value = undefined,
 return_value: ?Value = null,
 
-pub fn deinit(self: *Vm, alloc: std.mem.Allocator) void {
-    self.instructions.deinit(alloc);
-    self.constants.deinit(alloc);
-}
-
 fn has_next(self: *Vm) bool {
-    return self.ip < self.instructions.items.len;
+    return self.ip < self.instructions.len;
 }
 
 fn next(self: *Vm) u8 {
-    if (self.ip >= self.instructions.items.len) return @intFromEnum(OpCodes.HALT);
+    if (self.ip >= self.instructions.len) return @intFromEnum(OpCodes.HALT);
     self.ip += 1;
-    return self.instructions.items[self.ip - 1];
+    return self.instructions[self.ip - 1];
 }
 
 fn nextOp(self: *Vm) OpCodes {
@@ -237,5 +232,5 @@ fn logicalOr(self: *Vm) !void {
 fn loadConst(self: *Vm) !void {
     const dst = self.next();
     const const_idx = self.next();
-    self.setRegister(dst, self.constants.items[const_idx]);
+    self.setRegister(dst, self.constants[const_idx]);
 }

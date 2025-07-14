@@ -53,19 +53,19 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
 
     var compiler = Compiler{ .allocator = allocator, .ast = parsed };
 
-    compiler.compile() catch {
+    var compiled = compiler.compile() catch {
         const stderr = std.io.getStdErr().writer();
         try utils.printCompileErr(stderr, compiler.err_msg.?);
         return null;
     };
+    defer compiled.deinit(allocator);
 
     if (opt.printAsm) {
         var disasm = Debug.Disassembler{ .instructions = compiler.instructions };
         disasm.disassemble(writer) catch {};
     }
 
-    var instance = Vm{ .instructions = compiler.instructions, .constants = compiler.constants };
-    defer instance.deinit(allocator);
+    var instance = Vm{ .instructions = compiled.instructions, .constants = compiled.constants };
     try instance.run();
 
     return instance.return_value;
