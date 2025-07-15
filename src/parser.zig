@@ -2,6 +2,7 @@ const std = @import("std");
 const Ast = @import("ast.zig");
 const Lexer = @import("lexer.zig");
 const Vm = @import("vm.zig");
+const Value = @import("value.zig").Value;
 
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
@@ -10,7 +11,6 @@ const Statement = Ast.Statement;
 const Program = Ast.Program;
 const Token = Lexer.Token;
 const TokenType = Lexer.TokenType;
-const Value = Vm.Value;
 
 pub const Error = error{
     ExpressionExpected,

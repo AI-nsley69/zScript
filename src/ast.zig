@@ -1,8 +1,8 @@
 const std = @import("std");
 const Runtime = @import("vm.zig");
 const Lexer = @import("lexer.zig");
+const Value = @import("value.zig").Value;
 
-const Value = Runtime.Value;
 const TokenType = Lexer.TokenType;
 const Token = Lexer.Token;
 

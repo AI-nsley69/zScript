@@ -1,11 +1,11 @@
 const std = @import("std");
 const Ast = @import("ast.zig");
 const Vm = @import("vm.zig");
+const Value = @import("value.zig").Value;
 
 const Program = Ast.Program;
 const Statement = Ast.Statement;
 const Expression = Ast.Expression;
-const Value = Vm.Value;
 
 pub const Error = error{
     UnsupportedValue,
@@ -44,7 +44,6 @@ fn isFoldable(self: *Optimizer, expr: Expression) bool {
                 .boolean => false,
                 .float => true,
                 .int => true,
-                .string => false,
             };
         },
         .variable => false,

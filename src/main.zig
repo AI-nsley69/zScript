@@ -7,6 +7,7 @@ const Compiler = @import("compiler.zig");
 const Vm = @import("vm.zig");
 const Debug = @import("debug.zig");
 const utils = @import("utils.zig");
+const Value = @import("value.zig").Value;
 
 const cli = @import("cli/root.zig");
 
@@ -28,7 +29,7 @@ pub const runOpts = struct {
     optimize: bool = false,
 };
 
-pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Value {
+pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
     var lexer = Lexer{ .source = src, .arena = std.heap.ArenaAllocator.init(allocator) };
     const tokens = try lexer.scan();
     defer lexer.deinit();

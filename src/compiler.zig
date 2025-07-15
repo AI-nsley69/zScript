@@ -2,6 +2,7 @@ const std = @import("std");
 const Lexer = @import("lexer.zig");
 const Vm = @import("vm.zig");
 const Ast = @import("ast.zig");
+const Value = @import("value.zig").Value;
 
 const Program = Ast.Program;
 const Statement = Ast.Statement;
@@ -11,7 +12,6 @@ const ExpressionValue = Ast.ExpressionValue;
 const Infix = Ast.Infix;
 const Unary = Ast.Unary;
 const Variable = Ast.Variable;
-const Value = Vm.Value;
 const TokenType = Lexer.TokenType;
 
 const Error = error{
@@ -39,7 +39,7 @@ const Compiler = @This();
 allocator: std.mem.Allocator,
 ast: Program,
 instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
-constants: std.ArrayListUnmanaged(Vm.Value) = std.ArrayListUnmanaged(Vm.Value){},
+constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 variables: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 ptr: usize = 0,
 reg_ptr: u8 = 1,
@@ -198,7 +198,7 @@ fn allocateRegister(self: *Compiler) Errors!u8 {
     return self.reg_ptr - 1;
 }
 
-fn addConstant(self: *Compiler, value: Vm.Value) Errors!u8 {
+fn addConstant(self: *Compiler, value: Value) Errors!u8 {
     if (self.constants.items.len >= std.math.maxInt(u8)) {
         try self.err("Out of constants");
         return Error.OutOfConstants;

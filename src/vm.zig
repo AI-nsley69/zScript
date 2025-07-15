@@ -1,5 +1,6 @@
 const std = @import("std");
 const debug = @import("debug.zig");
+const Value = @import("value.zig").Value;
 
 pub const OpCodes = enum(u8) {
     RET,
@@ -35,20 +36,6 @@ pub const OpCodes = enum(u8) {
 pub const Error = error{
     MismatchedTypes,
     Unknown,
-};
-
-pub const ValueType = enum {
-    int,
-    float,
-    string,
-    boolean,
-};
-
-pub const Value = union(ValueType) {
-    int: i64,
-    float: f64,
-    string: []const u8,
-    boolean: bool,
 };
 
 pub const RegisterSize = u16;
@@ -200,7 +187,6 @@ fn add(self: *Vm) !void {
             if (snd != .float) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .float = fst.float + snd.float });
         },
-        .string => return Error.Unknown,
         .boolean => return Error.Unknown,
     };
 }
@@ -219,7 +205,6 @@ fn sub(self: *Vm) !void {
             if (snd != .float) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .float = fst.float - snd.float });
         },
-        .string => return Error.Unknown,
         .boolean => return Error.Unknown,
     };
 }
@@ -238,7 +223,6 @@ fn mul(self: *Vm) !void {
             if (snd != .float) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .float = fst.float * snd.float });
         },
-        .string => return Error.Unknown,
         .boolean => return Error.Unknown,
     };
 }
@@ -257,7 +241,6 @@ fn div(self: *Vm) !void {
             if (snd != .float) return Error.MismatchedTypes;
             self.setRegister(dst, .{ .float = @divFloor(fst.float, snd.float) });
         },
-        .string => return Error.Unknown,
         .boolean => return Error.Unknown,
     };
 }
@@ -289,7 +272,6 @@ fn eql(self: *Vm) !void {
         .boolean => if (snd == .boolean) fst.boolean == snd.boolean else false,
         .float => if (snd == .float) fst.float == snd.float else false,
         .int => if (snd == .int) fst.int == snd.int else false,
-        .string => if (snd == .string) std.mem.eql(u8, fst.string, snd.string) else false,
     };
 
     self.setRegister(dst, .{ .boolean = res });
@@ -304,7 +286,6 @@ fn neq(self: *Vm) !void {
         .boolean => if (snd == .boolean) fst.boolean != snd.boolean else false,
         .float => if (snd == .float) fst.float != snd.float else false,
         .int => if (snd == .int) fst.int != snd.int else false,
-        .string => if (snd == .string) !std.mem.eql(u8, fst.string, snd.string) else false,
     };
 
     self.setRegister(dst, .{ .boolean = res });

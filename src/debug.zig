@@ -3,6 +3,7 @@ const Vm = @import("vm.zig");
 const Compiler = @import("compiler.zig");
 const types = @import("ast.zig");
 const Lexer = @import("lexer.zig");
+const Value = @import("value.zig").Value;
 
 const TokenType = Lexer.TokenType;
 
@@ -15,7 +16,6 @@ const ExpressionValue = types.ExpressionValue;
 const Infix = types.Infix;
 const Unary = types.Unary;
 const Variable = types.Variable;
-const Value = Vm.Value;
 
 fn codeToString(opcode: Vm.OpCodes) []const u8 {
     return switch (opcode) {
@@ -52,7 +52,6 @@ fn valueToString(allocator: std.mem.Allocator, value: Value) ![]u8 {
     return switch (value) {
         .int => std.fmt.allocPrint(allocator, "(int){d}", .{value.int}),
         .float => std.fmt.allocPrint(allocator, "(float){d}", .{value.float}),
-        .string => std.fmt.allocPrint(allocator, "\"{s}\"", .{value.string}),
         .boolean => std.fmt.allocPrint(allocator, "(bool){any}", .{value.boolean}),
     };
 }
@@ -193,7 +192,6 @@ pub const Ast = struct {
         return switch (value) {
             .int => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.int }),
             .float => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.float }),
-            .string => try self.writer.print("{s}lit: {s}\n", .{ indent_msg, value.string }),
             .boolean => try self.writer.print("{s}lit: {any}\n", .{ indent_msg, value.boolean }),
         };
     }
