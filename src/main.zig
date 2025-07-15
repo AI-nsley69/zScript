@@ -81,10 +81,12 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Vm.Val
         disasm.disassemble(allocator, writer) catch {};
     }
 
-    var instance = Vm{ .instructions = compiled.instructions, .constants = compiled.constants };
-    try instance.run();
+    var vm = Vm{ .allocator = allocator, .instructions = compiled.instructions, .constants = compiled.constants };
+    try vm.init();
+    defer vm.deinit();
+    try vm.run();
 
-    return instance.return_value;
+    return vm.return_value;
 }
 
 const expect = std.testing.expect;

@@ -51,16 +51,30 @@ pub const Value = union(ValueType) {
     boolean: bool,
 };
 
+pub const RegisterSize = u16;
+
 // pub const RegisterSize = std.math.maxInt(u16);
 
 const Vm = @This();
 
+allocator: std.mem.Allocator,
 trace: bool = true,
 ip: u64 = 0,
 instructions: []u8,
 constants: []Value,
-registers: [256]Value = undefined,
+registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 return_value: ?Value = null,
+
+pub fn init(self: *Vm) !void {
+    try self.registers.ensureUnusedCapacity(self.allocator, 256);
+    for (0..256) |_| {
+        try self.registers.append(self.allocator, Value{ .int = 0 });
+    }
+}
+
+pub fn deinit(self: *Vm) void {
+    self.registers.deinit(self.allocator);
+}
 
 fn has_next(self: *Vm) bool {
     return self.ip < self.instructions.len;
@@ -76,12 +90,20 @@ fn nextOp(self: *Vm) OpCodes {
     return @enumFromInt(self.next());
 }
 
+fn addRegister(self: *Vm, index: RegisterSize) !void {
+    while (index >= self.registers.items.len) {
+        try self.registers.append(self.allocator, Value{ .int = 0 });
+    }
+}
+
 fn getRegister(self: *Vm, index: u8) Value {
-    return self.registers[index];
+    self.addRegister(index) catch {};
+    return self.registers.items[index];
 }
 
 fn setRegister(self: *Vm, index: u8, value: Value) void {
-    self.registers[index] = value;
+    self.addRegister(index) catch {};
+    self.registers.items[index] = value;
 }
 
 pub fn run(self: *Vm) !void {
