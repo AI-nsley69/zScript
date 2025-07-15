@@ -82,8 +82,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
         disasm.disassemble(allocator, writer) catch {};
     }
 
-    var vm = Vm{ .allocator = allocator, .instructions = compiled.instructions, .constants = compiled.constants };
-    try vm.init();
+    var vm = try Vm.init(allocator, compiled.instructions, compiled.constants);
     defer vm.deinit();
     try vm.run();
 
@@ -100,7 +99,7 @@ test "Addition" {
         if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
     }
 
-    const src = "1 + 1 + 1";
+    const src = "1 + 1 + 1;";
     const res = try run(allocator, src, .{});
     try expect(res != null);
     try expect(res.?.int == 3);
@@ -114,7 +113,7 @@ test "Arithmetic" {
         //fail test; can't try in defer as defer is executed after we return
         if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
     }
-    const src = "1 * 2 - 4 / 2 + 1";
+    const src = "1 * 2 - 4 / 2 + 1;";
     const res = try run(allocator, src, .{});
     try expect(res != null);
     try expect(res.?.int == 1);
@@ -128,7 +127,7 @@ test "Float" {
         //fail test; can't try in defer as defer is executed after we return
         if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
     }
-    const src = "1.5 + 1.5";
+    const src = "1.5 + 1.5;";
     const res = try run(allocator, src, .{});
     try expect(res != null);
     try expect(res.?.float == 3.0);

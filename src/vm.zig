@@ -31,7 +31,12 @@ pub const OpCodes = enum(u8) {
     NEQ,
 };
 
-// pub const InterpretResult = enum { OK, COMPILE_ERR, RUNTIME_ERR, HALT };
+pub const Frame = struct {
+    body: []u8,
+    ip: usize = 0,
+    caller: ?*Frame = null,
+    result: ?*Value,
+};
 
 pub const Error = error{
     MismatchedTypes,
@@ -52,11 +57,19 @@ constants: []Value,
 registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 return_value: ?Value = null,
 
-pub fn init(self: *Vm) !void {
-    try self.registers.ensureUnusedCapacity(self.allocator, 256);
+pub fn init(allocator: std.mem.Allocator, instructions: []u8, constants: []Value) !Vm {
+    var vm: Vm = .{
+        .allocator = allocator,
+        .instructions = instructions,
+        .constants = constants,
+    };
+
+    try vm.registers.ensureUnusedCapacity(allocator, 256);
     for (0..256) |_| {
-        try self.registers.append(self.allocator, Value{ .int = 0 });
+        try vm.registers.append(allocator, Value{ .int = 0 });
     }
+
+    return vm;
 }
 
 pub fn deinit(self: *Vm) void {
@@ -94,10 +107,7 @@ fn setRegister(self: *Vm, index: u8, value: Value) void {
 }
 
 pub fn run(self: *Vm) !void {
-    if (!self.has_next()) return;
-
     const opcode: OpCodes = self.nextOp();
-
     return blk: switch (opcode) {
         .MOV => {
             try self.mov();
