@@ -96,7 +96,9 @@ fn peekNext(self: *Lexer) u8 {
 
 fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
     const curr = self.current;
-    for (expected) |c| {
+    if (self.source[self.current - 1] != expected[0]) return false;
+
+    for (expected[1..]) |c| {
         if (self.match(c)) continue;
         // Move back current if it doesn't match the full string
         self.current = curr;
@@ -161,7 +163,7 @@ fn scanToken(self: *Lexer) Token {
     }
 }
 
-fn takeWhile(self: *Lexer, comptime prec: anytype) !usize {
+fn takeWhile(self: *Lexer, comptime prec: anytype) usize {
     const start = self.current - 1;
     while (prec(self.peek())) {
         _ = self.advance();
@@ -189,15 +191,11 @@ fn trimWhitespace(self: *Lexer) void {
 }
 
 fn number(self: *Lexer, start: usize) Token {
-    while (isDigit(self.peek())) {
-        _ = self.advance();
-    }
+    _ = self.takeWhile(isDigit);
 
     if (self.peek() == '.' and isDigit(self.peekNext())) {
         _ = self.advance();
-        while (isDigit(self.peek())) {
-            _ = self.advance();
-        }
+        _ = self.takeWhile(isDigit);
     }
 
     return self.makeToken(.number, start);
@@ -221,11 +219,11 @@ fn alpha(self: *Lexer, current: u8, start: usize) Token {
         return self.makeToken(.var_declaration, start);
     }
 
-    if (self.match("if")) {
+    if (self.matchFull("if")) {
         return self.makeToken(.if_stmt, start);
     }
 
-    return self.makeToken(.identifier, try self.takeWhile(isAlpha));
+    return self.makeToken(.identifier, self.takeWhile(isAlpha));
 }
 
 fn makeError(self: *Lexer, msg: []const u8) Token {
