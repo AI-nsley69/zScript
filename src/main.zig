@@ -78,8 +78,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
     defer compiled.deinit(allocator);
 
     if (opt.printAsm) {
-        var disasm = Debug.Disassembler{ .output = compiled };
-        disasm.disassemble(allocator, writer) catch {};
+        Debug.disassemble(compiled, writer) catch {};
     }
 
     var vm = try Vm.init(allocator, compiled.instructions, compiled.constants);

@@ -54,85 +54,65 @@ fn valueToString(allocator: std.mem.Allocator, value: Value) ![]u8 {
     };
 }
 
-pub const Disassembler = struct {
-    const Self = @This();
-    output: CompilerOutput,
-    instructions: std.io.FixedBufferStream([]u8) = undefined,
+fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std.io.FixedBufferStream([]u8)) !void {
+    const pos = try instructions.getPos();
+    const in = instructions.reader();
+    const opcode: Vm.OpCodes = @enumFromInt(try in.readByte());
+    const name = codeToString(opcode);
 
-    fn getIn(self: *Self) std.io.FixedBufferStream([]u8).Reader {
-        return self.instructions.reader();
+    switch (opcode) {
+        // no arg
+        .noop, .halt => try writer.print("[{x:0>6}] {s}\n", .{ pos, name }),
+        // 1x reg with imm arg
+        .jump_eql, .jump_neq => {
+            const reg = try in.readByte();
+            const imm: u16 = try in.readInt(u16, .big);
+            try writer.print("[{x:0>6}] {s} ${d} #{x}\n", .{ pos, name, reg, imm });
+        },
+        // imm arg
+        .jump => {
+            const imm: u16 = try in.readInt(u16, .big);
+            try writer.print("[{x:0>6}] {s} #{x}\n", .{ pos, name, imm });
+        },
+        // 1x reg arg
+        .@"return" => {
+            try writer.print("[{x:0>6}] {s} ${d}\n", .{ pos, name, try in.readByte() });
+        },
+        .load_bool => {
+            const dst = try in.readByte();
+            const val = try in.readByte() == 1;
+            try writer.print("[{x:0>6}] {s} ${d} {}\n", .{ pos, name, dst, val });
+        },
+        .load_float => {
+            const dst = try in.readByte();
+            const val = try in.readInt(u64, .big);
+            try writer.print("[{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(f64, @bitCast(val)) });
+        },
+        .load_int => {
+            const dst = try in.readByte();
+            const val = try in.readInt(u64, .big);
+            try writer.print("[{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(i64, @bitCast(val)) });
+        },
+        // 2x reg arg
+        .copy => {
+            try writer.print("[{x:0>6}] {s} ${d} ${d}\n", .{ pos, name, try in.readByte(), try in.readByte() });
+        },
+        // 3x reg arg
+        .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq, .less_than, .lte, .greater_than, .gte => {
+            try writer.print("[{x:0>6}] {s} ${d} ${d} ${d}\n", .{ pos, name, try in.readByte(), try in.readByte(), try in.readByte() });
+        },
     }
+}
 
-    fn next(self: *Self) u8 {
-        return self.getIn().readByte() catch @intFromEnum(Vm.OpCodes.noop);
+pub fn disassemble(output: CompilerOutput, writer: std.fs.File.Writer) !void {
+    var instructions = std.io.fixedBufferStream(output.instructions);
+    while (true) {
+        disassembleNextInstruction(writer, &instructions) catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => |e| return e,
+        };
     }
-
-    pub fn has_next(self: *Self) bool {
-        const pos = self.instructions.getPos() catch return false;
-        const end_pos = self.instructions.getEndPos() catch return false;
-        return pos < end_pos;
-    }
-
-    pub fn disassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {
-        const pos = try self.instructions.getPos();
-        const opcode: Vm.OpCodes = @enumFromInt(self.next());
-        const name = codeToString(opcode);
-
-        switch (opcode) {
-            // no arg
-            .noop, .halt => try writer.print("[{x:0>6}] {s}\n", .{ pos, name }),
-            // 1x reg with imm arg
-            .jump_eql, .jump_neq => {
-                const reg = self.next();
-                const imm: u16 = @as(u16, self.next()) << 8 | self.next();
-                try writer.print("[{x:0>6}] {s} ${d} #{x}\n", .{ pos, name, reg, imm });
-            },
-            // imm arg
-            .jump => {
-                const imm = @as(u16, self.next()) << 8 | self.next();
-                try writer.print("[{x:0>6}] {s} #{x}\n", .{ pos, name, imm });
-            },
-            // 1x reg arg
-            .@"return" => {
-                try writer.print("[{x:0>6}] {s} ${d}\n", .{ pos, name, self.next() });
-            },
-            .load_bool => {
-                const dst = self.next();
-                const val = self.next() == 1;
-                try writer.print("[{x:0>6}] {s} ${d} {}\n", .{ pos, name, dst, val });
-            },
-            .load_float => {
-                const dst = self.next();
-                const val = try self.getIn().readInt(u64, .big);
-                try writer.print("[{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(f64, @bitCast(val)) });
-            },
-            .load_int => {
-                const dst = self.next();
-                const val = try self.getIn().readInt(u64, .big);
-                try writer.print("[{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(i64, @bitCast(val)) });
-            },
-            // 2x reg arg
-            .copy => {
-                try writer.print("[{x:0>6}] {s} ${d} ${d}\n", .{ pos, name, self.next(), self.next() });
-            },
-            // 3x reg arg
-            .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq, .less_than, .lte, .greater_than, .gte => {
-                try writer.print("[{x:0>6}] {s} ${d} ${d} ${d}\n", .{ pos, name, self.next(), self.next(), self.next() });
-            },
-        }
-    }
-
-    pub fn disassemble(self: *Disassembler, allocator: std.mem.Allocator, writer: std.fs.File.Writer) !void {
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        defer arena.deinit();
-
-        self.instructions = std.io.fixedBufferStream(self.output.instructions);
-
-        while (self.has_next()) {
-            try self.disassembleNextInstruction(writer);
-        }
-    }
-};
+}
 
 fn createIndent(allocator: std.mem.Allocator, indent_step: usize) ![]u8 {
     const indent_msg = try allocator.alloc(u8, indent_step);
