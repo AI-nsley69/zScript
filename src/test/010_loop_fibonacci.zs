@@ -1,4 +1,4 @@
-mut n = 10;
+immut n = 10;
 mut i = 0;
 
 mut fibone = 1;
