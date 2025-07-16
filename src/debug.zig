@@ -141,11 +141,34 @@ pub const Ast = struct {
         const list = input.statements.items;
         try self.writer.print("(program)\n", .{});
         for (list) |stmt| {
-            try self.writer.print("{s}Statement:\n", .{indent_msg});
-            if (stmt.node != .expression) continue;
-            try self.printExpressionHelper(stmt.node.expression, indent_step * 2);
+            try self.printStatement(stmt, indent_step);
         }
-        // self.io.("{any}", .{input});
+    }
+
+    fn printStatement(self: *Self, stmt: Statement, indent: usize) !void {
+        const indent_msg = try createIndent(self.allocator, indent);
+        defer self.allocator.free(indent_msg);
+        const node = stmt.node;
+        switch (node) {
+            .expression => {
+                try self.writer.print("{s}expression:\n", .{indent_msg});
+                try self.printExpressionHelper(node.expression, indent + indent_step);
+            },
+            .conditional => {
+                const conditional = node.conditional.*;
+                try self.writer.print("{s}conditional:\n", .{indent_msg});
+                try self.printExpressionHelper(conditional.expression, indent + indent_step);
+                try self.printStatement(conditional.body, indent + indent_step);
+                if (conditional.otherwise != null) try self.printStatement(conditional.otherwise.?, indent + indent_step);
+            },
+            .block => {
+                try self.writer.print("{s}block:\n", .{indent_msg});
+                for (node.block.statements) |block_stmt| {
+                    try self.printStatement(block_stmt, indent + indent_step);
+                }
+            },
+            // else => return,
+        }
     }
 
     fn printExpressionHelper(self: *Self, expr: Expression, indent: usize) Errors!void {
