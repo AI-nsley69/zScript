@@ -35,7 +35,7 @@ current: usize = 0,
 errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
 variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnmanaged(VariableMetaData){},
 
-const dummy_Statement = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
+const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
 
 pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.ArrayListUnmanaged(Token)) Errors!Program {
     var arena = std.heap.ArenaAllocator.init(alloc);
@@ -43,7 +43,8 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.ArrayListUnman
     self.tokens = tokens;
     var statements = std.ArrayListUnmanaged(Statement){};
     while (!self.isEof() and self.errors.items.len < 1) {
-        const stmt = self.declaration() catch dummy_Statement;
+        // Proceeds with parsing until then, then prints the errors and goes on
+        const stmt = self.declaration() catch dummy_stmt;
         try statements.append(self.allocator, stmt);
     }
 
@@ -130,8 +131,7 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
 }
 
 fn expression(self: *Parser) Errors!Expression {
-    const expr = try self.assignment();
-    return expr;
+    return try self.assignment();
 }
 
 fn assignment(self: *Parser) Errors!Expression {
@@ -260,7 +260,7 @@ fn primary(self: *Parser) Errors!Expression {
     const token = self.peek();
     const err_msg = try std.fmt.allocPrint(self.allocator, "Expected expression, found: {s}", .{token.span});
     // errdefer self.allocator.free(err_msg);
-    try self.err(err_msg);
+    try self.reportError(err_msg);
     return Error.ExpressionExpected;
 }
 
@@ -278,11 +278,11 @@ fn consume(self: *Parser, token: TokenType, err_msg: []const u8) !Token {
         return self.advance();
     }
 
-    try self.err(err_msg);
+    try self.reportError(err_msg);
     return Error.UnexpectedToken;
 }
 
-fn err(self: *Parser, err_msg: []const u8) !void {
+fn reportError(self: *Parser, err_msg: []const u8) !void {
     const tkn = self.peek();
     try self.errors.append(self.allocator, .{ .tag = .err, .span = err_msg, .idx = tkn.idx });
 }
