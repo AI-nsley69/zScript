@@ -69,7 +69,7 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
 fn statement(self: *Compiler, target: Statement) Errors!u8 {
     const node = target.node;
     return switch (node) {
-        .expression => try self.expression(node.expression),
+        .expression => try self.expression(node.expression, null),
         .conditional => try self.conditional(node.conditional),
         .block => {
             var dst: u8 = undefined;
@@ -84,7 +84,7 @@ fn statement(self: *Compiler, target: Statement) Errors!u8 {
 }
 
 fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
-    const cmp = try self.expression(target.expression);
+    const cmp = try self.expression(target.expression, null);
     if (self.instructions.items.len > std.math.maxInt(u16)) {
         try self.reportError("Invalid jump target");
         return Error.InvalidJmpTarget;
@@ -114,10 +114,10 @@ fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
 
 fn loop(self: *Compiler, target: *Loop) Errors!u8 {
     if (target.initializer) |init| {
-        _ = try self.expression(init);
+        _ = try self.expression(init, null);
     }
     const start_ip = self.instructions.items.len;
-    const cmp = try self.expression(target.condition);
+    const cmp = try self.expression(target.condition, null);
     if (self.instructions.items.len > std.math.maxInt(u16)) {
         try self.reportError("Invalid jump target");
         return Error.InvalidJmpTarget;
@@ -127,7 +127,7 @@ fn loop(self: *Compiler, target: *Loop) Errors!u8 {
     const current_ip = self.instructions.items.len - 1;
     const body = try self.statement(target.body);
     if (target.post) |post| {
-        _ = try self.expression(post);
+        _ = try self.expression(post, null);
     }
     // Jump to the start of the loop
     try self.emitBytes(@intFromEnum(opcodes.jump), @truncate((start_ip & 0xff00) >> 8));
@@ -140,12 +140,12 @@ fn loop(self: *Compiler, target: *Loop) Errors!u8 {
     return body;
 }
 
-fn expression(self: *Compiler, target: Expression) Errors!u8 {
+fn expression(self: *Compiler, target: Expression, dst_reg: ?u8) Errors!u8 {
     const node = target.node;
     return switch (target.node) {
-        .infix => try self.infix(node.infix),
-        .unary => try self.unary(node.unary),
-        .literal => try self.literal(node.literal),
+        .infix => try self.infix(node.infix, dst_reg),
+        .unary => try self.unary(node.unary, dst_reg),
+        .literal => try self.literal(node.literal, dst_reg),
         .variable => try self.variable(node.variable),
     };
 }
@@ -180,20 +180,20 @@ fn variable(self: *Compiler, target: *Variable) Errors!u8 {
         try self.reportError(msg);
         return Error.Unknown;
     }
-    const expr = try self.expression(target.initializer.?);
+    _ = try self.expression(target.initializer.?, dst);
 
-    try self.emitBytes(@intFromEnum(opcodes.copy), dst);
-    try self.emitByte(expr);
+    // try self.emitBytes(@intFromEnum(opcodes.copy), dst);
+    // try self.emitByte(expr);
 
     return dst;
 }
 
-fn infix(self: *Compiler, target: *Infix) Errors!u8 {
+fn infix(self: *Compiler, target: *Infix, dst_reg: ?u8) Errors!u8 {
     if (target.op == .assign) return try self.assignment(target);
 
-    const lhs = try self.expression(target.lhs);
-    const rhs = try self.expression(target.rhs);
-    const dst = try self.allocateRegister();
+    const lhs = try self.expression(target.lhs, null);
+    const rhs = try self.expression(target.rhs, null);
+    const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
     const op = opcode(target.op);
     try self.emitBytes(op, dst);
     try self.emitBytes(lhs, rhs);
@@ -210,25 +210,25 @@ fn assignment(self: *Compiler, target: *Infix) Errors!u8 {
         }
     }
     const lhs = try self.variable(target_var);
-    const rhs = try self.expression(target.rhs);
-    try self.emitBytes(@intFromEnum(opcodes.copy), lhs);
-    try self.emitByte(rhs);
+    _ = try self.expression(target.rhs, lhs);
+    // try self.emitBytes(@intFromEnum(opcodes.copy), lhs);
+    // try self.emitByte(rhs);
 
     return lhs;
 }
 
-fn unary(self: *Compiler, target: *Unary) Errors!u8 {
+fn unary(self: *Compiler, target: *Unary, dst_reg: ?u8) Errors!u8 {
     const zero_reg = 0x00;
-    const rhs = try self.expression(target.rhs);
-    const dst = try self.allocateRegister();
+    const rhs = try self.expression(target.rhs, null);
+    const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
     const op = opcode(target.op);
     try self.emitBytes(op, dst);
     try self.emitBytes(zero_reg, rhs);
     return dst;
 }
 
-fn literal(self: *Compiler, val: Value) Errors!u8 {
-    const dst = try self.allocateRegister();
+fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
+    const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
     const const_idx = try self.addConstant(val);
     try self.emitBytes(@intFromEnum(opcodes.load_const), dst);
     try self.emitByte(const_idx);
