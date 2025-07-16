@@ -26,7 +26,7 @@ pub fn optimize(self: *Optimizer, allocator: std.mem.Allocator, program: Program
     errdefer arena.deinit();
     defer program.arena.deinit();
 
-    return .{ .arena = arena, .statements = stmts };
+    return .{ .arena = arena, .statements = stmts, .variables = try program.variables.clone(self.allocator) };
 }
 
 fn optimizeStatement(self: *Optimizer, stmt: Statement) !Statement {
@@ -146,7 +146,7 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
                 if (variable.initializer == null) return expr;
                 const init = try self.constantFold(variable.initializer.?);
 
-                return try Ast.createVariable(self.allocator, init, variable.name, variable.mutable, expr.src);
+                return try Ast.createVariable(self.allocator, init, variable.name, expr.src);
             },
         }
     }

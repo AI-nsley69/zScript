@@ -1,10 +1,12 @@
 const std = @import("std");
 const Runtime = @import("vm.zig");
 const Lexer = @import("lexer.zig");
+const Parser = @import("parser.zig");
 const Value = @import("value.zig").Value;
 
 const TokenType = Lexer.TokenType;
 const Token = Lexer.Token;
+const VariableMetaData = Parser.VariableMetaData;
 
 const ExpressionType = enum {
     variable,
@@ -21,7 +23,6 @@ pub const ExpressionValue = union(ExpressionType) {
 };
 
 pub const Variable = struct {
-    mutable: bool,
     name: []const u8,
     initializer: ?Expression,
 };
@@ -79,15 +80,16 @@ pub const Statement = struct {
 
 pub const Program = struct {
     statements: std.ArrayListUnmanaged(Statement),
+    variables: std.StringHashMapUnmanaged(VariableMetaData),
     arena: std.heap.ArenaAllocator,
 };
 
 // Expression helpers
 
-pub fn createVariable(allocator: std.mem.Allocator, init: ?Expression, name: []const u8, mutable: bool, src: Token) !Expression {
+pub fn createVariable(allocator: std.mem.Allocator, init: ?Expression, name: []const u8, src: Token) !Expression {
     const variable = try allocator.create(Variable);
     errdefer allocator.destroy(variable);
-    variable.* = .{ .initializer = init, .mutable = mutable, .name = name };
+    variable.* = .{ .initializer = init, .name = name };
 
     return .{
         .node = .{ .variable = variable },

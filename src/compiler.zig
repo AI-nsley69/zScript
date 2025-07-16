@@ -86,7 +86,7 @@ fn statement(self: *Compiler, target: Statement) Errors!u8 {
 fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
     const cmp = try self.expression(target.expression);
     if (self.instructions.items.len > std.math.maxInt(u16)) {
-        try self.err("Invalid jump target");
+        try self.reportError("Invalid jump target");
         return Error.InvalidJmpTarget;
     }
     try self.emitBytes(@intFromEnum(opcodes.jump_neq), cmp);
@@ -100,7 +100,7 @@ fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
 
     if (target.otherwise) |else_blk| {
         if (self.instructions.items.len > std.math.maxInt(u16)) {
-            try self.err("Invalid jump target");
+            try self.reportError("Invalid jump target");
             return Error.InvalidJmpTarget;
         }
         const else_ip: u16 = @truncate(self.instructions.items.len + 3);
@@ -119,7 +119,7 @@ fn loop(self: *Compiler, target: *Loop) Errors!u8 {
     const start_ip = self.instructions.items.len;
     const cmp = try self.expression(target.condition);
     if (self.instructions.items.len > std.math.maxInt(u16)) {
-        try self.err("Invalid jump target");
+        try self.reportError("Invalid jump target");
         return Error.InvalidJmpTarget;
     }
     try self.emitBytes(@intFromEnum(opcodes.jump_neq), cmp);
@@ -173,7 +173,7 @@ fn variable(self: *Compiler, target: *Variable) Errors!u8 {
     _ = try self.variables.fetchPut(self.allocator, target.name, dst);
     if (target.initializer == null) {
         const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
-        try self.err(msg);
+        try self.reportError(msg);
         return Error.Unknown;
     }
     const expr = try self.expression(target.initializer.?);
@@ -197,7 +197,15 @@ fn infix(self: *Compiler, target: *Infix) Errors!u8 {
 }
 
 fn assignment(self: *Compiler, target: *Infix) Errors!u8 {
-    const lhs = try self.variable(target.lhs.node.variable);
+    const target_var = target.lhs.node.variable;
+    if (self.ast.variables.get(target_var.*.name)) |metadata| {
+        if (!metadata.mutable) {
+            const msg = try std.fmt.allocPrint(self.allocator, "Invalid assignment to immutable variable '{s}'", .{target_var.*.name});
+            try self.reportError(msg);
+            return Error.Unknown;
+        }
+    }
+    const lhs = try self.variable(target_var);
     const rhs = try self.expression(target.rhs);
     try self.emitBytes(@intFromEnum(opcodes.copy), lhs);
     try self.emitByte(rhs);
@@ -225,7 +233,7 @@ fn literal(self: *Compiler, val: Value) Errors!u8 {
 
 fn allocateRegister(self: *Compiler) Errors!u8 {
     if (self.reg_ptr >= std.math.maxInt(u8)) {
-        try self.err("Out of registers");
+        try self.reportError("Out of registers");
         return Error.OutOfRegisters;
     }
     self.reg_ptr += 1;
@@ -234,7 +242,7 @@ fn allocateRegister(self: *Compiler) Errors!u8 {
 
 fn addConstant(self: *Compiler, value: Value) Errors!u8 {
     if (self.constants.items.len >= std.math.maxInt(u8)) {
-        try self.err("Out of constants");
+        try self.reportError("Out of constants");
         return Error.OutOfConstants;
     }
     try self.constants.append(self.allocator, value);
@@ -242,7 +250,7 @@ fn addConstant(self: *Compiler, value: Value) Errors!u8 {
     return ret;
 }
 
-fn err(self: *Compiler, msg: []const u8) Errors!void {
+fn reportError(self: *Compiler, msg: []const u8) Errors!void {
     const err_msg = try self.allocator.dupe(u8, msg);
     errdefer self.allocator.free(err_msg);
     self.err_msg = err_msg;

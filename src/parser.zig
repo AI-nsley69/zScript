@@ -2,7 +2,10 @@ const std = @import("std");
 const Ast = @import("ast.zig");
 const Lexer = @import("lexer.zig");
 const Vm = @import("vm.zig");
-const Value = @import("value.zig").Value;
+const val = @import("value.zig");
+
+const Value = val.Value;
+const ValueType = val.ValueType;
 
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
@@ -11,6 +14,11 @@ const Statement = Ast.Statement;
 const Program = Ast.Program;
 const Token = Lexer.Token;
 const TokenType = Lexer.TokenType;
+
+pub const VariableMetaData = struct {
+    mutable: bool = false,
+    type: ?ValueType = null,
+};
 
 pub const Error = error{
     ExpressionExpected,
@@ -24,6 +32,7 @@ const Parser = @This();
 tokens: std.ArrayListUnmanaged(Token),
 current: usize = 0,
 errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
+variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnmanaged(VariableMetaData){},
 allocator: std.mem.Allocator = undefined,
 
 const dummy_Statement = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
@@ -39,6 +48,7 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator) Errors!Program {
 
     return .{
         .arena = arena,
+        .variables = self.variables,
         .statements = statements,
     };
 }
@@ -93,11 +103,15 @@ fn block(self: *Parser) Errors!Statement {
 }
 
 fn variableDeclaration(self: *Parser) Errors!Expression {
+    const tkn = self.previous();
     const name = try self.consume(.identifier, "Expected variable name.");
     _ = try self.consume(.assign, "Expected assignment: '='");
     const init = try self.expression();
     _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
-    return Ast.createVariable(self.allocator, init, name.span, true, self.previous());
+    // Add metadata for variable
+    _ = try self.variables.fetchPut(self.allocator, name.span, .{ .mutable = std.mem.eql(u8, tkn.span, "mut"), .type = null });
+
+    return try Ast.createVariable(self.allocator, init, name.span, tkn);
 }
 
 fn expression(self: *Parser) Errors!Expression {
@@ -199,8 +213,8 @@ fn call(self: *Parser) Errors!Expression {
 fn primary(self: *Parser) Errors!Expression {
     if (self.match(.bool)) {
         // Lexer only spits out bool token if 'true' or 'false' is found
-        const val = std.mem.eql(u8, "true", self.previous().span);
-        return Ast.createLiteral(.{ .boolean = val }, self.previous());
+        const bool_val = std.mem.eql(u8, "true", self.previous().span);
+        return Ast.createLiteral(.{ .boolean = bool_val }, self.previous());
     }
 
     if (self.match(.number)) {
@@ -214,7 +228,7 @@ fn primary(self: *Parser) Errors!Expression {
     }
 
     if (self.match(.identifier)) {
-        return Ast.createVariable(self.allocator, null, self.previous().span, false, self.previous());
+        return Ast.createVariable(self.allocator, null, self.previous().span, self.previous());
     }
 
     if (self.match(.left_paren)) {
