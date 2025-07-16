@@ -23,7 +23,9 @@ fn codeToString(opcode: Vm.OpCodes) []const u8 {
         .halt => "HALT",
         .noop => "NOOP",
         .copy => "COPY",
-        .load_const => "LOAD_CONST",
+        .load_bool => "LOAD_BOOL",
+        .load_float => "LOAD_FLOAT",
+        .load_int => "LOAD_INT",
         .add => "ADD",
         .sub => "SUBTRACT",
         .mult => "MULT",
@@ -54,53 +56,64 @@ fn valueToString(allocator: std.mem.Allocator, value: Value) ![]u8 {
 
 pub const Disassembler = struct {
     const Self = @This();
-
-    ip: u32 = 0,
     output: CompilerOutput,
+    instructions: std.io.FixedBufferStream([]u8) = undefined,
+
+    fn getIn(self: *Self) std.io.FixedBufferStream([]u8).Reader {
+        return self.instructions.reader();
+    }
 
     fn next(self: *Self) u8 {
-        std.debug.assert(self.ip < self.output.instructions.len);
-        const instruction = self.output.instructions[self.ip];
-        self.ip += 1;
-        return instruction;
+        return self.getIn().readByte() catch @intFromEnum(Vm.OpCodes.noop);
     }
 
     pub fn has_next(self: *Self) bool {
-        return self.ip < self.output.instructions.len;
+        const pos = self.instructions.getPos() catch return false;
+        const end_pos = self.instructions.getEndPos() catch return false;
+        return pos < end_pos;
     }
 
-    pub fn disassembleNextInstruction(self: *Self, allocator: std.mem.Allocator, writer: std.fs.File.Writer) !void {
+    pub fn disassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {
         const opcode: Vm.OpCodes = @enumFromInt(self.next());
         const name = codeToString(opcode);
 
         switch (opcode) {
             // no arg
-            .noop, .halt => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
+            .noop, .halt => try writer.print("[{x:0>6}] {s}\n", .{ self.instructions.pos - 1, name }),
             // 1x reg with imm arg
             .jump_eql, .jump_neq => {
                 const reg = self.next();
                 const imm: u16 = @as(u16, self.next()) << 8 | self.next();
-                try writer.print("[{x:0>6}] {s} ${d} #{d}\n", .{ self.ip - 1, name, reg, imm });
+                try writer.print("[{x:0>6}] {s} ${d} #{d}\n", .{ self.instructions.pos - 1, name, reg, imm });
             },
             // imm arg
             .jump => {
                 const imm = @as(u16, self.next()) << 8 | self.next();
-                try writer.print("[{x:0>6}] {s} #{d}\n", .{ self.ip - 1, name, imm });
+                try writer.print("[{x:0>6}] {s} #{d}\n", .{ self.instructions.pos - 1, name, imm });
             },
             // 1x reg arg
             .@"return" => {
-                try writer.print("[{x:0>6}] {s} ${d}\n", .{ self.ip - 1, name, self.next() });
+                try writer.print("[{x:0>6}] {s} ${d}\n", .{ self.instructions.pos - 1, name, self.next() });
             },
-            .load_const => {
-                try writer.print("[{x:0>6}] {s} ${d} {s}\n", .{ self.ip - 1, name, self.next(), try valueToString(allocator, self.output.constants[self.next()]) });
+            .load_bool => {
+                const val = self.next() == 1;
+                try writer.print("[{x:0>6}] {s} ${d} {}\n", .{ self.instructions.pos - 1, name, self.next(), val });
+            },
+            .load_float => {
+                const val = try self.getIn().readInt(u64, .big);
+                try writer.print("[{x:0>6}] {s} ${d} {d}\n", .{ self.instructions.pos - 1, name, self.next(), @as(f64, @bitCast(val)) });
+            },
+            .load_int => {
+                const val = try self.getIn().readInt(u64, .big);
+                try writer.print("[{x:0>6}] {s} ${d} {d}\n", .{ self.instructions.pos - 1, name, self.next(), @as(i64, @bitCast(val)) });
             },
             // 2x reg arg
             .copy => {
-                try writer.print("[{x:0>6}] {s} ${d} ${d}\n", .{ self.ip - 1, name, self.next(), self.next() });
+                try writer.print("[{x:0>6}] {s} ${d} ${d}\n", .{ self.instructions.pos - 1, name, self.next(), self.next() });
             },
             // 3x reg arg
             .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq, .less_than, .lte, .greater_than, .gte => {
-                try writer.print("[{x:0>6}] {s} ${d} ${d} ${d}\n", .{ self.ip - 1, name, self.next(), self.next(), self.next() });
+                try writer.print("[{x:0>6}] {s} ${d} ${d} ${d}\n", .{ self.instructions.pos - 1, name, self.next(), self.next(), self.next() });
             },
         }
     }
@@ -109,8 +122,10 @@ pub const Disassembler = struct {
         var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
 
+        self.instructions = std.io.fixedBufferStream(self.output.instructions);
+
         while (self.has_next()) {
-            try self.disassembleNextInstruction(arena.allocator(), writer);
+            try self.disassembleNextInstruction(writer);
         }
     }
 };

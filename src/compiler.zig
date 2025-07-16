@@ -50,6 +50,7 @@ const opcodes = Vm.OpCodes;
 
 pub fn compile(self: *Compiler) Errors!CompilerOutput {
     defer self.variables.deinit(self.allocator);
+    const out = try self.getOut();
 
     const statements = self.ast.statements.items;
     var final_dst: u8 = 0;
@@ -58,12 +59,17 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     }
 
     // Emit halt instruction at the end
-    try self.emitBytes(@intFromEnum(opcodes.@"return"), final_dst);
+    try out.writeByte(@intFromEnum(opcodes.@"return"));
+    try out.writeByte(final_dst);
 
     return .{
         .instructions = try self.instructions.toOwnedSlice(self.allocator),
         .constants = try self.constants.toOwnedSlice(self.allocator),
     };
+}
+
+fn getOut(self: *Compiler) !std.ArrayListUnmanaged(u8).Writer {
+    return self.instructions.writer(self.allocator);
 }
 
 fn statement(self: *Compiler, target: Statement) Errors!u8 {
@@ -84,13 +90,14 @@ fn statement(self: *Compiler, target: Statement) Errors!u8 {
 }
 
 fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
+    const out = try self.getOut();
     const cmp = try self.expression(target.expression, null);
     if (self.instructions.items.len > std.math.maxInt(u16)) {
         try self.reportError("Invalid jump target");
         return Error.InvalidJmpTarget;
     }
-    try self.emitBytes(@intFromEnum(opcodes.jump_neq), cmp);
-    try self.emitBytes(0x00, 0x00);
+    try out.writeAll(&.{ @intFromEnum(opcodes.jump_neq), cmp });
+    try out.writeInt(u16, 0, .big);
     const current_ip = self.instructions.items.len - 1;
     const body = try self.statement(target.body);
     const target_ip = self.instructions.items.len;
@@ -98,21 +105,22 @@ fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
     self.instructions.items[current_ip - 1] = @truncate((target_ip & 0xff00) >> 8);
     self.instructions.items[current_ip] = @truncate(target_ip);
 
-    if (target.otherwise) |else_blk| {
-        if (self.instructions.items.len > std.math.maxInt(u16)) {
-            try self.reportError("Invalid jump target");
-            return Error.InvalidJmpTarget;
-        }
-        const else_ip: u16 = @truncate(self.instructions.items.len + 3);
-        try self.emitBytes(@intFromEnum(opcodes.jump), @truncate((else_ip & 0xff00) >> 8));
-        try self.emitByte(@truncate((else_ip & 0x00ff)));
-        _ = try self.statement(else_blk);
-    }
+    // if (target.otherwise) |else_blk| {
+    //     if (self.instructions.items.len > std.math.maxInt(u16)) {
+    //         try self.reportError("Invalid jump target");
+    //         return Error.InvalidJmpTarget;
+    //     }
+    //     const else_ip: u16 = @truncate(self.instructions.items.len + 3);
+    //     try out.writeByte(@intFromEnum(opcodes.jump));
+    //     try out.writeInt(u16, else_ip);
+    //     _ = try self.statement(else_blk);
+    // }
 
     return body;
 }
 
 fn loop(self: *Compiler, target: *Loop) Errors!u8 {
+    const out = try self.getOut();
     if (target.initializer) |init| {
         _ = try self.expression(init, null);
     }
@@ -122,16 +130,16 @@ fn loop(self: *Compiler, target: *Loop) Errors!u8 {
         try self.reportError("Invalid jump target");
         return Error.InvalidJmpTarget;
     }
-    try self.emitBytes(@intFromEnum(opcodes.jump_neq), cmp);
-    try self.emitBytes(0x00, 0x00);
+    try out.writeAll(&.{ @intFromEnum(opcodes.jump_neq), cmp });
+    try out.writeInt(u16, 0, .big);
     const current_ip = self.instructions.items.len - 1;
     const body = try self.statement(target.body);
     if (target.post) |post| {
         _ = try self.expression(post, null);
     }
     // Jump to the start of the loop
-    try self.emitBytes(@intFromEnum(opcodes.jump), @truncate((start_ip & 0xff00) >> 8));
-    try self.emitByte(@truncate(start_ip & 0x00ff));
+    try out.writeByte(@intFromEnum(opcodes.jump));
+    try out.writeInt(u16, @truncate(start_ip), .big);
     // Patch the bytecode with the new target to jump to
     const target_ip = self.instructions.items.len;
     self.instructions.items[current_ip - 1] = @truncate((target_ip & 0xff00) >> 8);
@@ -191,12 +199,14 @@ fn variable(self: *Compiler, target: *Variable) Errors!u8 {
 fn infix(self: *Compiler, target: *Infix, dst_reg: ?u8) Errors!u8 {
     if (target.op == .assign) return try self.assignment(target);
 
+    const out = try self.getOut();
+
     const lhs = try self.expression(target.lhs, null);
     const rhs = try self.expression(target.rhs, null);
     const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
     const op = opcode(target.op);
-    try self.emitBytes(op, dst);
-    try self.emitBytes(lhs, rhs);
+
+    try out.writeAll(&.{ op, dst, lhs, rhs });
     return dst;
 }
 
@@ -211,27 +221,36 @@ fn assignment(self: *Compiler, target: *Infix) Errors!u8 {
     }
     const lhs = try self.variable(target_var);
     _ = try self.expression(target.rhs, lhs);
-    // try self.emitBytes(@intFromEnum(opcodes.copy), lhs);
-    // try self.emitByte(rhs);
 
     return lhs;
 }
 
 fn unary(self: *Compiler, target: *Unary, dst_reg: ?u8) Errors!u8 {
     const zero_reg = 0x00;
+    const out = try self.getOut();
     const rhs = try self.expression(target.rhs, null);
     const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
     const op = opcode(target.op);
-    try self.emitBytes(op, dst);
-    try self.emitBytes(zero_reg, rhs);
+    try out.writeAll(&.{ op, dst, zero_reg, rhs });
     return dst;
 }
 
 fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
     const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
-    const const_idx = try self.addConstant(val);
-    try self.emitBytes(@intFromEnum(opcodes.load_const), dst);
-    try self.emitByte(const_idx);
+    const out = try self.getOut();
+    switch (val) {
+        .boolean => {
+            try out.writeAll(&.{ @intFromEnum(opcodes.load_bool), dst, @intFromBool(val.boolean) });
+        },
+        .float => {
+            try out.writeAll(&.{ @intFromEnum(opcodes.load_float), dst });
+            try out.writeInt(u64, @bitCast(val.float), .big);
+        },
+        .int => {
+            try out.writeAll(&.{ @intFromEnum(opcodes.load_int), dst });
+            try out.writeInt(u64, @bitCast(val.int), .big);
+        },
+    }
     return dst;
 }
 
@@ -258,13 +277,4 @@ fn reportError(self: *Compiler, msg: []const u8) Errors!void {
     const err_msg = try self.allocator.dupe(u8, msg);
     errdefer self.allocator.free(err_msg);
     self.err_msg = err_msg;
-}
-
-fn emitBytes(self: *Compiler, byte1: u8, byte2: u8) Errors!void {
-    try self.emitByte(byte1);
-    try self.emitByte(byte2);
-}
-
-fn emitByte(self: *Compiler, byte: u8) Errors!void {
-    try self.instructions.append(self.allocator, byte);
 }

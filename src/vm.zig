@@ -7,7 +7,9 @@ pub const OpCodes = enum(u8) {
     halt,
     noop,
     copy,
-    load_const,
+    load_int,
+    load_float,
+    load_bool,
     add,
     sub,
     mult,
@@ -47,8 +49,7 @@ const Vm = @This();
 
 allocator: std.mem.Allocator,
 trace: bool = true,
-ip: u64 = 0,
-instructions: []u8,
+instructions: std.io.FixedBufferStream([]u8),
 constants: []Value,
 registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 return_value: ?Value = null,
@@ -56,7 +57,7 @@ return_value: ?Value = null,
 pub fn init(allocator: std.mem.Allocator, instructions: []u8, constants: []Value) !Vm {
     var vm: Vm = .{
         .allocator = allocator,
-        .instructions = instructions,
+        .instructions = std.io.fixedBufferStream(instructions),
         .constants = constants,
     };
 
@@ -73,13 +74,19 @@ pub fn deinit(self: *Vm) void {
 }
 
 fn has_next(self: *Vm) bool {
-    return self.ip < self.instructions.len;
+    const ip = self.instructions.getPos() catch false;
+    const end = self.instructions.getEndPos() catch false;
+    return ip < end;
+}
+
+fn getReader(self: *Vm) std.io.FixedBufferStream([]u8).Reader {
+    return self.instructions.reader();
 }
 
 fn next(self: *Vm) u8 {
-    if (self.ip >= self.instructions.len) return @intFromEnum(OpCodes.halt);
-    self.ip += 1;
-    return self.instructions[self.ip - 1];
+    if (!self.has_next()) return @intFromEnum(OpCodes.halt);
+    const in = self.getReader();
+    return in.readByte() catch @intFromEnum(OpCodes.halt);
 }
 
 fn nextOp(self: *Vm) OpCodes {
@@ -169,8 +176,16 @@ pub fn run(self: *Vm) !void {
             try self.jmp();
             continue :blk self.nextOp();
         },
-        .load_const => {
-            try self.loadConst();
+        .load_int => {
+            try self.loadInt();
+            continue :blk self.nextOp();
+        },
+        .load_float => {
+            try self.loadFloat();
+            continue :blk self.nextOp();
+        },
+        .load_bool => {
+            try self.loadBool();
             continue :blk self.nextOp();
         },
         .@"return" => {
@@ -374,7 +389,8 @@ fn jeq(self: *Vm) !void {
     if (isEql != .boolean) return;
     if (!isEql.boolean) return;
 
-    self.ip = @as(u16, self.next()) << 8 | self.next();
+    const ip = try self.getReader().readInt(u16, .big);
+    try self.instructions.seekTo(ip);
 }
 
 fn jne(self: *Vm) !void {
@@ -382,15 +398,29 @@ fn jne(self: *Vm) !void {
     if (isEql != .boolean) return;
     if (isEql.boolean) return;
 
-    self.ip = @as(u16, self.next()) << 8 | self.next();
+    const ip = try self.getReader().readInt(u16, .big);
+    try self.instructions.seekTo(ip);
 }
 
 fn jmp(self: *Vm) !void {
-    self.ip = @as(u16, self.next()) << 8 | self.next();
+    const ip = try self.getReader().readInt(u16, .big);
+    try self.instructions.seekTo(ip);
 }
 
-fn loadConst(self: *Vm) !void {
+fn loadBool(self: *Vm) !void {
     const dst = self.next();
-    const const_idx = self.next();
-    self.setRegister(dst, self.constants[const_idx]);
+    const val = self.next() == 1;
+    self.setRegister(dst, .{ .boolean = val });
+}
+
+fn loadFloat(self: *Vm) !void {
+    const dst = self.next();
+    const val = try self.getReader().readInt(u64, .big);
+    self.setRegister(dst, .{ .float = @bitCast(val) });
+}
+
+fn loadInt(self: *Vm) !void {
+    const dst = self.next();
+    const val = try self.getReader().readInt(u64, .big);
+    self.setRegister(dst, .{ .int = @bitCast(val) });
 }
