@@ -19,32 +19,24 @@ const Variable = types.Variable;
 
 fn codeToString(opcode: Vm.OpCodes) []const u8 {
     return switch (opcode) {
-        .RET => "ret",
-        .HALT => "halt",
-        .NOP => "nop",
-        .MOV => "mov",
-        .LOAD_IMMEDIATE => "li",
-        .LOAD_WORD => "lw",
-        .STORE_WORD => "sw",
-        .ADD => "add",
-        .ADD_IMMEDIATE => "addi",
-        .SUBTRACT => "sub",
-        .SUBTRACT_IMMEDIATE => "subi",
-        .MULTIPLY => "mul",
-        .MULTIPLY_IMMEDIATE => "muli",
-        .DIVIDE => "div",
-        .DIVIDE_IMMEDIATE => "divi",
-        .JUMP => "jmp",
-        .JMP_EQL => "jeq",
-        .JMP_NEQ => "jne",
-        .BRANCH_IF_EQUAL => "beq",
-        .BRANCH_IF_NOT_EQUAL => "bne",
-        .XOR => "xor",
-        .AND => "and",
-        .NOT => "not",
-        .OR => "or",
-        .EQL => "eql",
-        .NEQ => "neq",
+        .@"return" => "RETURN",
+        .halt => "HALT",
+        .noop => "NOOP",
+        .copy => "COPY",
+        .load_const => "LOAD_CONST",
+        .add => "ADD",
+        .sub => "SUBTRACT",
+        .mult => "MULT",
+        .divide => "DIV",
+        .jump => "JUMP",
+        .jump_eql => "JUMP_EQL",
+        .jump_neq => "JUMP_NEQ",
+        .eql => "EQL",
+        .neq => "NEQ",
+        .xor => "XOR",
+        .@"and" => "AND",
+        .not => "NOT",
+        .@"or" => "OR",
     };
 }
 
@@ -79,32 +71,32 @@ pub const Disassembler = struct {
 
         switch (opcode) {
             // no arg
-            .NOP, .HALT => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
+            .noop, .halt => try writer.print("[{x:0>6}] {s}\n", .{ self.ip - 1, name }),
             // 1x reg with imm arg
-            .ADD_IMMEDIATE, .SUBTRACT_IMMEDIATE, .MULTIPLY_IMMEDIATE, .DIVIDE_IMMEDIATE, .JMP_EQL, .JMP_NEQ => {
+            .jump_eql, .jump_neq => {
                 const reg = self.next();
                 const imm: u16 = @as(u16, self.next()) << 8 | self.next();
-                try writer.print("[{x:0>6}] {s} r{d} #{d}\n", .{ self.ip - 1, name, reg, imm });
+                try writer.print("[{x:0>6}] {s} ${d} #{d}\n", .{ self.ip - 1, name, reg, imm });
             },
             // imm arg
-            .JUMP => {
+            .jump => {
                 const imm = @as(u16, self.next()) << 8 | self.next();
                 try writer.print("[{x:0>6}] {s} #{d}\n", .{ self.ip - 1, name, imm });
             },
             // 1x reg arg
-            .RET => {
-                try writer.print("[{x:0>6}] {s} r{d}\n", .{ self.ip - 1, name, self.next() });
+            .@"return" => {
+                try writer.print("[{x:0>6}] {s} ${d}\n", .{ self.ip - 1, name, self.next() });
             },
-            .LOAD_IMMEDIATE => {
-                try writer.print("[{x:0>6}] {s} r{d} {s}\n", .{ self.ip - 1, name, self.next(), try valueToString(allocator, self.output.constants[self.next()]) });
+            .load_const => {
+                try writer.print("[{x:0>6}] {s} ${d} {s}\n", .{ self.ip - 1, name, self.next(), try valueToString(allocator, self.output.constants[self.next()]) });
             },
             // 2x reg arg
-            .LOAD_WORD, .STORE_WORD, .MOV => {
-                try writer.print("[{x:0>6}] {s} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next() });
+            .copy => {
+                try writer.print("[{x:0>6}] {s} ${d} ${d}\n", .{ self.ip - 1, name, self.next(), self.next() });
             },
             // 3x reg arg
-            .ADD, .SUBTRACT, .MULTIPLY, .DIVIDE, .BRANCH_IF_EQUAL, .BRANCH_IF_NOT_EQUAL, .XOR, .AND, .NOT, .OR, .EQL, .NEQ => {
-                try writer.print("[{x:0>6}] {s} r{d} r{d} r{d}\n", .{ self.ip - 1, name, self.next(), self.next(), self.next() });
+            .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq => {
+                try writer.print("[{x:0>6}] {s} ${d} ${d} ${d}\n", .{ self.ip - 1, name, self.next(), self.next(), self.next() });
             },
         }
     }

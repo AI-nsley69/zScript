@@ -3,32 +3,24 @@ const debug = @import("debug.zig");
 const Value = @import("value.zig").Value;
 
 pub const OpCodes = enum(u8) {
-    RET,
-    HALT,
-    NOP,
-    MOV,
-    LOAD_IMMEDIATE,
-    LOAD_WORD,
-    STORE_WORD,
-    ADD,
-    ADD_IMMEDIATE,
-    SUBTRACT,
-    SUBTRACT_IMMEDIATE,
-    MULTIPLY,
-    MULTIPLY_IMMEDIATE,
-    DIVIDE,
-    DIVIDE_IMMEDIATE,
-    JUMP,
-    JMP_EQL,
-    JMP_NEQ,
-    BRANCH_IF_EQUAL,
-    BRANCH_IF_NOT_EQUAL,
-    XOR,
-    AND,
-    NOT,
-    OR,
-    EQL,
-    NEQ,
+    @"return",
+    halt,
+    noop,
+    copy,
+    load_const,
+    add,
+    sub,
+    mult,
+    divide,
+    jump,
+    jump_eql,
+    jump_neq,
+    eql,
+    neq,
+    xor,
+    @"and",
+    not,
+    @"or",
 };
 
 pub const Frame = struct {
@@ -81,7 +73,7 @@ fn has_next(self: *Vm) bool {
 }
 
 fn next(self: *Vm) u8 {
-    if (self.ip >= self.instructions.len) return @intFromEnum(OpCodes.HALT);
+    if (self.ip >= self.instructions.len) return @intFromEnum(OpCodes.halt);
     self.ip += 1;
     return self.instructions[self.ip - 1];
 }
@@ -109,64 +101,64 @@ fn setRegister(self: *Vm, index: u8, value: Value) void {
 pub fn run(self: *Vm) !void {
     const opcode: OpCodes = self.nextOp();
     return blk: switch (opcode) {
-        .MOV => {
-            try self.mov();
+        .copy => {
+            try self.copy();
             continue :blk self.nextOp();
         },
-        .ADD => {
+        .add => {
             try self.add();
             continue :blk self.nextOp();
         },
-        .SUBTRACT => {
+        .sub => {
             try self.sub();
             continue :blk self.nextOp();
         },
-        .MULTIPLY => {
+        .mult => {
             try self.mul();
             continue :blk self.nextOp();
         },
-        .DIVIDE => {
+        .divide => {
             try self.div();
             continue :blk self.nextOp();
         },
-        .OR => {
+        .@"or" => {
             try self.logicalOr();
             continue :blk self.nextOp();
         },
-        .AND => {
+        .@"and" => {
             try self.logicalAnd();
             continue :blk self.nextOp();
         },
-        .EQL => {
+        .eql => {
             try self.eql();
             continue :blk self.nextOp();
         },
-        .NEQ => {
+        .neq => {
             try self.neq();
             continue :blk self.nextOp();
         },
-        .JMP_EQL => {
+        .jump_eql => {
             try self.jeq();
             continue :blk self.nextOp();
         },
-        .JMP_NEQ => {
+        .jump_neq => {
             try self.jne();
             continue :blk self.nextOp();
         },
-        .JUMP => {
+        .jump => {
             try self.jmp();
             continue :blk self.nextOp();
         },
-        .LOAD_IMMEDIATE => {
+        .load_const => {
             try self.loadConst();
             continue :blk self.nextOp();
         },
-        .RET => {
+        .@"return" => {
             try self.ret();
             continue :blk self.nextOp();
         },
-        .HALT => return,
-        .NOP => {
+        .halt => return,
+        .noop => {
             continue :blk self.nextOp();
         },
         else => return Error.Unknown,
@@ -177,7 +169,7 @@ fn ret(self: *Vm) !void {
     self.return_value = self.getRegister(self.next());
 }
 
-fn mov(self: *Vm) !void {
+fn copy(self: *Vm) !void {
     const src = self.next();
     const dst = self.next();
     self.setRegister(src, self.getRegister(dst));

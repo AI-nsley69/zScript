@@ -58,7 +58,7 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     }
 
     // Emit halt instruction at the end
-    try self.emitBytes(@intFromEnum(opcodes.RET), final_dst);
+    try self.emitBytes(@intFromEnum(opcodes.@"return"), final_dst);
 
     return .{
         .instructions = try self.instructions.toOwnedSlice(self.allocator),
@@ -89,7 +89,7 @@ fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
         try self.err("Invalid jump target");
         return Error.InvalidJmpTarget;
     }
-    try self.emitBytes(@intFromEnum(opcodes.JMP_NEQ), cmp);
+    try self.emitBytes(@intFromEnum(opcodes.jump_neq), cmp);
     try self.emitBytes(0x00, 0x00);
     const current_ip = self.instructions.items.len - 1;
     const body = try self.statement(target.body);
@@ -104,7 +104,7 @@ fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
             return Error.InvalidJmpTarget;
         }
         const else_ip: u16 = @truncate(self.instructions.items.len + 3);
-        try self.emitBytes(@intFromEnum(opcodes.JUMP), @truncate((else_ip & 0xff00) >> 8));
+        try self.emitBytes(@intFromEnum(opcodes.jump), @truncate((else_ip & 0xff00) >> 8));
         try self.emitByte(@truncate((else_ip & 0x00ff)));
         _ = try self.statement(else_blk);
     }
@@ -122,7 +122,7 @@ fn loop(self: *Compiler, target: *Loop) Errors!u8 {
         try self.err("Invalid jump target");
         return Error.InvalidJmpTarget;
     }
-    try self.emitBytes(@intFromEnum(opcodes.JMP_NEQ), cmp);
+    try self.emitBytes(@intFromEnum(opcodes.jump_neq), cmp);
     try self.emitBytes(0x00, 0x00);
     const current_ip = self.instructions.items.len - 1;
     const body = try self.statement(target.body);
@@ -130,7 +130,7 @@ fn loop(self: *Compiler, target: *Loop) Errors!u8 {
         _ = try self.expression(post);
     }
     // Jump to the start of the loop
-    try self.emitBytes(@intFromEnum(opcodes.JUMP), @truncate((start_ip & 0xff00) >> 8));
+    try self.emitBytes(@intFromEnum(opcodes.jump), @truncate((start_ip & 0xff00) >> 8));
     try self.emitByte(@truncate(start_ip & 0x00ff));
     const target_ip = self.instructions.items.len;
     // Patch the bytecode with the new target to jump to
@@ -152,15 +152,15 @@ fn expression(self: *Compiler, target: Expression) Errors!u8 {
 
 fn opcode(target: TokenType) u8 {
     const op = switch (target) {
-        .add => opcodes.ADD,
-        .sub => opcodes.SUBTRACT,
-        .mul => opcodes.MULTIPLY,
-        .div => opcodes.DIVIDE,
-        .logical_and => opcodes.AND,
-        .logical_or => opcodes.OR,
-        .eql => opcodes.EQL,
-        .neq => opcodes.NEQ,
-        else => opcodes.NOP,
+        .add => opcodes.add,
+        .sub => opcodes.sub,
+        .mul => opcodes.mult,
+        .div => opcodes.divide,
+        .logical_and => opcodes.@"and",
+        .logical_or => opcodes.@"or",
+        .eql => opcodes.eql,
+        .neq => opcodes.neq,
+        else => opcodes.noop,
     };
     return @intFromEnum(op);
 }
@@ -178,7 +178,7 @@ fn variable(self: *Compiler, target: *Variable) Errors!u8 {
     }
     const expr = try self.expression(target.initializer.?);
 
-    try self.emitBytes(@intFromEnum(opcodes.MOV), dst);
+    try self.emitBytes(@intFromEnum(opcodes.copy), dst);
     try self.emitByte(expr);
 
     return dst;
@@ -199,7 +199,7 @@ fn infix(self: *Compiler, target: *Infix) Errors!u8 {
 fn assignment(self: *Compiler, target: *Infix) Errors!u8 {
     const lhs = try self.variable(target.lhs.node.variable);
     const rhs = try self.expression(target.rhs);
-    try self.emitBytes(@intFromEnum(opcodes.MOV), lhs);
+    try self.emitBytes(@intFromEnum(opcodes.copy), lhs);
     try self.emitByte(rhs);
 
     return lhs;
@@ -218,7 +218,7 @@ fn unary(self: *Compiler, target: *Unary) Errors!u8 {
 fn literal(self: *Compiler, val: Value) Errors!u8 {
     const dst = try self.allocateRegister();
     const const_idx = try self.addConstant(val);
-    try self.emitBytes(@intFromEnum(opcodes.LOAD_IMMEDIATE), dst);
+    try self.emitBytes(@intFromEnum(opcodes.load_const), dst);
     try self.emitByte(const_idx);
     return dst;
 }
