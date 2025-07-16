@@ -92,8 +92,6 @@ fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
     const current_ip = self.instructions.items.len - 1;
     const body = try self.statement(target.body);
     const target_ip = self.instructions.items.len;
-    // TODO, replace this opcode, here to prevent jumping to nothing.
-    try self.emitByte(@intFromEnum(opcodes.NOP));
     // Patch the bytecode with the new target to jump to
     self.instructions.items[current_ip - 1] = @truncate((target_ip & 0xff00) >> 8);
     self.instructions.items[current_ip] = @truncate(target_ip);

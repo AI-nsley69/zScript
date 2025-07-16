@@ -95,8 +95,11 @@ fn peekNext(self: *Lexer) u8 {
 }
 
 fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
+    const curr = self.current;
     for (expected) |c| {
         if (self.match(c)) continue;
+        // Move back current if it doesn't match the full string
+        self.current = curr;
         return false;
     }
 
@@ -201,32 +204,25 @@ fn number(self: *Lexer, start: usize) Token {
 }
 
 fn alpha(self: *Lexer, current: u8, start: usize) Token {
-    if (current == 't') {
-        if (self.matchFull("rue")) {
-            return self.makeToken(.bool, start);
-        }
+    _ = current;
+    if (self.matchFull("true")) {
+        return self.makeToken(.bool, start);
     }
 
-    if (current == 'f') {
-        if (self.matchFull("alse")) {
-            return self.makeToken(.bool, start);
-        }
+    if (self.matchFull("false")) {
+        return self.makeToken(.bool, start);
     }
 
-    if (current == 'm') {
-        if (self.matchFull("ut")) {
-            return self.makeToken(.var_declaration, start);
-        }
+    if (self.matchFull("mut")) {
+        return self.makeToken(.var_declaration, start);
     }
 
-    if (current == 'i') {
-        if (self.matchFull("mmut")) {
-            return self.makeToken(.var_declaration, start);
-        }
+    if (self.matchFull("immut")) {
+        return self.makeToken(.var_declaration, start);
+    }
 
-        if (self.match('f')) {
-            return self.makeToken(.if_stmt, start);
-        }
+    if (self.match("if")) {
+        return self.makeToken(.if_stmt, start);
     }
 
     return self.makeToken(.identifier, try self.takeWhile(isAlpha));
