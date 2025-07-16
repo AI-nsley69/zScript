@@ -74,46 +74,50 @@ pub const Disassembler = struct {
     }
 
     pub fn disassembleNextInstruction(self: *Self, writer: std.fs.File.Writer) !void {
+        const pos = try self.instructions.getPos();
         const opcode: Vm.OpCodes = @enumFromInt(self.next());
         const name = codeToString(opcode);
 
         switch (opcode) {
             // no arg
-            .noop, .halt => try writer.print("[{x:0>6}] {s}\n", .{ self.instructions.pos - 1, name }),
+            .noop, .halt => try writer.print("[{x:0>6}] {s}\n", .{ pos, name }),
             // 1x reg with imm arg
             .jump_eql, .jump_neq => {
                 const reg = self.next();
                 const imm: u16 = @as(u16, self.next()) << 8 | self.next();
-                try writer.print("[{x:0>6}] {s} ${d} #{d}\n", .{ self.instructions.pos - 1, name, reg, imm });
+                try writer.print("[{x:0>6}] {s} ${d} #{x}\n", .{ pos, name, reg, imm });
             },
             // imm arg
             .jump => {
                 const imm = @as(u16, self.next()) << 8 | self.next();
-                try writer.print("[{x:0>6}] {s} #{d}\n", .{ self.instructions.pos - 1, name, imm });
+                try writer.print("[{x:0>6}] {s} #{x}\n", .{ pos, name, imm });
             },
             // 1x reg arg
             .@"return" => {
-                try writer.print("[{x:0>6}] {s} ${d}\n", .{ self.instructions.pos - 1, name, self.next() });
+                try writer.print("[{x:0>6}] {s} ${d}\n", .{ pos, name, self.next() });
             },
             .load_bool => {
+                const dst = self.next();
                 const val = self.next() == 1;
-                try writer.print("[{x:0>6}] {s} ${d} {}\n", .{ self.instructions.pos - 1, name, self.next(), val });
+                try writer.print("[{x:0>6}] {s} ${d} {}\n", .{ pos, name, dst, val });
             },
             .load_float => {
+                const dst = self.next();
                 const val = try self.getIn().readInt(u64, .big);
-                try writer.print("[{x:0>6}] {s} ${d} {d}\n", .{ self.instructions.pos - 1, name, self.next(), @as(f64, @bitCast(val)) });
+                try writer.print("[{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(f64, @bitCast(val)) });
             },
             .load_int => {
+                const dst = self.next();
                 const val = try self.getIn().readInt(u64, .big);
-                try writer.print("[{x:0>6}] {s} ${d} {d}\n", .{ self.instructions.pos - 1, name, self.next(), @as(i64, @bitCast(val)) });
+                try writer.print("[{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(i64, @bitCast(val)) });
             },
             // 2x reg arg
             .copy => {
-                try writer.print("[{x:0>6}] {s} ${d} ${d}\n", .{ self.instructions.pos - 1, name, self.next(), self.next() });
+                try writer.print("[{x:0>6}] {s} ${d} ${d}\n", .{ pos, name, self.next(), self.next() });
             },
             // 3x reg arg
             .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq, .less_than, .lte, .greater_than, .gte => {
-                try writer.print("[{x:0>6}] {s} ${d} ${d} ${d}\n", .{ self.instructions.pos - 1, name, self.next(), self.next(), self.next() });
+                try writer.print("[{x:0>6}] {s} ${d} ${d} ${d}\n", .{ pos, name, self.next(), self.next(), self.next() });
             },
         }
     }
