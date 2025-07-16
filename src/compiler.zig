@@ -7,6 +7,7 @@ const Value = @import("value.zig").Value;
 const Program = Ast.Program;
 const Statement = Ast.Statement;
 const Conditional = Ast.Conditional;
+const Loop = Ast.Loop;
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
 const Infix = Ast.Infix;
@@ -78,6 +79,7 @@ fn statement(self: *Compiler, target: Statement) Errors!u8 {
 
             return dst;
         },
+        .loop => try self.loop(node.loop),
     };
 }
 
@@ -110,6 +112,34 @@ fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
     return body;
 }
 
+fn loop(self: *Compiler, target: *Loop) Errors!u8 {
+    if (target.initializer) |init| {
+        _ = try self.expression(init);
+    }
+    const start_ip = self.instructions.items.len;
+    const cmp = try self.expression(target.condition);
+    if (self.instructions.items.len > std.math.maxInt(u16)) {
+        try self.err("Invalid jump target");
+        return Error.InvalidJmpTarget;
+    }
+    try self.emitBytes(@intFromEnum(opcodes.JMP_NEQ), cmp);
+    try self.emitBytes(0x00, 0x00);
+    const current_ip = self.instructions.items.len - 1;
+    const body = try self.statement(target.body);
+    if (target.post) |post| {
+        _ = try self.expression(post);
+    }
+    // Jump to the start of the loop
+    try self.emitBytes(@intFromEnum(opcodes.JUMP), @truncate((start_ip & 0xff00) >> 8));
+    try self.emitByte(@truncate(start_ip & 0x00ff));
+    const target_ip = self.instructions.items.len;
+    // Patch the bytecode with the new target to jump to
+    self.instructions.items[current_ip - 1] = @truncate((target_ip & 0xff00) >> 8);
+    self.instructions.items[current_ip] = @truncate(target_ip);
+
+    return body;
+}
+
 fn expression(self: *Compiler, target: Expression) Errors!u8 {
     const node = target.node;
     return switch (target.node) {
@@ -129,6 +159,7 @@ fn opcode(target: TokenType) u8 {
         .logical_and => opcodes.AND,
         .logical_or => opcodes.OR,
         .eql => opcodes.EQL,
+        .neq => opcodes.NEQ,
         else => opcodes.NOP,
     };
     return @intFromEnum(op);

@@ -50,6 +50,7 @@ fn declaration(self: *Parser) Errors!Statement {
 
 fn statement(self: *Parser) Errors!Statement {
     if (self.match(.if_stmt)) return try self.ifStatement();
+    if (self.match(.while_stmt)) return try self.whileStatement();
     if (self.match(.left_bracket)) return try self.block();
     const expr = try self.expression();
     _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
@@ -68,6 +69,15 @@ fn ifStatement(self: *Parser) Errors!Statement {
     }
 
     return try Ast.createConditional(self.allocator, condition, body, otherwise);
+}
+
+fn whileStatement(self: *Parser) Errors!Statement {
+    _ = try self.consume(.left_paren, "Expected left parentheses after while-statement.");
+    const condition = try self.expression();
+    _ = try self.consume(.right_paren, "Expected right parentheses after while-statement.");
+    const body = try self.statement();
+
+    return try Ast.createLoop(self.allocator, null, condition, null, body);
 }
 
 fn block(self: *Parser) Errors!Statement {
@@ -131,7 +141,7 @@ fn logicalAnd(self: *Parser) Errors!Expression {
 fn equality(self: *Parser) Errors!Expression {
     var expr = try self.comparison();
     // TODO: implement not assign
-    while (self.match(.eql)) {
+    while (self.match(.eql) or self.match(.neq)) {
         const op = self.previous().tag;
         const rhs = try self.comparison();
 

@@ -19,7 +19,9 @@ pub const TokenType = enum {
     identifier,
     if_stmt,
     else_stmt,
+    while_stmt,
     eql,
+    neq,
     eof,
     err,
 };
@@ -137,6 +139,14 @@ fn scanToken(self: *Lexer) Token {
             }
             return self.makeToken(.assign, self.current - 1);
         },
+        '!' => {
+            if (self.match('=')) {
+                return self.makeToken(.neq, self.current - 2);
+            }
+
+            const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
+            return self.makeError(msg);
+        },
         '|' => {
             const start = self.current - 1;
             if (!self.match(c)) {
@@ -221,6 +231,10 @@ fn alpha(self: *Lexer, current: u8, start: usize) Token {
 
     if (self.matchFull("if")) {
         return self.makeToken(.if_stmt, start);
+    }
+
+    if (self.matchFull("while")) {
+        return self.makeToken(.while_stmt, start);
     }
 
     return self.makeToken(.identifier, self.takeWhile(isAlpha));

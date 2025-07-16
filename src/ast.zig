@@ -46,12 +46,21 @@ const StatementType = enum {
     conditional,
     expression,
     block,
+    loop,
 };
 
 pub const StatementValue = union(StatementType) {
     conditional: *Conditional,
     expression: Expression,
     block: Block,
+    loop: *Loop,
+};
+
+pub const Loop = struct {
+    initializer: ?Expression,
+    condition: Expression,
+    post: ?Expression,
+    body: Statement,
 };
 
 pub const Block = struct {
@@ -127,6 +136,20 @@ pub fn createConditional(allocator: std.mem.Allocator, expr: Expression, body: S
 
     return .{
         .node = .{ .conditional = conditional },
+    };
+}
+
+pub fn createLoop(allocator: std.mem.Allocator, initializer: ?Expression, condition: Expression, post: ?Expression, body: Statement) !Statement {
+    const loop = try allocator.create(Loop);
+    loop.* = .{
+        .body = body,
+        .condition = condition,
+        .initializer = initializer,
+        .post = post,
+    };
+
+    return .{
+        .node = .{ .loop = loop },
     };
 }
 

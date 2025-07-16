@@ -167,7 +167,7 @@ pub const Ast = struct {
                     try self.printStatement(block_stmt, indent + indent_step);
                 }
             },
-            // else => return,
+            else => return,
         }
     }
 

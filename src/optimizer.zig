@@ -52,7 +52,7 @@ fn optimizeStatement(self: *Optimizer, stmt: Statement) !Statement {
 
             return try Ast.createBlockStatement(try new_stmts.toOwnedSlice(self.allocator));
         },
-        // else => return stmt,
+        else => return stmt,
     }
 }
 
