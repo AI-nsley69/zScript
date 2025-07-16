@@ -171,6 +171,11 @@ fn variable(self: *Compiler, target: *Variable) Errors!u8 {
     }
     const dst = try self.allocateRegister();
     _ = try self.variables.fetchPut(self.allocator, target.name, dst);
+    if (target.initializer == null) {
+        const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
+        try self.err(msg);
+        return Error.Unknown;
+    }
     const expr = try self.expression(target.initializer.?);
 
     try self.emitBytes(@intFromEnum(opcodes.MOV), dst);
