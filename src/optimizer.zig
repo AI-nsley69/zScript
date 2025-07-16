@@ -23,7 +23,10 @@ pub fn optimize(self: *Optimizer, allocator: std.mem.Allocator, program: Program
 
     for (program.statements.items) |stmt| {
         const node = stmt.node;
-        if (node != .expression) continue;
+        if (node != .expression) {
+            try stmts.append(self.allocator, stmt);
+            continue;
+        }
         const expr = try self.constantFold(node.expression);
         try stmts.append(self.allocator, try Ast.createExpressionStatement(expr));
     }
