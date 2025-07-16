@@ -1,6 +1,9 @@
 const std = @import("std");
 const debug = @import("debug.zig");
+const Compiler = @import("compiler.zig");
 const Value = @import("value.zig").Value;
+
+const CompilerOutput = Compiler.CompilerOutput;
 
 pub const OpCodes = enum(u8) {
     @"return",
@@ -50,15 +53,13 @@ const Vm = @This();
 allocator: std.mem.Allocator,
 trace: bool = true,
 instructions: std.io.FixedBufferStream([]u8),
-constants: []Value,
 registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 return_value: ?Value = null,
 
-pub fn init(allocator: std.mem.Allocator, instructions: []u8, constants: []Value) !Vm {
+pub fn init(allocator: std.mem.Allocator, compiled: CompilerOutput) !Vm {
     var vm: Vm = .{
         .allocator = allocator,
-        .instructions = std.io.fixedBufferStream(instructions),
-        .constants = constants,
+        .instructions = std.io.fixedBufferStream(compiled.instructions),
     };
 
     try vm.registers.ensureUnusedCapacity(allocator, 256);
@@ -73,24 +74,12 @@ pub fn deinit(self: *Vm) void {
     self.registers.deinit(self.allocator);
 }
 
-fn has_next(self: *Vm) bool {
-    const ip = self.instructions.getPos() catch false;
-    const end = self.instructions.getEndPos() catch false;
-    return ip < end;
-}
-
-fn getReader(self: *Vm) std.io.FixedBufferStream([]u8).Reader {
+fn getIn(self: *Vm) std.io.FixedBufferStream([]u8).Reader {
     return self.instructions.reader();
 }
 
-fn next(self: *Vm) u8 {
-    if (!self.has_next()) return @intFromEnum(OpCodes.halt);
-    const in = self.getReader();
-    return in.readByte() catch @intFromEnum(OpCodes.halt);
-}
-
-fn nextOp(self: *Vm) OpCodes {
-    return @enumFromInt(self.next());
+fn nextOp(self: *Vm) !OpCodes {
+    return @enumFromInt(try self.getIn().readByte());
 }
 
 fn addRegister(self: *Vm, index: RegisterSize) !void {
@@ -110,110 +99,110 @@ fn setRegister(self: *Vm, index: u8, value: Value) void {
 }
 
 pub fn run(self: *Vm) !void {
-    const opcode: OpCodes = self.nextOp();
+    const opcode: OpCodes = try self.nextOp();
     return blk: switch (opcode) {
         .copy => {
             try self.copy();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .add => {
             try self.add();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .sub => {
             try self.sub();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .mult => {
             try self.mul();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .divide => {
             try self.div();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .@"or" => {
             try self.logicalOr();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .@"and" => {
             try self.logicalAnd();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .eql => {
             try self.eql();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .neq => {
             try self.neq();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .less_than => {
             try self.lt();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .lte => {
             try self.lte();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .greater_than => {
             try self.gt();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .gte => {
             try self.gte();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .jump_eql => {
             try self.jeq();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .jump_neq => {
             try self.jne();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .jump => {
             try self.jmp();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .load_int => {
             try self.loadInt();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .load_float => {
             try self.loadFloat();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .load_bool => {
             try self.loadBool();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .@"return" => {
             try self.ret();
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         .halt => return,
         .noop => {
-            continue :blk self.nextOp();
+            continue :blk try self.nextOp();
         },
         else => return Error.Unknown,
     };
 }
 
 fn ret(self: *Vm) !void {
-    self.return_value = self.getRegister(self.next());
+    self.return_value = self.getRegister(try self.getIn().readByte());
 }
 
 fn copy(self: *Vm) !void {
-    const src = self.next();
-    const dst = self.next();
+    const src = try self.getIn().readByte();
+    const dst = try self.getIn().readByte();
     self.setRegister(src, self.getRegister(dst));
 }
 
 fn add(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     return switch (fst) {
         .int => {
@@ -229,9 +218,9 @@ fn add(self: *Vm) !void {
 }
 
 fn sub(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     return switch (fst) {
         .int => {
@@ -247,9 +236,9 @@ fn sub(self: *Vm) !void {
 }
 
 fn mul(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     return switch (fst) {
         .int => {
@@ -265,9 +254,9 @@ fn mul(self: *Vm) !void {
 }
 
 fn div(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     return switch (fst) {
         .int => {
@@ -283,27 +272,27 @@ fn div(self: *Vm) !void {
 }
 
 fn logicalAnd(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     if (fst != .boolean or snd != .boolean) return Error.MismatchedTypes;
     self.setRegister(dst, .{ .boolean = fst.boolean and snd.boolean });
 }
 
 fn logicalOr(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     if (fst != .boolean or snd != .boolean) return Error.MismatchedTypes;
     self.setRegister(dst, .{ .boolean = fst.boolean or snd.boolean });
 }
 
 fn eql(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     const res: bool = switch (fst) {
         .boolean => if (snd == .boolean) fst.boolean == snd.boolean else false,
@@ -315,9 +304,9 @@ fn eql(self: *Vm) !void {
 }
 
 fn neq(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     const res = switch (fst) {
         .boolean => if (snd == .boolean) fst.boolean != snd.boolean else false,
@@ -329,9 +318,9 @@ fn neq(self: *Vm) !void {
 }
 
 fn lt(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     const res = try switch (fst) {
         .boolean => Error.MismatchedTypes,
@@ -343,9 +332,9 @@ fn lt(self: *Vm) !void {
 }
 
 fn lte(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     const res = try switch (fst) {
         .boolean => Error.MismatchedTypes,
@@ -357,9 +346,9 @@ fn lte(self: *Vm) !void {
 }
 
 fn gt(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     const res = try switch (fst) {
         .boolean => Error.MismatchedTypes,
@@ -371,9 +360,9 @@ fn gt(self: *Vm) !void {
 }
 
 fn gte(self: *Vm) !void {
-    const dst = self.next();
-    const fst = self.getRegister(self.next());
-    const snd = self.getRegister(self.next());
+    const dst = try self.getIn().readByte();
+    const fst = self.getRegister(try self.getIn().readByte());
+    const snd = self.getRegister(try self.getIn().readByte());
 
     const res = try switch (fst) {
         .boolean => Error.MismatchedTypes,
@@ -385,42 +374,42 @@ fn gte(self: *Vm) !void {
 }
 
 fn jeq(self: *Vm) !void {
-    const isEql = self.getRegister(self.next());
+    const isEql = self.getRegister(try self.getIn().readByte());
     if (isEql != .boolean) return;
     if (!isEql.boolean) return;
 
-    const ip = try self.getReader().readInt(u16, .big);
+    const ip = try self.getIn().readInt(u16, .big);
     try self.instructions.seekTo(ip);
 }
 
 fn jne(self: *Vm) !void {
-    const isEql = self.getRegister(self.next());
+    const isEql = self.getRegister(try self.getIn().readByte());
     if (isEql != .boolean) return;
     if (isEql.boolean) return;
 
-    const ip = try self.getReader().readInt(u16, .big);
+    const ip = try self.getIn().readInt(u16, .big);
     try self.instructions.seekTo(ip);
 }
 
 fn jmp(self: *Vm) !void {
-    const ip = try self.getReader().readInt(u16, .big);
+    const ip = try self.getIn().readInt(u16, .big);
     try self.instructions.seekTo(ip);
 }
 
 fn loadBool(self: *Vm) !void {
-    const dst = self.next();
-    const val = self.next() == 1;
+    const dst = try self.getIn().readByte();
+    const val = try self.getIn().readByte() == 1;
     self.setRegister(dst, .{ .boolean = val });
 }
 
 fn loadFloat(self: *Vm) !void {
-    const dst = self.next();
-    const val = try self.getReader().readInt(u64, .big);
+    const dst = try self.getIn().readByte();
+    const val = try self.getIn().readInt(u64, .big);
     self.setRegister(dst, .{ .float = @bitCast(val) });
 }
 
 fn loadInt(self: *Vm) !void {
-    const dst = self.next();
-    const val = try self.getReader().readInt(u64, .big);
+    const dst = try self.getIn().readByte();
+    const val = try self.getIn().readInt(u64, .big);
     self.setRegister(dst, .{ .int = @bitCast(val) });
 }

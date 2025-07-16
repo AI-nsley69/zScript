@@ -44,19 +44,17 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
         try writer.writeAll("\n");
     }
 
-    var parser = Parser{ .tokens = tokens };
-    var parsed = try parser.parse(allocator);
+    var parser = Parser{};
+    var parsed = try parser.parse(allocator, tokens);
     defer parsed.arena.deinit();
 
     const parser_errors = parser.errors.items;
-    if (parser_errors.len > 0) {
-        for (parser_errors) |err| {
-            const err_writer = std.io.getStdErr().writer();
-            const tokenInfo = lexer.tokenInfo.items[err.idx];
-            try utils.printParseError(allocator, err_writer, err, tokenInfo, opt.file, err.span);
-        }
-        return null;
+    for (parser_errors) |err| {
+        const err_writer = std.io.getStdErr().writer();
+        const tokenInfo = lexer.tokenInfo.items[err.idx];
+        try utils.printParseError(allocator, err_writer, err, tokenInfo, opt.file, err.span);
     }
+    if (parser_errors.len > 0) return null;
 
     if (opt.optimize) {
         var optimizer = Optimizer{};
@@ -81,9 +79,12 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
         Debug.disassemble(compiled, writer) catch {};
     }
 
-    var vm = try Vm.init(allocator, compiled.instructions, compiled.constants);
+    var vm = try Vm.init(allocator, compiled);
     defer vm.deinit();
-    try vm.run();
+    vm.run() catch |err| switch (err) {
+        error.EndOfStream => return vm.return_value,
+        else => |e| return e,
+    };
 
     return vm.return_value;
 }

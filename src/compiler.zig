@@ -27,11 +27,9 @@ const Errors = (Error || std.mem.Allocator.Error);
 pub const CompilerOutput = struct {
     const Self = @This();
     instructions: []u8,
-    constants: []Value,
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         allocator.free(self.instructions);
-        allocator.free(self.constants);
     }
 };
 
@@ -59,12 +57,10 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     }
 
     // Emit halt instruction at the end
-    try out.writeByte(@intFromEnum(opcodes.@"return"));
-    try out.writeByte(final_dst);
+    try out.writeAll(&.{ @intFromEnum(opcodes.@"return"), final_dst });
 
     return .{
         .instructions = try self.instructions.toOwnedSlice(self.allocator),
-        .constants = try self.constants.toOwnedSlice(self.allocator),
     };
 }
 

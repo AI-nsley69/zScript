@@ -29,17 +29,18 @@ const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std
 
 const Parser = @This();
 
-tokens: std.ArrayListUnmanaged(Token),
+allocator: std.mem.Allocator = undefined,
+tokens: std.ArrayListUnmanaged(Token) = undefined,
 current: usize = 0,
 errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
 variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnmanaged(VariableMetaData){},
-allocator: std.mem.Allocator = undefined,
 
 const dummy_Statement = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
 
-pub fn parse(self: *Parser, alloc: std.mem.Allocator) Errors!Program {
+pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.ArrayListUnmanaged(Token)) Errors!Program {
     var arena = std.heap.ArenaAllocator.init(alloc);
     self.allocator = arena.allocator();
+    self.tokens = tokens;
     var statements = std.ArrayListUnmanaged(Statement){};
     while (!self.isEof() and self.errors.items.len < 1) {
         const stmt = self.declaration() catch dummy_Statement;
