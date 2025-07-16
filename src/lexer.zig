@@ -20,8 +20,13 @@ pub const TokenType = enum {
     if_stmt,
     else_stmt,
     while_stmt,
+    for_stmt,
     eql,
     neq,
+    less_than,
+    lte,
+    greater_than,
+    gte,
     eof,
     err,
 };
@@ -120,24 +125,25 @@ fn match(self: *Lexer, expected: u8) bool {
 fn scanToken(self: *Lexer) Token {
     self.trimWhitespace();
     if (self.isAtEnd()) return self.makeToken(.eof, self.current);
-    const c: u8 = self.advance();
 
+    const start = self.current;
+    const c: u8 = self.advance();
     switch (c) {
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => return self.number(self.current - 1),
-        '+' => return self.makeToken(.add, self.current - 1),
-        '-' => return self.makeToken(.sub, self.current - 1),
-        '*' => return self.makeToken(.mul, self.current - 1),
-        '/' => return self.makeToken(.div, self.current - 1),
-        '(' => return self.makeToken(.left_paren, self.current - 1),
-        ')' => return self.makeToken(.right_paren, self.current - 1),
-        '{' => return self.makeToken(.left_bracket, self.current - 1),
-        '}' => return self.makeToken(.right_bracket, self.current - 1),
-        ';' => return self.makeToken(.semi_colon, self.current - 1),
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => return self.number(start),
+        '+' => return self.makeToken(.add, start),
+        '-' => return self.makeToken(.sub, start),
+        '*' => return self.makeToken(.mul, start),
+        '/' => return self.makeToken(.div, start),
+        '(' => return self.makeToken(.left_paren, start),
+        ')' => return self.makeToken(.right_paren, start),
+        '{' => return self.makeToken(.left_bracket, start),
+        '}' => return self.makeToken(.right_bracket, start),
+        ';' => return self.makeToken(.semi_colon, start),
         '=' => {
             if (self.match('=')) {
                 return self.makeToken(.eql, self.current - 2);
             }
-            return self.makeToken(.assign, self.current - 1);
+            return self.makeToken(.assign, start);
         },
         '!' => {
             if (self.match('=')) {
@@ -147,8 +153,20 @@ fn scanToken(self: *Lexer) Token {
             const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
             return self.makeError(msg);
         },
+        '<' => {
+            if (self.match('=')) {
+                return self.makeToken(.lte, start);
+            }
+
+            return self.makeToken(.less_than, start);
+        },
+        '>' => {
+            if (self.match('=')) {
+                return self.makeToken(.gte, start);
+            }
+            return self.makeToken(.greater_than, start);
+        },
         '|' => {
-            const start = self.current - 1;
             if (!self.match(c)) {
                 const msg = std.fmt.allocPrint(self.arena.allocator(), "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
                 return self.makeError(msg);
@@ -157,7 +175,6 @@ fn scanToken(self: *Lexer) Token {
             return self.makeToken(.logical_or, start);
         },
         '&' => {
-            const start = self.current - 1;
             if (!self.match(c)) {
                 const msg = std.fmt.allocPrint(self.arena.allocator(), "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
                 return self.makeError(msg);
@@ -165,7 +182,7 @@ fn scanToken(self: *Lexer) Token {
 
             return self.makeToken(.logical_and, start);
         },
-        'a'...'z', 'A'...'Z' => return self.alpha(c, self.current - 1),
+        'a'...'z', 'A'...'Z' => return self.alpha(c, start),
         else => {
             const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
             return self.makeError(msg);
@@ -235,6 +252,10 @@ fn alpha(self: *Lexer, current: u8, start: usize) Token {
 
     if (self.matchFull("while")) {
         return self.makeToken(.while_stmt, start);
+    }
+
+    if (self.matchFull("for")) {
+        return self.makeToken(.for_stmt, start);
     }
 
     return self.makeToken(.identifier, self.takeWhile(isAlpha));

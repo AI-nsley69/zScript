@@ -61,6 +61,7 @@ fn declaration(self: *Parser) Errors!Statement {
 fn statement(self: *Parser) Errors!Statement {
     if (self.match(.if_stmt)) return try self.ifStatement();
     if (self.match(.while_stmt)) return try self.whileStatement();
+    if (self.match(.for_stmt)) return try self.forStatement();
     if (self.match(.left_bracket)) return try self.block();
     const expr = try self.expression();
     _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
@@ -90,6 +91,19 @@ fn whileStatement(self: *Parser) Errors!Statement {
     return try Ast.createLoop(self.allocator, null, condition, null, body);
 }
 
+fn forStatement(self: *Parser) Errors!Statement {
+    _ = try self.consume(.left_paren, "Expected left parentheses after for-statement.");
+    // Try to parse a variable, else expression
+    const init = if (self.match(.var_declaration)) try self.variableDeclaration() else try self.expression();
+    const condition = try self.expression();
+    _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
+    const post_loop = try self.expression();
+    _ = try self.consume(.right_paren, "Expected right parentheses after for-statement.");
+    const body = try self.statement();
+
+    return try Ast.createLoop(self.allocator, init, condition, post_loop, body);
+}
+
 fn block(self: *Parser) Errors!Statement {
     var stmts = std.ArrayListUnmanaged(Statement){};
 
@@ -103,15 +117,15 @@ fn block(self: *Parser) Errors!Statement {
 }
 
 fn variableDeclaration(self: *Parser) Errors!Expression {
-    const tkn = self.previous();
+    const var_decl = self.previous();
     const name = try self.consume(.identifier, "Expected variable name.");
     _ = try self.consume(.assign, "Expected assignment: '='");
     const init = try self.expression();
     _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
     // Add metadata for variable
-    _ = try self.variables.fetchPut(self.allocator, name.span, .{ .mutable = std.mem.eql(u8, tkn.span, "mut"), .type = null });
+    _ = try self.variables.fetchPut(self.allocator, name.span, .{ .mutable = std.mem.eql(u8, var_decl.span, "mut"), .type = null });
 
-    return try Ast.createVariable(self.allocator, init, name.span, tkn);
+    return try Ast.createVariable(self.allocator, init, name.span, var_decl);
 }
 
 fn expression(self: *Parser) Errors!Expression {
@@ -165,9 +179,14 @@ fn equality(self: *Parser) Errors!Expression {
 }
 
 fn comparison(self: *Parser) Errors!Expression {
-    const lhs = try self.term();
-    // TODO: Implement checking for comparisons
-    return lhs;
+    var expr = try self.term();
+    while (self.match(.less_than) or self.match(.lte) or self.match(.greater_than) or self.match(.gte)) {
+        const op = self.previous().tag;
+        const rhs = try self.term();
+
+        expr = try Ast.createInfix(self.allocator, op, expr, rhs, self.previous());
+    }
+    return expr;
 }
 
 fn term(self: *Parser) Errors!Expression {

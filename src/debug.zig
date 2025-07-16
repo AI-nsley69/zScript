@@ -33,6 +33,10 @@ fn codeToString(opcode: Vm.OpCodes) []const u8 {
         .jump_neq => "JUMP_NEQ",
         .eql => "EQL",
         .neq => "NEQ",
+        .less_than => "LT",
+        .lte => "LTE",
+        .greater_than => "GT",
+        .gte => "GTE",
         .xor => "XOR",
         .@"and" => "AND",
         .not => "NOT",
@@ -95,7 +99,7 @@ pub const Disassembler = struct {
                 try writer.print("[{x:0>6}] {s} ${d} ${d}\n", .{ self.ip - 1, name, self.next(), self.next() });
             },
             // 3x reg arg
-            .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq => {
+            .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq, .less_than, .lte, .greater_than, .gte => {
                 try writer.print("[{x:0>6}] {s} ${d} ${d} ${d}\n", .{ self.ip - 1, name, self.next(), self.next(), self.next() });
             },
         }

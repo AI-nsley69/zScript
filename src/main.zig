@@ -48,11 +48,6 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
     var parsed = try parser.parse(allocator);
     defer parsed.arena.deinit();
 
-    if (opt.optimize) {
-        var optimizer = Optimizer{};
-        parsed = try optimizer.optimize(allocator, parsed);
-    }
-
     const parser_errors = parser.errors.items;
     if (parser_errors.len > 0) {
         for (parser_errors) |err| {
@@ -61,6 +56,11 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
             try utils.printParseError(allocator, err_writer, err, tokenInfo, opt.file, err.span);
         }
         return null;
+    }
+
+    if (opt.optimize) {
+        var optimizer = Optimizer{};
+        parsed = try optimizer.optimize(allocator, parsed);
     }
 
     if (opt.printAst) {

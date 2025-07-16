@@ -17,6 +17,10 @@ pub const OpCodes = enum(u8) {
     jump_neq,
     eql,
     neq,
+    less_than,
+    lte,
+    greater_than,
+    gte,
     xor,
     @"and",
     not,
@@ -135,6 +139,22 @@ pub fn run(self: *Vm) !void {
         },
         .neq => {
             try self.neq();
+            continue :blk self.nextOp();
+        },
+        .less_than => {
+            try self.lt();
+            continue :blk self.nextOp();
+        },
+        .lte => {
+            try self.lte();
+            continue :blk self.nextOp();
+        },
+        .greater_than => {
+            try self.gt();
+            continue :blk self.nextOp();
+        },
+        .gte => {
+            try self.gte();
             continue :blk self.nextOp();
         },
         .jump_eql => {
@@ -284,10 +304,66 @@ fn neq(self: *Vm) !void {
     const fst = self.getRegister(self.next());
     const snd = self.getRegister(self.next());
 
-    const res: bool = switch (fst) {
+    const res = switch (fst) {
         .boolean => if (snd == .boolean) fst.boolean != snd.boolean else false,
         .float => if (snd == .float) fst.float != snd.float else false,
         .int => if (snd == .int) fst.int != snd.int else false,
+    };
+
+    self.setRegister(dst, .{ .boolean = res });
+}
+
+fn lt(self: *Vm) !void {
+    const dst = self.next();
+    const fst = self.getRegister(self.next());
+    const snd = self.getRegister(self.next());
+
+    const res = try switch (fst) {
+        .boolean => Error.MismatchedTypes,
+        .float => if (snd == .float) fst.float < snd.float else false,
+        .int => if (snd == .int) fst.int < snd.int else false,
+    };
+
+    self.setRegister(dst, .{ .boolean = res });
+}
+
+fn lte(self: *Vm) !void {
+    const dst = self.next();
+    const fst = self.getRegister(self.next());
+    const snd = self.getRegister(self.next());
+
+    const res = try switch (fst) {
+        .boolean => Error.MismatchedTypes,
+        .float => if (snd == .float) fst.float <= snd.float else false,
+        .int => if (snd == .int) fst.int <= snd.int else false,
+    };
+
+    self.setRegister(dst, .{ .boolean = res });
+}
+
+fn gt(self: *Vm) !void {
+    const dst = self.next();
+    const fst = self.getRegister(self.next());
+    const snd = self.getRegister(self.next());
+
+    const res = try switch (fst) {
+        .boolean => Error.MismatchedTypes,
+        .float => if (snd == .float) fst.float > snd.float else false,
+        .int => if (snd == .int) fst.int > snd.int else false,
+    };
+
+    self.setRegister(dst, .{ .boolean = res });
+}
+
+fn gte(self: *Vm) !void {
+    const dst = self.next();
+    const fst = self.getRegister(self.next());
+    const snd = self.getRegister(self.next());
+
+    const res = try switch (fst) {
+        .boolean => Error.MismatchedTypes,
+        .float => if (snd == .float) fst.float >= snd.float else false,
+        .int => if (snd == .int) fst.int >= snd.int else false,
     };
 
     self.setRegister(dst, .{ .boolean = res });

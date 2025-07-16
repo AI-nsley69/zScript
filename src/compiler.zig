@@ -132,8 +132,8 @@ fn loop(self: *Compiler, target: *Loop) Errors!u8 {
     // Jump to the start of the loop
     try self.emitBytes(@intFromEnum(opcodes.jump), @truncate((start_ip & 0xff00) >> 8));
     try self.emitByte(@truncate(start_ip & 0x00ff));
-    const target_ip = self.instructions.items.len;
     // Patch the bytecode with the new target to jump to
+    const target_ip = self.instructions.items.len;
     self.instructions.items[current_ip - 1] = @truncate((target_ip & 0xff00) >> 8);
     self.instructions.items[current_ip] = @truncate(target_ip);
 
@@ -160,6 +160,10 @@ fn opcode(target: TokenType) u8 {
         .logical_or => opcodes.@"or",
         .eql => opcodes.eql,
         .neq => opcodes.neq,
+        .less_than => opcodes.less_than,
+        .lte => opcodes.lte,
+        .greater_than => opcodes.greater_than,
+        .gte => opcodes.gte,
         else => opcodes.noop,
     };
     return @intFromEnum(op);
