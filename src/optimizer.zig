@@ -20,21 +20,40 @@ pub fn optimize(self: *Optimizer, allocator: std.mem.Allocator, program: Program
     self.allocator = arena.allocator();
 
     var stmts = std.ArrayListUnmanaged(Statement){};
-
     for (program.statements.items) |stmt| {
-        const node = stmt.node;
-        if (node != .expression) {
-            try stmts.append(self.allocator, stmt);
-            continue;
-        }
-        const expr = try self.constantFold(node.expression);
-        try stmts.append(self.allocator, try Ast.createExpressionStatement(expr));
+        try stmts.append(self.allocator, try self.optimizeStatement(stmt));
     }
-
     errdefer arena.deinit();
     defer program.arena.deinit();
 
     return .{ .arena = arena, .statements = stmts };
+}
+
+fn optimizeStatement(self: *Optimizer, stmt: Statement) !Statement {
+    const node = stmt.node;
+    switch (node) {
+        .expression => {
+            const expr = try self.constantFold(node.expression);
+            return try Ast.createExpressionStatement(expr);
+        },
+        .conditional => {
+            const conditional = node.conditional.*;
+            const expr = try self.constantFold(conditional.expression);
+            const body = try self.optimizeStatement(conditional.body);
+            const otherwise = if (conditional.otherwise != null) try self.optimizeStatement(conditional.otherwise.?) else null;
+            return try Ast.createConditional(self.allocator, expr, body, otherwise);
+        },
+        .block => {
+            const block = node.block;
+            var new_stmts = std.ArrayListUnmanaged(Statement){};
+            for (block.statements) |block_stmt| {
+                try new_stmts.append(self.allocator, try self.optimizeStatement(block_stmt));
+            }
+
+            return try Ast.createBlockStatement(try new_stmts.toOwnedSlice(self.allocator));
+        },
+        // else => return stmt,
+    }
 }
 
 fn isFoldable(self: *Optimizer, expr: Expression) bool {
