@@ -93,7 +93,9 @@ fn next(self: *Vm) !u8 {
 }
 
 fn nextOp(self: *Vm) !OpCodes {
-    return @enumFromInt(try self.next());
+    const op: OpCodes = @enumFromInt(try self.next());
+    // std.debug.print("Next op: {s}\n", .{@tagName(op)});
+    return op;
 }
 
 fn addRegister(self: *Vm, index: RegisterSize) !void {
@@ -221,22 +223,17 @@ pub fn run(self: *Vm) !void {
 fn ret(self: *Vm) !void {
     const res = self.getRegister(try self.next());
     self.current().result = res;
-    std.debug.print("Return was called, res: {any}!\n", .{res});
     if (self.current().caller == null) {
         self.result = res;
-        // return error.EndOfStream;
     }
 
     // Update current caller
     const caller = self.current().caller;
-    // std.debug.print("Caller: {?}\n", .{caller});
     self.frame = if (caller != null) caller.? else 0;
 
-    // std.debug.print("Setting {d} to {any}\n", .{ self.current().call_dst, res });
+    // std.debug.print("Setting return value {any} in {d}\n", .{ res, self.current().call_dst });
     self.setRegister(self.current().call_dst, res);
 
-    // const opcode: OpCodes = @enumFromInt(self.current().body[self.current().ip]);
-    // std.debug.print("Returning to op: {s} ({x})\n", .{ @tagName(opcode), self.current().ip });
     // std.debug.print("regstack: {d}, caller: {d}\n", .{ self.reg_stack.items.len, (self.current().reg_size - 1) });
     // TODO: Figure out why this errors on a return
     // @memcpy(self.registers.items[0..self.current().reg_size], self.reg_stack.items[self.reg_stack.items.len - (self.current().reg_size - 1) ..]);
@@ -252,9 +249,10 @@ fn call(self: *Vm) !void {
     try self.reg_stack.appendSlice(self.allocator, self.registers.items[1..self.current().reg_size]);
     // Set caller to the current frame
     const caller = self.frame;
-    self.current().caller = caller;
     // Update to new caller
     self.frame = frame_idx;
+    // Set current frames caller to the old index
+    self.current().caller = caller;
 }
 
 fn copy(self: *Vm) !void {
@@ -486,14 +484,15 @@ fn storeParam(self: *Vm) !void {
 fn loadFloat(self: *Vm) !void {
     const dst = try self.next();
     var buf = self.current().body[self.current().ip .. self.current().ip + 8];
+    self.current().ip += 8;
     const val = std.mem.readInt(u64, buf[0..8], .big);
-    // const val = try self.getIn().readInt(u64, .big);
     self.setRegister(dst, .{ .float = @bitCast(val) });
 }
 
 fn loadInt(self: *Vm) !void {
     const dst = try self.next();
     var buf = self.current().body[self.current().ip .. self.current().ip + 8];
+    self.current().ip += 8;
     const val = std.mem.readInt(u64, buf[0..8], .big);
     self.setRegister(dst, .{ .int = @bitCast(val) });
 }
