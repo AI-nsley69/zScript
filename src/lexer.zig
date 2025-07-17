@@ -16,6 +16,9 @@ pub const TokenType = enum {
     right_bracket,
     semi_colon,
     var_declaration,
+    fn_declaration,
+    @"return",
+    comma,
     identifier,
     if_stmt,
     else_stmt,
@@ -139,6 +142,7 @@ fn scanToken(self: *Lexer) Token {
         '{' => return self.makeToken(.left_bracket, start),
         '}' => return self.makeToken(.right_bracket, start),
         ';' => return self.makeToken(.semi_colon, start),
+        ',' => return self.makeToken(.comma, start),
         '=' => {
             if (self.match('=')) {
                 return self.makeToken(.eql, self.current - 2);
@@ -256,6 +260,14 @@ fn alpha(self: *Lexer, current: u8, start: usize) Token {
 
     if (self.matchFull("for")) {
         return self.makeToken(.for_stmt, start);
+    }
+
+    if (self.matchFull("fn")) {
+        return self.makeToken(.fn_declaration, start);
+    }
+
+    if (self.matchFull("return")) {
+        return self.makeToken(.@"return", start);
     }
 
     return self.makeToken(.identifier, self.takeWhile(isAlpha));

@@ -69,6 +69,7 @@ fn isFoldable(self: *Optimizer, expr: Expression) bool {
             };
         },
         .variable => false,
+        else => false,
     };
 }
 
@@ -148,6 +149,7 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
 
                 return try Ast.createVariable(self.allocator, init, variable.name, expr.src);
             },
+            .call => return expr,
         }
     }
 }

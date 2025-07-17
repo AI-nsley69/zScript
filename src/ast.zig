@@ -9,6 +9,7 @@ const Token = Lexer.Token;
 const VariableMetaData = Parser.VariableMetaData;
 
 const ExpressionType = enum {
+    call,
     variable,
     infix,
     unary,
@@ -16,10 +17,16 @@ const ExpressionType = enum {
 };
 
 pub const ExpressionValue = union(ExpressionType) {
+    call: *Call,
     variable: *Variable,
     infix: *Infix,
     unary: *Unary,
     literal: Value,
+};
+
+pub const Call = struct {
+    callee: Expression,
+    args: []Expression,
 };
 
 pub const Variable = struct {
@@ -48,6 +55,8 @@ const StatementType = enum {
     expression,
     block,
     loop,
+    function,
+    @"return",
 };
 
 pub const StatementValue = union(StatementType) {
@@ -55,6 +64,18 @@ pub const StatementValue = union(StatementType) {
     expression: Expression,
     block: Block,
     loop: *Loop,
+    function: *Function,
+    @"return": Return,
+};
+
+pub const Return = struct {
+    value: ?Expression,
+};
+
+pub const Function = struct {
+    name: []const u8,
+    params: []*Variable,
+    body: Statement,
 };
 
 pub const Loop = struct {
@@ -85,6 +106,19 @@ pub const Program = struct {
 };
 
 // Expression helpers
+
+pub fn createCallExpression(allocator: std.mem.Allocator, callee: Expression, args: []Expression, src: Token) !Expression {
+    const call = try allocator.create(Call);
+    call.* = .{
+        .callee = callee,
+        .args = args,
+    };
+
+    return .{
+        .node = .{ .call = call },
+        .src = src,
+    };
+}
 
 pub fn createVariable(allocator: std.mem.Allocator, init: ?Expression, name: []const u8, src: Token) !Expression {
     const variable = try allocator.create(Variable);
@@ -165,5 +199,28 @@ pub fn createBlockStatement(stmts: []Statement) !Statement {
     const block: Block = .{ .statements = stmts };
     return .{
         .node = .{ .block = block },
+    };
+}
+
+pub fn createFunction(allocator: std.mem.Allocator, name: []const u8, body: Statement, params: []*Variable) !Statement {
+    const func = try allocator.create(Function);
+    func.* = .{
+        .name = name,
+        .body = body,
+        .params = params,
+    };
+
+    return .{
+        .node = .{ .function = func },
+    };
+}
+
+pub fn createReturn(expr: ?Expression) !Statement {
+    const ret: Return = .{
+        .value = expr,
+    };
+
+    return .{
+        .node = .{ .@"return" = ret },
     };
 }

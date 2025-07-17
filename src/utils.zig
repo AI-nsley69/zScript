@@ -24,7 +24,7 @@ pub fn printParseError(allocator: Allocator, writer: Writer, token: Token, token
     try writer.writeAll("\n");
     try format.resetStyle(writer);
     // Print the source line indented
-    const source_aligned = try std.fmt.allocPrint(allocator, "  {s}\n", .{tokenInfo.line_source});
+    const source_aligned = try std.fmt.allocPrint(allocator, "  {s}", .{tokenInfo.line_source});
     defer allocator.free(source_aligned);
     try writer.writeAll(source_aligned);
     // Print a pointer to where the error occured

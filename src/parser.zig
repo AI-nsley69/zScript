@@ -16,6 +16,7 @@ const Token = Lexer.Token;
 const TokenType = Lexer.TokenType;
 
 pub const VariableMetaData = struct {
+    scope: []const u8 = "",
     mutable: bool = false,
     type: ?ValueType = null,
 };
@@ -57,13 +58,46 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.ArrayListUnman
 
 fn declaration(self: *Parser) Errors!Statement {
     if (self.match(.var_declaration)) return try Ast.createExpressionStatement(try self.variableDeclaration());
+    if (self.match(.fn_declaration)) return try self.functionDeclaration();
     return try self.statement();
 }
 
+fn variableDeclaration(self: *Parser) Errors!Expression {
+    const var_decl = self.previous();
+    const name = try self.consume(.identifier, "Expected variable name.");
+    _ = try self.consume(.assign, "Expected assignment: '='");
+    const init = try self.expression();
+    _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
+    // Add metadata for variable
+    _ = try self.variables.fetchPut(self.allocator, name.span, .{ .mutable = std.mem.eql(u8, var_decl.span, "mut"), .type = null });
+
+    return try Ast.createVariable(self.allocator, init, name.span, var_decl);
+}
+
+fn functionDeclaration(self: *Parser) Errors!Statement {
+    const name = try self.consume(.identifier, "Expected function name.");
+    _ = try self.consume(.left_paren, "Expected left parentheses after function declaration.");
+    var params = std.ArrayListUnmanaged(*Ast.Variable){};
+    while (self.match(.identifier)) {
+        const param = try Ast.createVariable(self.allocator, null, self.previous().span, self.previous());
+        try params.append(self.allocator, param.node.variable);
+        _ = self.consume(.comma, "Expected comma after function parameter") catch {
+            // Remove last error since it can either be comma or right paren
+            _ = self.errors.pop();
+            _ = try self.consume(.right_paren, "Expected right parentheses after function parameters");
+        };
+    }
+
+    const body = try self.block();
+
+    return try Ast.createFunction(self.allocator, name.span, body, try params.toOwnedSlice(self.allocator));
+}
+
 fn statement(self: *Parser) Errors!Statement {
-    if (self.match(.if_stmt)) return try self.ifStatement();
-    if (self.match(.while_stmt)) return try self.whileStatement();
     if (self.match(.for_stmt)) return try self.forStatement();
+    if (self.match(.if_stmt)) return try self.ifStatement();
+    if (self.match(.@"return")) return try self.returnStatement();
+    if (self.match(.while_stmt)) return try self.whileStatement();
     if (self.match(.left_bracket)) return try self.block();
     const expr = try self.expression();
     _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
@@ -82,6 +116,12 @@ fn ifStatement(self: *Parser) Errors!Statement {
     }
 
     return try Ast.createConditional(self.allocator, condition, body, otherwise);
+}
+
+fn returnStatement(self: *Parser) Errors!Statement {
+    const expr: ?Expression = if (self.check(.semi_colon)) null else try self.expression();
+    _ = try self.consume(.semi_colon, "Expected ';' after return.");
+    return try Ast.createReturn(expr);
 }
 
 fn whileStatement(self: *Parser) Errors!Statement {
@@ -116,18 +156,6 @@ fn block(self: *Parser) Errors!Statement {
     _ = try self.consume(.right_bracket, "Expected end of block.");
 
     return try Ast.createBlockStatement(try stmts.toOwnedSlice(self.allocator));
-}
-
-fn variableDeclaration(self: *Parser) Errors!Expression {
-    const var_decl = self.previous();
-    const name = try self.consume(.identifier, "Expected variable name.");
-    _ = try self.consume(.assign, "Expected assignment: '='");
-    const init = try self.expression();
-    _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
-    // Add metadata for variable
-    _ = try self.variables.fetchPut(self.allocator, name.span, .{ .mutable = std.mem.eql(u8, var_decl.span, "mut"), .type = null });
-
-    return try Ast.createVariable(self.allocator, init, name.span, var_decl);
 }
 
 fn expression(self: *Parser) Errors!Expression {
@@ -225,9 +253,31 @@ fn unary(self: *Parser) Errors!Expression {
 }
 
 fn call(self: *Parser) Errors!Expression {
-    const lhs = try self.primary();
-    // TODO: implement checking for calls
-    return lhs;
+    var expr = try self.primary();
+
+    while (true) {
+        if (self.match(.left_paren)) {
+            expr = try self.finishCall(expr);
+        } else {
+            break;
+        }
+    }
+
+    return expr;
+}
+
+fn finishCall(self: *Parser, callee: Expression) Errors!Expression {
+    const src = self.previous();
+    var args = std.ArrayListUnmanaged(Expression){};
+    if (!self.check(.right_paren)) {
+        while (self.match(.comma)) {
+            try args.append(self.allocator, try self.expression());
+        }
+    }
+
+    _ = try self.consume(.right_bracket, "Expected ')' after call arguments");
+
+    return try Ast.createCallExpression(self.allocator, callee, try args.toOwnedSlice(self.allocator), src);
 }
 
 fn primary(self: *Parser) Errors!Expression {

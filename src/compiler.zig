@@ -97,6 +97,7 @@ fn statement(self: *Compiler, target: Statement) Errors!u8 {
             return dst;
         },
         .loop => try self.loop(node.loop),
+        else => Error.Unknown,
     };
 }
 
