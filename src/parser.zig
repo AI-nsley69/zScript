@@ -65,9 +65,9 @@ fn declaration(self: *Parser) Errors!Statement {
 fn variableDeclaration(self: *Parser) Errors!Expression {
     const var_decl = self.previous();
     const name = try self.consume(.identifier, "Expected variable name.");
-    _ = try self.consume(.assign, "Expected assignment: '='");
+    _ = try self.consume(.assign, "Expected '=' after variable declaration.");
     const init = try self.expression();
-    _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
+    _ = try self.consume(.semi_colon, "Expected ';' after expression.");
     // Add metadata for variable
     _ = try self.variables.fetchPut(self.allocator, name.span, .{ .mutable = std.mem.eql(u8, var_decl.span, "mut"), .type = null });
 
@@ -76,15 +76,18 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
 
 fn functionDeclaration(self: *Parser) Errors!Statement {
     const name = try self.consume(.identifier, "Expected function name.");
-    _ = try self.consume(.left_paren, "Expected left parentheses after function declaration.");
+    _ = try self.consume(.left_paren, "Expected '(' after function declaration.");
     var params = std.ArrayListUnmanaged(*Ast.Variable){};
     while (self.match(.identifier)) {
         const param = try Ast.createVariable(self.allocator, null, self.previous().span, self.previous());
         try params.append(self.allocator, param.node.variable);
-        _ = self.consume(.comma, "Expected comma after function parameter") catch {
+        _ = self.consume(.comma, "Expected ',' after function parameter") catch {
             // Remove last error since it can either be comma or right paren
-            _ = self.errors.pop();
-            _ = try self.consume(.right_paren, "Expected right parentheses after function parameters");
+            if (self.match(.right_paren)) {
+                _ = self.errors.pop();
+            } else {
+                _ = try self.consume(.right_paren, "Expected ')' after function parameters");
+            }
         };
     }
 
@@ -100,14 +103,14 @@ fn statement(self: *Parser) Errors!Statement {
     if (self.match(.while_stmt)) return try self.whileStatement();
     if (self.match(.left_bracket)) return try self.block();
     const expr = try self.expression();
-    _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
+    _ = try self.consume(.semi_colon, "Expected ';' after expression.");
     return Ast.createExpressionStatement(expr);
 }
 
 fn ifStatement(self: *Parser) Errors!Statement {
-    _ = try self.consume(.left_paren, "Expected left parentheses after if-statement.");
+    _ = try self.consume(.left_paren, "Expected '(' after if-statement.");
     const condition = try self.expression();
-    _ = try self.consume(.right_paren, "Expected right parentheses after if-statement.");
+    _ = try self.consume(.right_paren, "Expected ')' after if-statement.");
     const body = try self.statement();
 
     var otherwise: ?Statement = null;
@@ -125,22 +128,22 @@ fn returnStatement(self: *Parser) Errors!Statement {
 }
 
 fn whileStatement(self: *Parser) Errors!Statement {
-    _ = try self.consume(.left_paren, "Expected left parentheses after while-statement.");
+    _ = try self.consume(.left_paren, "Expected '(' after while-statement.");
     const condition = try self.expression();
-    _ = try self.consume(.right_paren, "Expected right parentheses after while-statement.");
+    _ = try self.consume(.right_paren, "Expected ')' after while-statement.");
     const body = try self.statement();
 
     return try Ast.createLoop(self.allocator, null, condition, null, body);
 }
 
 fn forStatement(self: *Parser) Errors!Statement {
-    _ = try self.consume(.left_paren, "Expected left parentheses after for-statement.");
+    _ = try self.consume(.left_paren, "Expected '(' after for-statement.");
     // Try to parse a variable, else expression
     const init = if (self.match(.var_declaration)) try self.variableDeclaration() else try self.expression();
     const condition = try self.expression();
-    _ = try self.consume(.semi_colon, "Expected semi-colon after expression.");
+    _ = try self.consume(.semi_colon, "Expected ';' after expression.");
     const post_loop = try self.expression();
-    _ = try self.consume(.right_paren, "Expected right parentheses after for-statement.");
+    _ = try self.consume(.right_paren, "Expected ')' after for-statement.");
     const body = try self.statement();
 
     return try Ast.createLoop(self.allocator, init, condition, post_loop, body);
@@ -153,7 +156,7 @@ fn block(self: *Parser) Errors!Statement {
         try stmts.append(self.allocator, try self.declaration());
     }
 
-    _ = try self.consume(.right_bracket, "Expected end of block.");
+    _ = try self.consume(.right_bracket, "Expected '}'");
 
     return try Ast.createBlockStatement(try stmts.toOwnedSlice(self.allocator));
 }
@@ -303,7 +306,7 @@ fn primary(self: *Parser) Errors!Expression {
 
     if (self.match(.left_paren)) {
         const expr = try self.expression();
-        _ = try self.consume(.right_paren, "Expected closing bracket");
+        _ = try self.consume(.right_paren, "Expected ')'");
         return expr;
     }
 
