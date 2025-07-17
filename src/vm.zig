@@ -1,5 +1,5 @@
 const std = @import("std");
-const debug = @import("debug.zig");
+const Debug = @import("debug.zig");
 const Compiler = @import("compiler.zig");
 const Value = @import("value.zig").Value;
 const ValueType = @import("value.zig").ValueType;
@@ -100,8 +100,9 @@ fn current(self: *Vm) *Frame {
 fn next(self: *Vm) !u8 {
     if (self.call_stack.items.len == 0) return error.EndOfStream;
     if (self.current().ip >= self.current().body.len) return error.EndOfStream;
+    const insn = self.current().body[self.current().ip];
     self.current().ip += 1;
-    return self.current().body[self.current().ip - 1];
+    return insn;
 }
 
 fn readInt(self: *Vm, comptime T: type) T {
@@ -113,7 +114,7 @@ fn readInt(self: *Vm, comptime T: type) T {
 
 fn nextOp(self: *Vm) !OpCodes {
     const op: OpCodes = @enumFromInt(try self.next());
-    std.debug.print("Next op: {s}\n", .{@tagName(op)});
+    // std.debug.print("Next op: {s}\n", .{@tagName(op)});
     return op;
 }
 
@@ -285,15 +286,17 @@ pub fn run(self: *Vm) !void {
         },
         .jump_eql => {
             const isEql = try self.nextReg();
+            const ip = self.readInt(u16);
             if (isEql == .boolean and isEql.boolean) {
-                self.current().ip = self.readInt(u16);
+                self.current().ip = ip;
             }
             continue :blk try self.nextOp();
         },
         .jump_neq => {
             const isEql = try self.nextReg();
+            const ip = self.readInt(u16);
             if (isEql == .boolean and !isEql.boolean) {
-                self.current().ip = self.readInt(u16);
+                self.current().ip = ip;
             }
             continue :blk try self.nextOp();
         },
@@ -344,13 +347,7 @@ pub fn run(self: *Vm) !void {
 
 // TODO: Figure out why return values aren't properly set
 fn ret(self: *Vm) !void {
-    // RETURN $6 according to disasm, but becomes $22 instead
     const dst = try self.next();
-    if (dst > self.current().reg_size) {
-        const msg = try std.fmt.allocPrint(self.allocator, "Returning from a register outside of usage for function: {d} > {d}", .{ dst, self.current().reg_size });
-        defer self.allocator.free(msg);
-        @panic(msg);
-    }
     const res = self.getRegister(dst);
     const popped_frame = self.call_stack.pop();
     // Set the final result if there is no more caller
@@ -368,27 +365,18 @@ fn ret(self: *Vm) !void {
     // Get back the values from the reg stack
     @memcpy(self.registers.items[1..self.current().reg_size], self.reg_stack.items[self.reg_stack.items.len - (self.current().reg_size - 1) ..]);
     self.reg_stack.items.len -= self.current().reg_size - 1;
-    std.debug.print("Setting return value {any} (${d}) in {d}\n", .{ res, dst, self.current().call_dst });
     // Set the return value
     self.setRegister(self.current().call_dst, frame.result.?);
 }
 
 fn call(self: *Vm) !void {
     const frame_idx = try self.next();
-    // Setup call dst
     const dst = try self.next();
-
     self.current().call_dst = dst;
     // Construct a new call_frame and push it to the stack
     const frame = self.frames[frame_idx];
     const new_call = try self.allocator.create(Frame);
-    new_call.* = .{
-        .body = frame.body,
-        .caller = self.call_stack.items.len - 1,
-        .ip = 0,
-        .name = frame.name,
-        .reg_size = frame.reg_size,
-    };
+    new_call.* = .{ .body = frame.body, .caller = self.call_stack.items.len - 1, .ip = 0, .name = frame.name, .reg_size = frame.reg_size };
     try self.call_stack.append(self.allocator, new_call);
 
     // Push registers to the stack

@@ -57,7 +57,7 @@ fn valueToString(allocator: std.mem.Allocator, value: Value) ![]u8 {
     };
 }
 
-fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std.io.FixedBufferStream([]u8)) !void {
+pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std.io.FixedBufferStream([]u8)) !void {
     const pos = try instructions.getPos();
     const in = instructions.reader();
     const opcode: Vm.OpCodes = @enumFromInt(try in.readByte());
