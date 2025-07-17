@@ -2,8 +2,7 @@ fn fib(n) {
     if (n < 2) {
         return n;
     }
-    mut res = fib(n - 1) + fib(n - 2);
-    return res;
+    return fib(n - 1) + fib(n - 2);
 }
 
-fib(5);
+fib(10);
