@@ -1,8 +1,5 @@
-fn fib(n) {
-    if (n < 2) {
-        return n;
-    }
-    return fib(n - 1) + fib(n-2);
+fn num(n) {
+    return n;
 }
 
-fib(10);
+num(3) + 5;

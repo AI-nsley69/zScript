@@ -78,7 +78,7 @@ fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std.io.
             try writer.print("  [{x:0>6}] {s} #{x}\n", .{ pos, name, imm });
         },
         // 1x reg arg
-        .@"return", .call, .load_param, .store_param => {
+        .@"return", .load_param, .store_param => {
             try writer.print("  [{x:0>6}] {s} ${d}\n", .{ pos, name, try in.readByte() });
         },
         .load_bool => {
@@ -97,7 +97,7 @@ fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std.io.
             try writer.print("  [{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(i64, @bitCast(val)) });
         },
         // 2x reg arg
-        .copy => {
+        .copy, .call => {
             try writer.print("  [{x:0>6}] {s} ${d} ${d}\n", .{ pos, name, try in.readByte(), try in.readByte() });
         },
         // 3x reg arg

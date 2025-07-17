@@ -39,13 +39,15 @@ pub const Frame = struct {
     name: []const u8,
     body: []u8,
     ip: usize = 0,
-    caller: ?*Frame = null,
+    call_dst: u8 = 0,
+    caller: ?usize = null,
     result: ?Value = null,
     reg_size: RegisterSize,
 };
 
 pub const Error = error{
     MismatchedTypes,
+    InvalidParameter,
     Unknown,
 };
 
@@ -58,6 +60,8 @@ trace: bool = true,
 frames: []*Frame,
 frame: usize = 0,
 registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+param_stack: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+reg_stack: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 result: ?Value = null,
 
 pub fn init(allocator: std.mem.Allocator, compiled: CompilerOutput) !Vm {
@@ -84,7 +88,7 @@ fn current(self: *Vm) *Frame {
 
 fn next(self: *Vm) !u8 {
     if (self.current().ip >= self.current().body.len) return error.EndOfStream;
-    self.current().ip = self.current().ip + 1;
+    self.current().ip += 1;
     return self.current().body[self.current().ip - 1];
 }
 
@@ -104,6 +108,9 @@ fn getRegister(self: *Vm, index: u8) Value {
 }
 
 fn setRegister(self: *Vm, index: u8, value: Value) void {
+    // Values to be discarded goes into reg0
+    if (index == 0) return;
+
     self.addRegister(index) catch {};
     self.registers.items[index] = value;
 }
@@ -187,8 +194,20 @@ pub fn run(self: *Vm) !void {
             try self.loadBool();
             continue :blk try self.nextOp();
         },
+        .load_param => {
+            try self.loadParam();
+            continue :blk try self.nextOp();
+        },
+        .store_param => {
+            try self.storeParam();
+            continue :blk try self.nextOp();
+        },
         .@"return" => {
             try self.ret();
+            continue :blk try self.nextOp();
+        },
+        .call => {
+            try self.call();
             continue :blk try self.nextOp();
         },
         .halt => return,
@@ -200,10 +219,42 @@ pub fn run(self: *Vm) !void {
 }
 
 fn ret(self: *Vm) !void {
-    self.current().result = self.getRegister(try self.next());
+    const res = self.getRegister(try self.next());
+    self.current().result = res;
+    std.debug.print("Return was called, res: {any}!\n", .{res});
     if (self.current().caller == null) {
-        self.result = self.current().result;
+        self.result = res;
+        // return error.EndOfStream;
     }
+
+    // Update current caller
+    const caller = self.current().caller;
+    // std.debug.print("Caller: {?}\n", .{caller});
+    self.frame = if (caller != null) caller.? else 0;
+
+    // std.debug.print("Setting {d} to {any}\n", .{ self.current().call_dst, res });
+    self.setRegister(self.current().call_dst, res);
+
+    // const opcode: OpCodes = @enumFromInt(self.current().body[self.current().ip]);
+    // std.debug.print("Returning to op: {s} ({x})\n", .{ @tagName(opcode), self.current().ip });
+    // std.debug.print("regstack: {d}, caller: {d}\n", .{ self.reg_stack.items.len, (self.current().reg_size - 1) });
+    // TODO: Figure out why this errors on a return
+    // @memcpy(self.registers.items[0..self.current().reg_size], self.reg_stack.items[self.reg_stack.items.len - (self.current().reg_size - 1) ..]);
+    // self.reg_stack.items.len -= self.current().reg_size;
+}
+
+fn call(self: *Vm) !void {
+    const frame_idx = try self.next();
+    // Setup call dst
+    const dst = try self.next();
+    self.current().call_dst = dst;
+    // Push registers to the stack
+    try self.reg_stack.appendSlice(self.allocator, self.registers.items[1..self.current().reg_size]);
+    // Set caller to the current frame
+    const caller = self.frame;
+    self.current().caller = caller;
+    // Update to new caller
+    self.frame = frame_idx;
 }
 
 fn copy(self: *Vm) !void {
@@ -416,6 +467,20 @@ fn loadBool(self: *Vm) !void {
     const dst = try self.next();
     const val = try self.next() == 1;
     self.setRegister(dst, .{ .boolean = val });
+}
+
+fn loadParam(self: *Vm) !void {
+    const dst = try self.next();
+    const val = self.param_stack.pop();
+    if (val == null) {
+        return Error.InvalidParameter;
+    }
+    self.setRegister(dst, val.?);
+}
+
+fn storeParam(self: *Vm) !void {
+    const src = try self.next();
+    try self.param_stack.append(self.allocator, self.getRegister(src));
 }
 
 fn loadFloat(self: *Vm) !void {

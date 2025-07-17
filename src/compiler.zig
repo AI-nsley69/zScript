@@ -15,6 +15,7 @@ const Infix = Ast.Infix;
 const Unary = Ast.Unary;
 const Variable = Ast.Variable;
 const Call = Ast.Call;
+const Return = Ast.Return;
 const TokenType = Lexer.TokenType;
 const Frame = Vm.Frame;
 const RegisterSize = Vm.RegisterSize;
@@ -54,6 +55,7 @@ ast: Program,
 comp_frames: std.ArrayListUnmanaged(*CompilerFrame) = std.ArrayListUnmanaged(*CompilerFrame){},
 frame_ptr: usize = 0,
 variables: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
+functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 err_msg: ?[]u8 = null,
 
 const opcodes = Vm.OpCodes;
@@ -69,12 +71,17 @@ fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
 pub fn compile(self: *Compiler) Errors!CompilerOutput {
     defer self.variables.deinit(self.allocator);
     defer self.comp_frames.deinit(self.allocator);
-
+    // Create a pseudo main function for initial frame
     var no_params: [0]*Variable = .{};
     var empty_block: [0]Statement = .{};
     const no_body: Statement = .{ .node = .{ .block = .{ .statements = &empty_block } } };
     var main_func: Function = .{ .name = "main", .params = &no_params, .body = no_body };
-    try self.compileFrame(self.ast.statements.items, &main_func);
+
+    try self.functions.put(self.allocator, "main", 0);
+    // Compile the actual frame
+    const final_dst = try self.compileFrame(self.ast.statements.items, &main_func);
+    // Emit return instruction at the end
+    try self.getOut().writeAll(&.{ @intFromEnum(opcodes.@"return"), final_dst });
     // Convert all comp frames to vm frames
     var frames: std.ArrayListUnmanaged(*Frame) = std.ArrayListUnmanaged(*Frame){};
     for (self.comp_frames.items) |compilerFrame| {
@@ -92,29 +99,33 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     };
 }
 
-pub fn compileFrame(self: *Compiler, target: []Statement, func: *Function) Errors!void {
+pub fn compileFrame(self: *Compiler, target: []Statement, func: *Function) Errors!u8 {
     const previous_frame = self.frame_ptr;
     // Setup a new frame
     const compilerFrame = try self.allocator.create(CompilerFrame);
-    compilerFrame.*.name = func.name;
+    compilerFrame.* = .{
+        .name = func.name,
+    };
     try self.comp_frames.append(self.allocator, compilerFrame);
+
     self.frame_ptr = self.comp_frames.items.len - 1;
     // Compile the new frame
     const out = self.getOut();
+    // Load the parameters for the function (if exists)
     const reversed = try self.allocator.dupe(*Variable, func.params);
     std.mem.reverse(*Variable, reversed);
     for (reversed) |param| {
         const dst = try self.variable(param);
         try out.writeAll(&.{ @intFromEnum(opcodes.load_param), dst });
     }
+    // Compile the statements
     var final_dst: u8 = 0;
     for (target) |elem| {
         final_dst = try self.statement(elem);
     }
-    // Emit return instruction at the end
-    try out.writeAll(&.{ @intFromEnum(opcodes.@"return"), final_dst });
-    // Continue compiling the previous frame
     self.frame_ptr = previous_frame;
+
+    return final_dst;
 }
 
 fn statement(self: *Compiler, target: Statement) Errors!u8 {
@@ -132,7 +143,7 @@ fn statement(self: *Compiler, target: Statement) Errors!u8 {
         },
         .loop => try self.loop(node.loop),
         .function => try self.function(node.function),
-        .@"return" => Error.Unknown,
+        .@"return" => try self.@"return"(node.@"return"),
     };
 }
 
@@ -200,7 +211,16 @@ fn loop(self: *Compiler, target: *Loop) Errors!u8 {
 
 fn function(self: *Compiler, target: *Function) Errors!u8 {
     const dst = try self.allocateRegister();
-    try self.compileFrame(target.body.node.block.statements, target);
+    // Function always parses a body after it
+    const func_body = target.body.node.block.statements;
+    _ = try self.compileFrame(func_body, target);
+    return dst;
+}
+
+fn @"return"(self: *Compiler, target: Return) Errors!u8 {
+    const out = self.getOut();
+    const dst = if (target.value != null) try self.expression(target.value.?, null) else 0;
+    try out.writeAll(&.{ @intFromEnum(opcodes.@"return"), dst });
     return dst;
 }
 
@@ -264,18 +284,22 @@ fn call(self: *Compiler, target: *Call) Errors!u8 {
     const node = target.*;
     const call_expr = node.callee.node;
     const func_name = call_expr.variable.*.name;
-    std.debug.print("{s}", .{func_name});
+    // Compile store instructions for all parameters
     for (node.args) |arg| {
-        const dst = try self.expression(arg, null);
-        try out.writeAll(&.{ @intFromEnum(opcodes.store_param), dst });
+        const arg_dst = try self.expression(arg, null);
+        try out.writeAll(&.{ @intFromEnum(opcodes.store_param), arg_dst });
     }
-    var frame_idx: u8 = 0;
-    for (0..self.comp_frames.items.len - 1) |i| {
-        const comp_frame = self.comp_frames.items[i];
-        if (std.mem.eql(u8, comp_frame.name, func_name)) frame_idx = @truncate(i);
+    // Find the frame target
+    var frame_idx: ?u8 = self.functions.get(func_name);
+    if (frame_idx == null) {
+        frame_idx = @truncate(self.functions.size);
+        try self.functions.put(self.allocator, func_name, frame_idx.?);
     }
-    try out.writeAll(&.{ @intFromEnum(opcodes.call), frame_idx });
-    return Error.Unknown;
+
+    const dst = try self.allocateRegister();
+    // Finalize the call instruction
+    try out.writeAll(&.{ @intFromEnum(opcodes.call), frame_idx.?, dst });
+    return dst;
 }
 
 fn infix(self: *Compiler, target: *Infix, dst_reg: ?u8) Errors!u8 {
