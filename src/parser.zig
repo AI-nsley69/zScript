@@ -213,7 +213,6 @@ fn logicalAnd(self: *Parser) Errors!Expression {
 
 fn equality(self: *Parser) Errors!Expression {
     var expr = try self.comparison();
-    // TODO: implement not assign
     while (self.match(.eql) or self.match(.neq)) {
         const op = self.previous().tag;
         const rhs = try self.comparison();

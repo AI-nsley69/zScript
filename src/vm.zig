@@ -62,6 +62,7 @@ frame: usize = 0,
 registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 param_stack: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 reg_stack: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+call_stack: std.ArrayListUnmanaged(*Frame) = std.ArrayListUnmanaged(*Frame){},
 result: ?Value = null,
 
 pub fn init(allocator: std.mem.Allocator, compiled: CompilerOutput) !Vm {
@@ -69,6 +70,15 @@ pub fn init(allocator: std.mem.Allocator, compiled: CompilerOutput) !Vm {
         .allocator = allocator,
         .frames = compiled.frames,
     };
+
+    const main = try allocator.create(Frame);
+    const frame = vm.frames[vm.frame].*;
+    main.* = .{
+        .body = frame.body,
+        .reg_size = frame.reg_size,
+        .name = frame.name,
+    };
+    try vm.call_stack.append(allocator, main);
 
     try vm.registers.ensureUnusedCapacity(allocator, 256);
     for (0..256) |_| {
@@ -83,10 +93,11 @@ pub fn deinit(self: *Vm) void {
 }
 
 fn current(self: *Vm) *Frame {
-    return self.frames[self.frame];
+    return self.call_stack.items[self.call_stack.items.len - 1];
 }
 
 fn next(self: *Vm) !u8 {
+    if (self.call_stack.items.len == 0) return error.EndOfStream;
     if (self.current().ip >= self.current().body.len) return error.EndOfStream;
     self.current().ip += 1;
     return self.current().body[self.current().ip - 1];
@@ -94,7 +105,7 @@ fn next(self: *Vm) !u8 {
 
 fn nextOp(self: *Vm) !OpCodes {
     const op: OpCodes = @enumFromInt(try self.next());
-    // std.debug.print("Next op: {s}\n", .{@tagName(op)});
+    std.debug.print("Next op: {s}\n", .{@tagName(op)});
     return op;
 }
 
@@ -222,15 +233,17 @@ pub fn run(self: *Vm) !void {
 
 fn ret(self: *Vm) !void {
     const res = self.getRegister(try self.next());
-    self.current().result = res;
+    const popped_frame = self.call_stack.pop();
     // Set the final result if there is no more caller
-    if (self.current().caller == null) {
+    if (self.current().caller == null or popped_frame == null) {
         self.result = res;
         return error.EndOfStream;
     }
+    var frame = popped_frame.?.*;
+    frame.result = res;
 
     // Update current caller
-    const caller = self.current().caller;
+    const caller = frame.caller;
     self.frame = if (caller != null) caller.? else 0;
 
     // Get back the values from the reg stack
@@ -242,19 +255,27 @@ fn ret(self: *Vm) !void {
 }
 
 fn call(self: *Vm) !void {
-    // TODO: Fix recursive calls
     const frame_idx = try self.next();
     // Setup call dst
     const dst = try self.next();
+
     self.current().call_dst = dst;
+    const frame = self.frames[frame_idx];
+    const new_call = try self.allocator.create(Frame);
+    new_call.* = .{
+        .body = frame.body,
+        .caller = self.call_stack.items.len - 1,
+        .ip = 0,
+        .name = frame.name,
+        .reg_size = frame.reg_size,
+    };
+
+    try self.call_stack.append(self.allocator, new_call);
+
     // Push registers to the stack
     try self.reg_stack.appendSlice(self.allocator, self.registers.items[1..self.current().reg_size]);
-    // Set caller to the current frame
-    const caller = self.frame;
     // Update to new caller
     self.frame = frame_idx;
-    // Set current frames caller to the old index
-    self.current().caller = caller;
 }
 
 fn copy(self: *Vm) !void {
