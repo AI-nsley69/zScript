@@ -223,8 +223,10 @@ pub fn run(self: *Vm) !void {
 fn ret(self: *Vm) !void {
     const res = self.getRegister(try self.next());
     self.current().result = res;
+    // Set the final result if there is no more caller
     if (self.current().caller == null) {
         self.result = res;
+        return error.EndOfStream;
     }
 
     // Update current caller
@@ -233,14 +235,13 @@ fn ret(self: *Vm) !void {
 
     // std.debug.print("Setting return value {any} in {d}\n", .{ res, self.current().call_dst });
     self.setRegister(self.current().call_dst, res);
-
-    // std.debug.print("regstack: {d}, caller: {d}\n", .{ self.reg_stack.items.len, (self.current().reg_size - 1) });
-    // TODO: Figure out why this errors on a return
-    // @memcpy(self.registers.items[0..self.current().reg_size], self.reg_stack.items[self.reg_stack.items.len - (self.current().reg_size - 1) ..]);
-    // self.reg_stack.items.len -= self.current().reg_size;
+    // Get back the values from the reg stack
+    @memcpy(self.registers.items[1..self.current().reg_size], self.reg_stack.items[self.reg_stack.items.len - (self.current().reg_size - 1) ..]);
+    self.reg_stack.items.len -= self.current().reg_size - 1;
 }
 
 fn call(self: *Vm) !void {
+    // TODO: Fix recursive calls
     const frame_idx = try self.next();
     // Setup call dst
     const dst = try self.next();
