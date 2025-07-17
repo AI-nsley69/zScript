@@ -85,12 +85,13 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
             // Remove last error since it can either be comma or right paren
             if (self.match(.right_paren)) {
                 _ = self.errors.pop();
+                break;
             } else {
                 _ = try self.consume(.right_paren, "Expected ')' after function parameters");
             }
         };
     }
-
+    _ = try self.consume(.left_bracket, "Expected '{'");
     const body = try self.block();
 
     return try Ast.createFunction(self.allocator, name.span, body, try params.toOwnedSlice(self.allocator));
@@ -273,12 +274,13 @@ fn finishCall(self: *Parser, callee: Expression) Errors!Expression {
     const src = self.previous();
     var args = std.ArrayListUnmanaged(Expression){};
     if (!self.check(.right_paren)) {
+        try args.append(self.allocator, try self.expression());
         while (self.match(.comma)) {
             try args.append(self.allocator, try self.expression());
         }
     }
 
-    _ = try self.consume(.right_bracket, "Expected ')' after call arguments");
+    _ = try self.consume(.right_paren, "Expected ')' after call arguments");
 
     return try Ast.createCallExpression(self.allocator, callee, try args.toOwnedSlice(self.allocator), src);
 }

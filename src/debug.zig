@@ -177,6 +177,8 @@ pub const Ast = struct {
             .literal => try self.printLiteral(node.literal, indent),
             .unary => try self.printUnary(node.unary, indent),
             .variable => try self.printVariable(node.variable, indent),
+            // TODO: Implement AST dump for call
+            .call => {},
         };
     }
 

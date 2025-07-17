@@ -13,6 +13,7 @@ const ExpressionValue = Ast.ExpressionValue;
 const Infix = Ast.Infix;
 const Unary = Ast.Unary;
 const Variable = Ast.Variable;
+const Call = Ast.Call;
 const TokenType = Lexer.TokenType;
 const Frame = Vm.Frame;
 const RegisterSize = Vm.RegisterSize;
@@ -89,7 +90,7 @@ fn statement(self: *Compiler, target: Statement) Errors!u8 {
         .expression => try self.expression(node.expression, null),
         .conditional => try self.conditional(node.conditional),
         .block => {
-            var dst: u8 = undefined;
+            var dst: u8 = 0;
             for (node.block.statements) |stmt| {
                 dst = try self.statement(stmt);
             }
@@ -117,6 +118,7 @@ fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
     self.instructions.items[current_ip - 1] = @truncate((target_ip & 0xff00) >> 8);
     self.instructions.items[current_ip] = @truncate(target_ip);
 
+    // TODO: Implement else for if-statements
     // if (target.otherwise) |else_blk| {
     //     if (self.instructions.items.len > std.math.maxInt(u16)) {
     //         try self.reportError("Invalid jump target");
@@ -167,6 +169,7 @@ fn expression(self: *Compiler, target: Expression, dst_reg: ?u8) Errors!u8 {
         .unary => try self.unary(node.unary, dst_reg),
         .literal => try self.literal(node.literal, dst_reg),
         .variable => try self.variable(node.variable),
+        .call => try self.call(node.call),
     };
 }
 
@@ -206,6 +209,12 @@ fn variable(self: *Compiler, target: *Variable) Errors!u8 {
     // try self.emitByte(expr);
 
     return dst;
+}
+
+fn call(self: *Compiler, target: *Call) Errors!u8 {
+    _ = self;
+    _ = target;
+    return Error.Unknown;
 }
 
 fn infix(self: *Compiler, target: *Infix, dst_reg: ?u8) Errors!u8 {
