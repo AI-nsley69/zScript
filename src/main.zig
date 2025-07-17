@@ -30,11 +30,11 @@ pub const runOpts = struct {
 };
 
 pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
+    const writer = std.io.getStdOut().writer();
+    // Source -> Tokens
     var lexer = Lexer{ .source = src, .arena = std.heap.ArenaAllocator.init(allocator) };
     const tokens = try lexer.scan();
     defer lexer.deinit();
-
-    const writer = std.io.getStdOut().writer();
 
     if (opt.printTokens) {
         for (tokens.items) |token| {
@@ -44,6 +44,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
         try writer.writeAll("\n");
     }
 
+    // Tokens -> Ast
     var parser = Parser{};
     var parsed = try parser.parse(allocator, tokens);
     defer parsed.arena.deinit();
@@ -66,8 +67,8 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
         ast.print(parsed) catch {};
     }
 
+    // Ast -> Bytecode
     var compiler = Compiler{ .allocator = allocator, .ast = parsed };
-
     var compiled = compiler.compile() catch {
         const stderr = std.io.getStdErr().writer();
         try utils.printCompileErr(stderr, compiler.err_msg.?);
@@ -78,7 +79,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
     if (opt.printAsm) {
         Debug.disassemble(compiled, writer) catch {};
     }
-
+    // Bytecode execution
     var vm = try Vm.init(allocator, compiled);
     defer vm.deinit();
     vm.run() catch |err| switch (err) {
