@@ -86,26 +86,18 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     var frames: std.ArrayListUnmanaged(*Frame) = std.ArrayListUnmanaged(*Frame){};
     for (self.comp_frames.items) |compilerFrame| {
         const frame = try self.allocator.create(Frame);
-        frame.* = .{
-            .name = compilerFrame.name,
-            .body = try compilerFrame.instructions.toOwnedSlice(self.allocator),
-            .reg_size = compilerFrame.reg_ptr,
-        };
+        frame.* = .{ .name = compilerFrame.name, .body = try compilerFrame.instructions.toOwnedSlice(self.allocator), .reg_size = compilerFrame.reg_ptr };
         try frames.append(self.allocator, frame);
     }
 
-    return .{
-        .frames = try frames.toOwnedSlice(self.allocator),
-    };
+    return .{ .frames = try frames.toOwnedSlice(self.allocator) };
 }
 
 pub fn compileFrame(self: *Compiler, target: []Statement, func: *Function) Errors!u8 {
     const previous_frame = self.frame_ptr;
     // Setup a new frame
     const compilerFrame = try self.allocator.create(CompilerFrame);
-    compilerFrame.* = .{
-        .name = func.name,
-    };
+    compilerFrame.* = .{ .name = func.name };
     try self.comp_frames.append(self.allocator, compilerFrame);
 
     self.frame_ptr = self.comp_frames.items.len - 1;
@@ -113,10 +105,10 @@ pub fn compileFrame(self: *Compiler, target: []Statement, func: *Function) Error
     const out = self.getOut();
     // Load the parameters for the function (if exists)
     const reversed = try self.allocator.dupe(*Variable, func.params);
+    defer self.allocator.free(reversed);
     std.mem.reverse(*Variable, reversed);
     for (reversed) |param| {
-        const dst = try self.variable(param);
-        try out.writeAll(&.{ @intFromEnum(opcodes.load_param), dst });
+        try out.writeAll(&.{ @intFromEnum(opcodes.load_param), try self.variable(param) });
     }
     // Compile the statements
     var final_dst: u8 = 0;
@@ -138,7 +130,6 @@ fn statement(self: *Compiler, target: Statement) Errors!u8 {
             for (node.block.statements) |stmt| {
                 dst = try self.statement(stmt);
             }
-
             return dst;
         },
         .loop => try self.loop(node.loop),
@@ -150,6 +141,7 @@ fn statement(self: *Compiler, target: Statement) Errors!u8 {
 fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
     const out = self.getOut();
     const frame = self.current();
+    // Conditional expression
     const cmp = try self.expression(target.expression, null);
     if (frame.instructions.items.len > std.math.maxInt(u16)) {
         try self.reportError("Invalid jump target");
@@ -157,6 +149,7 @@ fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
     }
     try out.writeAll(&.{ @intFromEnum(opcodes.jump_neq), cmp });
     try out.writeInt(u16, 0, .big);
+    // Compile bytecode to jump over the 'then' body
     const current_ip = frame.instructions.items.len - 1;
     const body = try self.statement(target.body);
     const target_ip = frame.instructions.items.len;
@@ -182,9 +175,11 @@ fn conditional(self: *Compiler, target: *Conditional) Errors!u8 {
 fn loop(self: *Compiler, target: *Loop) Errors!u8 {
     const frame = self.current();
     const out = self.getOut();
+    // Compile initializer if there is one (for-loop)
     if (target.initializer) |init| {
         _ = try self.expression(init, null);
     }
+    // Compile condition expression
     const start_ip = frame.instructions.items.len;
     const cmp = try self.expression(target.condition, null);
     if (frame.instructions.items.len > std.math.maxInt(u16)) {
@@ -195,6 +190,7 @@ fn loop(self: *Compiler, target: *Loop) Errors!u8 {
     try out.writeInt(u16, 0, .big);
     const current_ip = frame.instructions.items.len - 1;
     const body = try self.statement(target.body);
+    // Compile initializer if there is one (for-loop)
     if (target.post) |post| {
         _ = try self.expression(post, null);
     }
@@ -218,9 +214,8 @@ fn function(self: *Compiler, target: *Function) Errors!u8 {
 }
 
 fn @"return"(self: *Compiler, target: Return) Errors!u8 {
-    const out = self.getOut();
     const dst = if (target.value != null) try self.expression(target.value.?, null) else 0;
-    try out.writeAll(&.{ @intFromEnum(opcodes.@"return"), dst });
+    try self.getOut().writeAll(&.{ @intFromEnum(opcodes.@"return"), dst });
     return dst;
 }
 
@@ -235,8 +230,8 @@ fn expression(self: *Compiler, target: Expression, dst_reg: ?u8) Errors!u8 {
     };
 }
 
-fn opcode(target: TokenType) u8 {
-    const op = switch (target) {
+fn opcode(target: TokenType) !u8 {
+    const op: opcodes = switch (target) {
         .add => opcodes.add,
         .sub => opcodes.sub,
         .mul => opcodes.mult,
@@ -249,7 +244,7 @@ fn opcode(target: TokenType) u8 {
         .lte => opcodes.lte,
         .greater_than => opcodes.greater_than,
         .gte => opcodes.gte,
-        else => opcodes.noop,
+        else => return Error.Unknown,
     };
     return @intFromEnum(op);
 }
@@ -261,12 +256,14 @@ fn variable(self: *Compiler, target: *Variable) Errors!u8 {
         try self.reportError(msg);
         return Error.Unknown;
     }
+    // Check if variable exists in current scope
     if (self.variables.contains(target.name) and std.mem.eql(u8, metadata.?.scope, self.current().name)) {
         return self.variables.get(target.name).?;
     }
     const dst = try self.allocateRegister();
     _ = try self.variables.fetchPut(self.allocator, target.name, dst);
     if (target.initializer == null) {
+        // Return destination if the variable is a function parameter
         if (metadata.?.is_param) return dst;
         const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
@@ -303,15 +300,11 @@ fn call(self: *Compiler, target: *Call) Errors!u8 {
 
 fn infix(self: *Compiler, target: *Infix, dst_reg: ?u8) Errors!u8 {
     if (target.op == .assign) return try self.assignment(target);
-
-    const out = self.getOut();
-
     const lhs = try self.expression(target.lhs, null);
     const rhs = try self.expression(target.rhs, null);
     const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
-    const op = opcode(target.op);
-
-    try out.writeAll(&.{ op, dst, lhs, rhs });
+    const op = try opcode(target.op);
+    try self.getOut().writeAll(&.{ op, dst, lhs, rhs });
     return dst;
 }
 
@@ -332,11 +325,10 @@ fn assignment(self: *Compiler, target: *Infix) Errors!u8 {
 
 fn unary(self: *Compiler, target: *Unary, dst_reg: ?u8) Errors!u8 {
     const zero_reg = 0x00;
-    const out = self.getOut();
     const rhs = try self.expression(target.rhs, null);
     const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
-    const op = opcode(target.op);
-    try out.writeAll(&.{ op, dst, zero_reg, rhs });
+    const op = try opcode(target.op);
+    try self.getOut().writeAll(&.{ op, dst, zero_reg, rhs });
     return dst;
 }
 
@@ -344,9 +336,7 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
     const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
     const out = self.getOut();
     switch (val) {
-        .boolean => {
-            try out.writeAll(&.{ @intFromEnum(opcodes.load_bool), dst, @intFromBool(val.boolean) });
-        },
+        .boolean => try out.writeAll(&.{ @intFromEnum(opcodes.load_bool), dst, @intFromBool(val.boolean) }),
         .float => {
             try out.writeAll(&.{ @intFromEnum(opcodes.load_float), dst });
             try out.writeInt(u64, @bitCast(val.float), .big);
@@ -367,16 +357,6 @@ fn allocateRegister(self: *Compiler) Errors!u8 {
     }
     frame.reg_ptr += 1;
     return frame.reg_ptr - 1;
-}
-
-fn addConstant(self: *Compiler, value: Value) Errors!u8 {
-    if (self.constants.items.len >= std.math.maxInt(u8)) {
-        try self.reportError("Out of constants");
-        return Error.OutOfConstants;
-    }
-    try self.constants.append(self.allocator, value);
-    const ret: u8 = @intCast(self.constants.items.len - 1);
-    return ret;
 }
 
 fn reportError(self: *Compiler, msg: []const u8) Errors!void {
