@@ -231,6 +231,7 @@ pub fn run(self: *Vm) !void {
     };
 }
 
+// TODO: Figure out why return values aren't properly set
 fn ret(self: *Vm) !void {
     const res = self.getRegister(try self.next());
     const popped_frame = self.call_stack.pop();
