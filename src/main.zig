@@ -82,11 +82,11 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
     var vm = try Vm.init(allocator, compiled);
     defer vm.deinit();
     vm.run() catch |err| switch (err) {
-        error.EndOfStream => return vm.return_value,
+        error.EndOfStream => return vm.result,
         else => |e| return e,
     };
 
-    return vm.return_value;
+    return vm.result;
 }
 
 const expect = std.testing.expect;

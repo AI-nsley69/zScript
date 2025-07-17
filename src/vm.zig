@@ -33,10 +33,12 @@ pub const OpCodes = enum(u8) {
 };
 
 pub const Frame = struct {
+    name: []const u8,
     body: []u8,
     ip: usize = 0,
     caller: ?*Frame = null,
-    result: ?*Value,
+    result: ?Value = null,
+    reg_size: RegisterSize,
 };
 
 pub const Error = error{
@@ -46,21 +48,19 @@ pub const Error = error{
 
 pub const RegisterSize = u16;
 
-// pub const RegisterSize = std.math.maxInt(u16);
-
 const Vm = @This();
 
 allocator: std.mem.Allocator,
 trace: bool = true,
-ip: usize = 0,
-instructions: []u8,
+frames: []*Frame,
+frame: usize = 0,
 registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
-return_value: ?Value = null,
+result: ?Value = null,
 
 pub fn init(allocator: std.mem.Allocator, compiled: CompilerOutput) !Vm {
     var vm: Vm = .{
         .allocator = allocator,
-        .instructions = compiled.instructions,
+        .frames = compiled.frames,
     };
 
     try vm.registers.ensureUnusedCapacity(allocator, 256);
@@ -75,10 +75,14 @@ pub fn deinit(self: *Vm) void {
     self.registers.deinit(self.allocator);
 }
 
+fn current(self: *Vm) *Frame {
+    return self.frames[self.frame];
+}
+
 fn next(self: *Vm) !u8 {
-    if (self.ip >= self.instructions.len) return error.EndOfStream;
-    self.ip = self.ip + 1;
-    return self.instructions[self.ip - 1];
+    if (self.current().ip >= self.current().body.len) return error.EndOfStream;
+    self.current().ip = self.current().ip + 1;
+    return self.current().body[self.current().ip - 1];
 }
 
 fn nextOp(self: *Vm) !OpCodes {
@@ -193,7 +197,10 @@ pub fn run(self: *Vm) !void {
 }
 
 fn ret(self: *Vm) !void {
-    self.return_value = self.getRegister(try self.next());
+    self.current().result = self.getRegister(try self.next());
+    if (self.current().caller == null) {
+        self.result = self.current().result;
+    }
 }
 
 fn copy(self: *Vm) !void {
@@ -381,9 +388,9 @@ fn jeq(self: *Vm) !void {
     if (isEql != .boolean) return;
     if (!isEql.boolean) return;
 
-    const buf = self.instructions[self.ip .. self.ip + 2];
+    const buf = self.current().body[self.current().ip .. self.current().ip + 2];
     const ip = std.mem.readInt(u16, buf[0..2], .big);
-    self.ip = ip;
+    self.current().ip = ip;
 }
 
 fn jne(self: *Vm) !void {
@@ -391,15 +398,15 @@ fn jne(self: *Vm) !void {
     if (isEql != .boolean) return;
     if (isEql.boolean) return;
 
-    const buf = self.instructions[self.ip .. self.ip + 2];
+    const buf = self.current().body[self.current().ip .. self.current().ip + 2];
     const ip = std.mem.readInt(u16, buf[0..2], .big);
-    self.ip = ip;
+    self.current().ip = ip;
 }
 
 fn jmp(self: *Vm) !void {
-    const buf = self.instructions[self.ip .. self.ip + 2];
+    const buf = self.current().body[self.current().ip .. self.current().ip + 2];
     const ip = std.mem.readInt(u16, buf[0..2], .big);
-    self.ip = ip;
+    self.current().ip = ip;
 }
 
 fn loadBool(self: *Vm) !void {
@@ -410,7 +417,7 @@ fn loadBool(self: *Vm) !void {
 
 fn loadFloat(self: *Vm) !void {
     const dst = try self.next();
-    var buf = self.instructions[self.ip .. self.ip + 8];
+    var buf = self.current().body[self.current().ip .. self.current().ip + 8];
     const val = std.mem.readInt(u64, buf[0..8], .big);
     // const val = try self.getIn().readInt(u64, .big);
     self.setRegister(dst, .{ .float = @bitCast(val) });
@@ -418,7 +425,7 @@ fn loadFloat(self: *Vm) !void {
 
 fn loadInt(self: *Vm) !void {
     const dst = try self.next();
-    var buf = self.instructions[self.ip .. self.ip + 8];
+    var buf = self.current().body[self.current().ip .. self.current().ip + 8];
     const val = std.mem.readInt(u64, buf[0..8], .big);
     self.setRegister(dst, .{ .int = @bitCast(val) });
 }

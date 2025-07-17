@@ -14,6 +14,8 @@ const Infix = Ast.Infix;
 const Unary = Ast.Unary;
 const Variable = Ast.Variable;
 const TokenType = Lexer.TokenType;
+const Frame = Vm.Frame;
+const RegisterSize = Vm.RegisterSize;
 
 const Error = error{
     OutOfRegisters,
@@ -26,10 +28,13 @@ const Errors = (Error || std.mem.Allocator.Error);
 
 pub const CompilerOutput = struct {
     const Self = @This();
-    instructions: []u8,
+    frames: []*Frame,
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-        allocator.free(self.instructions);
+        for (self.frames) |frame| {
+            allocator.free(frame.*.body);
+        }
+        allocator.free(self.frames);
     }
 };
 
@@ -38,7 +43,7 @@ const Compiler = @This();
 allocator: std.mem.Allocator,
 ast: Program,
 instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
-constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+frames: std.ArrayListUnmanaged(*Frame) = std.ArrayListUnmanaged(*Frame){},
 variables: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 ptr: usize = 0,
 reg_ptr: u8 = 1,
@@ -46,26 +51,36 @@ err_msg: ?[]u8 = null,
 
 const opcodes = Vm.OpCodes;
 
+fn getOut(self: *Compiler) !std.ArrayListUnmanaged(u8).Writer {
+    return self.instructions.writer(self.allocator);
+}
+
 pub fn compile(self: *Compiler) Errors!CompilerOutput {
     defer self.variables.deinit(self.allocator);
-    const out = try self.getOut();
+    try self.frames.append(self.allocator, try self.compileFrame(self.ast.statements.items, "main"));
 
-    const statements = self.ast.statements.items;
+    return .{
+        .frames = try self.frames.toOwnedSlice(self.allocator),
+    };
+}
+
+pub fn compileFrame(self: *Compiler, target: []Statement, name: []const u8) Errors!*Frame {
+    const out = try self.getOut();
     var final_dst: u8 = 0;
-    for (statements) |elem| {
+    for (target) |elem| {
         final_dst = try self.statement(elem);
     }
 
     // Emit halt instruction at the end
     try out.writeAll(&.{ @intFromEnum(opcodes.@"return"), final_dst });
 
-    return .{
-        .instructions = try self.instructions.toOwnedSlice(self.allocator),
+    const frame = try self.allocator.create(Frame);
+    frame.* = .{
+        .name = name,
+        .body = try self.instructions.toOwnedSlice(self.allocator),
+        .reg_size = self.reg_ptr,
     };
-}
-
-fn getOut(self: *Compiler) !std.ArrayListUnmanaged(u8).Writer {
-    return self.instructions.writer(self.allocator);
+    return frame;
 }
 
 fn statement(self: *Compiler, target: Statement) Errors!u8 {
