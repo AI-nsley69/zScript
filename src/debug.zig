@@ -26,6 +26,9 @@ fn codeToString(opcode: Vm.OpCodes) []const u8 {
         .load_bool => "LOAD_BOOL",
         .load_float => "LOAD_FLOAT",
         .load_int => "LOAD_INT",
+        .load_param => "LOAD_PARAM",
+        .store_param => "STORE_PARAM",
+        .call => "CALL",
         .add => "ADD",
         .sub => "SUBTRACT",
         .mult => "MULT",
@@ -75,7 +78,7 @@ fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std.io.
             try writer.print("  [{x:0>6}] {s} #{x}\n", .{ pos, name, imm });
         },
         // 1x reg arg
-        .@"return" => {
+        .@"return", .call, .load_param, .store_param => {
             try writer.print("  [{x:0>6}] {s} ${d}\n", .{ pos, name, try in.readByte() });
         },
         .load_bool => {
