@@ -52,14 +52,15 @@ const Vm = @This();
 
 allocator: std.mem.Allocator,
 trace: bool = true,
-instructions: std.io.FixedBufferStream([]u8),
+ip: usize = 0,
+instructions: []u8,
 registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 return_value: ?Value = null,
 
 pub fn init(allocator: std.mem.Allocator, compiled: CompilerOutput) !Vm {
     var vm: Vm = .{
         .allocator = allocator,
-        .instructions = std.io.fixedBufferStream(compiled.instructions),
+        .instructions = compiled.instructions,
     };
 
     try vm.registers.ensureUnusedCapacity(allocator, 256);
@@ -74,12 +75,14 @@ pub fn deinit(self: *Vm) void {
     self.registers.deinit(self.allocator);
 }
 
-fn getIn(self: *Vm) std.io.FixedBufferStream([]u8).Reader {
-    return self.instructions.reader();
+fn next(self: *Vm) !u8 {
+    if (self.ip >= self.instructions.len) return error.EndOfStream;
+    self.ip = self.ip + 1;
+    return self.instructions[self.ip - 1];
 }
 
 fn nextOp(self: *Vm) !OpCodes {
-    return @enumFromInt(try self.getIn().readByte());
+    return @enumFromInt(try self.next());
 }
 
 fn addRegister(self: *Vm, index: RegisterSize) !void {
@@ -190,19 +193,19 @@ pub fn run(self: *Vm) !void {
 }
 
 fn ret(self: *Vm) !void {
-    self.return_value = self.getRegister(try self.getIn().readByte());
+    self.return_value = self.getRegister(try self.next());
 }
 
 fn copy(self: *Vm) !void {
-    const src = try self.getIn().readByte();
-    const dst = try self.getIn().readByte();
+    const src = try self.next();
+    const dst = try self.next();
     self.setRegister(src, self.getRegister(dst));
 }
 
 fn add(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     return switch (fst) {
         .int => {
@@ -218,9 +221,9 @@ fn add(self: *Vm) !void {
 }
 
 fn sub(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     return switch (fst) {
         .int => {
@@ -236,9 +239,9 @@ fn sub(self: *Vm) !void {
 }
 
 fn mul(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     return switch (fst) {
         .int => {
@@ -254,9 +257,9 @@ fn mul(self: *Vm) !void {
 }
 
 fn div(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     return switch (fst) {
         .int => {
@@ -272,27 +275,27 @@ fn div(self: *Vm) !void {
 }
 
 fn logicalAnd(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     if (fst != .boolean or snd != .boolean) return Error.MismatchedTypes;
     self.setRegister(dst, .{ .boolean = fst.boolean and snd.boolean });
 }
 
 fn logicalOr(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     if (fst != .boolean or snd != .boolean) return Error.MismatchedTypes;
     self.setRegister(dst, .{ .boolean = fst.boolean or snd.boolean });
 }
 
 fn eql(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     const res: bool = switch (fst) {
         .boolean => if (snd == .boolean) fst.boolean == snd.boolean else false,
@@ -304,9 +307,9 @@ fn eql(self: *Vm) !void {
 }
 
 fn neq(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     const res = switch (fst) {
         .boolean => if (snd == .boolean) fst.boolean != snd.boolean else false,
@@ -318,9 +321,9 @@ fn neq(self: *Vm) !void {
 }
 
 fn lt(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     const res = try switch (fst) {
         .boolean => Error.MismatchedTypes,
@@ -332,9 +335,9 @@ fn lt(self: *Vm) !void {
 }
 
 fn lte(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     const res = try switch (fst) {
         .boolean => Error.MismatchedTypes,
@@ -346,9 +349,9 @@ fn lte(self: *Vm) !void {
 }
 
 fn gt(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     const res = try switch (fst) {
         .boolean => Error.MismatchedTypes,
@@ -360,9 +363,9 @@ fn gt(self: *Vm) !void {
 }
 
 fn gte(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const fst = self.getRegister(try self.getIn().readByte());
-    const snd = self.getRegister(try self.getIn().readByte());
+    const dst = try self.next();
+    const fst = self.getRegister(try self.next());
+    const snd = self.getRegister(try self.next());
 
     const res = try switch (fst) {
         .boolean => Error.MismatchedTypes,
@@ -374,42 +377,48 @@ fn gte(self: *Vm) !void {
 }
 
 fn jeq(self: *Vm) !void {
-    const isEql = self.getRegister(try self.getIn().readByte());
+    const isEql = self.getRegister(try self.next());
     if (isEql != .boolean) return;
     if (!isEql.boolean) return;
 
-    const ip = try self.getIn().readInt(u16, .big);
-    try self.instructions.seekTo(ip);
+    const buf = self.instructions[self.ip .. self.ip + 2];
+    const ip = std.mem.readInt(u16, buf[0..2], .big);
+    self.ip = ip;
 }
 
 fn jne(self: *Vm) !void {
-    const isEql = self.getRegister(try self.getIn().readByte());
+    const isEql = self.getRegister(try self.next());
     if (isEql != .boolean) return;
     if (isEql.boolean) return;
 
-    const ip = try self.getIn().readInt(u16, .big);
-    try self.instructions.seekTo(ip);
+    const buf = self.instructions[self.ip .. self.ip + 2];
+    const ip = std.mem.readInt(u16, buf[0..2], .big);
+    self.ip = ip;
 }
 
 fn jmp(self: *Vm) !void {
-    const ip = try self.getIn().readInt(u16, .big);
-    try self.instructions.seekTo(ip);
+    const buf = self.instructions[self.ip .. self.ip + 2];
+    const ip = std.mem.readInt(u16, buf[0..2], .big);
+    self.ip = ip;
 }
 
 fn loadBool(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const val = try self.getIn().readByte() == 1;
+    const dst = try self.next();
+    const val = try self.next() == 1;
     self.setRegister(dst, .{ .boolean = val });
 }
 
 fn loadFloat(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const val = try self.getIn().readInt(u64, .big);
+    const dst = try self.next();
+    var buf = self.instructions[self.ip .. self.ip + 8];
+    const val = std.mem.readInt(u64, buf[0..8], .big);
+    // const val = try self.getIn().readInt(u64, .big);
     self.setRegister(dst, .{ .float = @bitCast(val) });
 }
 
 fn loadInt(self: *Vm) !void {
-    const dst = try self.getIn().readByte();
-    const val = try self.getIn().readInt(u64, .big);
+    const dst = try self.next();
+    var buf = self.instructions[self.ip .. self.ip + 8];
+    const val = std.mem.readInt(u64, buf[0..8], .big);
     self.setRegister(dst, .{ .int = @bitCast(val) });
 }
