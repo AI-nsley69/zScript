@@ -8,6 +8,8 @@ const TokenType = Lexer.TokenType;
 const Token = Lexer.Token;
 const VariableMetaData = Parser.VariableMetaData;
 
+// Expressions
+
 const ExpressionType = enum {
     call,
     variable,
@@ -49,6 +51,8 @@ pub const Expression = struct {
     node: ExpressionValue,
     src: Token,
 };
+
+// Statements
 
 const StatementType = enum {
     conditional,

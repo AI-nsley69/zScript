@@ -119,8 +119,7 @@ fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
 }
 
 fn match(self: *Lexer, expected: u8) bool {
-    if (self.isAtEnd()) return false;
-    if (self.source[self.current] != expected) return false;
+    if (self.isAtEnd() or self.source[self.current] != expected) return false;
     self.current += 1;
     return true;
 }
@@ -131,6 +130,7 @@ fn scanToken(self: *Lexer) Token {
 
     const start = self.current;
     const c: u8 = self.advance();
+
     switch (c) {
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => return self.number(start),
         '+' => return self.makeToken(.add, start),
@@ -147,6 +147,7 @@ fn scanToken(self: *Lexer) Token {
             if (self.match('=')) {
                 return self.makeToken(.eql, self.current - 2);
             }
+
             return self.makeToken(.assign, start);
         },
         '!' => {
@@ -155,7 +156,7 @@ fn scanToken(self: *Lexer) Token {
             }
 
             const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
-            return self.makeError(msg);
+            return reportError(msg);
         },
         '<' => {
             if (self.match('=')) {
@@ -173,7 +174,7 @@ fn scanToken(self: *Lexer) Token {
         '|' => {
             if (!self.match(c)) {
                 const msg = std.fmt.allocPrint(self.arena.allocator(), "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
-                return self.makeError(msg);
+                return reportError(msg);
             }
 
             return self.makeToken(.logical_or, start);
@@ -181,15 +182,15 @@ fn scanToken(self: *Lexer) Token {
         '&' => {
             if (!self.match(c)) {
                 const msg = std.fmt.allocPrint(self.arena.allocator(), "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
-                return self.makeError(msg);
+                return reportError(msg);
             }
 
             return self.makeToken(.logical_and, start);
         },
-        'a'...'z', 'A'...'Z' => return self.alpha(c, start),
+        'a'...'z', 'A'...'Z' => return self.alpha(start),
         else => {
             const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
-            return self.makeError(msg);
+            return reportError(msg);
         },
     }
 }
@@ -232,8 +233,7 @@ fn number(self: *Lexer, start: usize) Token {
     return self.makeToken(.number, start);
 }
 
-fn alpha(self: *Lexer, current: u8, start: usize) Token {
-    _ = current;
+fn alpha(self: *Lexer, start: usize) Token {
     if (self.matchFull("true")) {
         return self.makeToken(.bool, start);
     }
@@ -273,28 +273,16 @@ fn alpha(self: *Lexer, current: u8, start: usize) Token {
     return self.makeToken(.identifier, self.takeWhile(isAlpha));
 }
 
-fn makeError(self: *Lexer, msg: []const u8) Token {
-    _ = self;
-    return .{
-        .tag = .err,
-        .span = msg,
-    };
+fn reportError(msg: []const u8) Token {
+    return .{ .tag = .err, .span = msg };
 }
 
 fn makeTokenInfo(self: *Lexer, token: Token) TokenInfo {
-    return .{
-        .line = self.line,
-        .pos = self.current - self.line_pos,
-        .len = token.span.len,
-        .line_source = self.getLineSource(),
-    };
+    return .{ .line = self.line, .pos = self.current - self.line_pos, .len = token.span.len, .line_source = self.getLineSource() };
 }
 
 fn makeToken(self: *Lexer, tokenType: TokenType, start: usize) Token {
-    return .{
-        .tag = tokenType,
-        .span = self.source[start..self.current],
-    };
+    return .{ .tag = tokenType, .span = self.source[start..self.current] };
 }
 
 fn getLineSource(self: *Lexer) []const u8 {
