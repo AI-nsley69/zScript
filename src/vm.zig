@@ -2,6 +2,7 @@ const std = @import("std");
 const debug = @import("debug.zig");
 const Compiler = @import("compiler.zig");
 const Value = @import("value.zig").Value;
+const ValueType = @import("value.zig").ValueType;
 
 const CompilerOutput = Compiler.CompilerOutput;
 
@@ -103,10 +104,21 @@ fn next(self: *Vm) !u8 {
     return self.current().body[self.current().ip - 1];
 }
 
+fn readInt(self: *Vm, comptime T: type) T {
+    const sections = @divFloor(@typeInfo(T).int.bits, 8);
+    const buf = self.current().body[self.current().ip .. self.current().ip + sections];
+    self.current().ip += buf.len;
+    return std.mem.readInt(T, buf[0..sections], .big);
+}
+
 fn nextOp(self: *Vm) !OpCodes {
     const op: OpCodes = @enumFromInt(try self.next());
-    // std.debug.print("Next op: {s}\n", .{@tagName(op)});
+    std.debug.print("Next op: {s}\n", .{@tagName(op)});
     return op;
+}
+
+fn nextReg(self: *Vm) !Value {
+    return self.getRegister(try self.next());
 }
 
 fn addRegister(self: *Vm, index: RegisterSize) !void {
@@ -132,87 +144,186 @@ pub fn run(self: *Vm) !void {
     const opcode: OpCodes = try self.nextOp();
     return blk: switch (opcode) {
         .copy => {
-            try self.copy();
+            self.setRegister(try self.next(), try self.nextReg());
             continue :blk try self.nextOp();
         },
         .add => {
-            try self.add();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            const res: Value = switch (fst) {
+                .int => if (snd == .int) .{ .int = fst.int + snd.int } else return Error.MismatchedTypes,
+                .float => if (snd == .float) .{ .float = fst.float + snd.float } else return Error.MismatchedTypes,
+                .boolean => return Error.Unknown,
+            };
+            self.setRegister(dst, res);
             continue :blk try self.nextOp();
         },
         .sub => {
-            try self.sub();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            const res: Value = switch (fst) {
+                .int => if (snd == .int) .{ .int = fst.int - snd.int } else return Error.MismatchedTypes,
+                .float => if (snd == .float) .{ .float = fst.float - snd.float } else return Error.MismatchedTypes,
+                .boolean => return Error.Unknown,
+            };
+            self.setRegister(dst, res);
             continue :blk try self.nextOp();
         },
         .mult => {
-            try self.mul();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            const res: Value = switch (fst) {
+                .int => if (snd == .int) .{ .int = fst.int * snd.int } else return Error.MismatchedTypes,
+                .float => if (snd == .float) .{ .float = fst.float * snd.float } else return Error.MismatchedTypes,
+                .boolean => return Error.Unknown,
+            };
+            self.setRegister(dst, res);
             continue :blk try self.nextOp();
         },
         .divide => {
-            try self.div();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            const res: Value = switch (fst) {
+                .int => if (snd == .int) .{ .int = @divFloor(fst.int, snd.int) } else return Error.MismatchedTypes,
+                .float => if (snd == .float) .{ .float = @divFloor(fst.float, snd.float) } else return Error.MismatchedTypes,
+                .boolean => return Error.Unknown,
+            };
+            self.setRegister(dst, res);
             continue :blk try self.nextOp();
         },
         .@"or" => {
-            try self.logicalOr();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            if (fst != .boolean or snd != .boolean) return Error.MismatchedTypes;
+            self.setRegister(dst, .{ .boolean = fst.boolean or snd.boolean });
             continue :blk try self.nextOp();
         },
         .@"and" => {
-            try self.logicalAnd();
+            const dst = try self.next();
+            const fst = self.getRegister(try self.next());
+            const snd = try self.nextReg();
+            if (fst != .boolean or snd != .boolean) return Error.MismatchedTypes;
+            self.setRegister(dst, .{ .boolean = fst.boolean and snd.boolean });
             continue :blk try self.nextOp();
         },
         .eql => {
-            try self.eql();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            const res: bool = switch (fst) {
+                .boolean => if (snd == .boolean) fst.boolean == snd.boolean else false,
+                .float => if (snd == .float) fst.float == snd.float else false,
+                .int => if (snd == .int) fst.int == snd.int else false,
+            };
+            self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
         },
         .neq => {
-            try self.neq();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            const res = switch (fst) {
+                .boolean => if (snd == .boolean) fst.boolean != snd.boolean else false,
+                .float => if (snd == .float) fst.float != snd.float else false,
+                .int => if (snd == .int) fst.int != snd.int else false,
+            };
+            self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
         },
         .less_than => {
-            try self.lt();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            const res = try switch (fst) {
+                .boolean => Error.MismatchedTypes,
+                .float => if (snd == .float) fst.float < snd.float else false,
+                .int => if (snd == .int) fst.int < snd.int else false,
+            };
+            self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
         },
         .lte => {
-            try self.lte();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            const res = try switch (fst) {
+                .boolean => Error.MismatchedTypes,
+                .float => if (snd == .float) fst.float <= snd.float else false,
+                .int => if (snd == .int) fst.int <= snd.int else false,
+            };
+            self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
         },
         .greater_than => {
-            try self.gt();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            const res = try switch (fst) {
+                .boolean => Error.MismatchedTypes,
+                .float => if (snd == .float) fst.float > snd.float else false,
+                .int => if (snd == .int) fst.int > snd.int else false,
+            };
+            self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
         },
         .gte => {
-            try self.gte();
+            const dst = try self.next();
+            const fst = try self.nextReg();
+            const snd = try self.nextReg();
+            const res = try switch (fst) {
+                .boolean => Error.MismatchedTypes,
+                .float => if (snd == .float) fst.float >= snd.float else false,
+                .int => if (snd == .int) fst.int >= snd.int else false,
+            };
+            self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
         },
         .jump_eql => {
-            try self.jeq();
+            const isEql = try self.nextReg();
+            if (isEql == .boolean and isEql.boolean) {
+                self.current().ip = self.readInt(u16);
+            }
             continue :blk try self.nextOp();
         },
         .jump_neq => {
-            try self.jne();
+            const isEql = try self.nextReg();
+            if (isEql == .boolean and !isEql.boolean) {
+                self.current().ip = self.readInt(u16);
+            }
             continue :blk try self.nextOp();
         },
         .jump => {
-            try self.jmp();
+            self.current().ip = self.readInt(u16);
             continue :blk try self.nextOp();
         },
         .load_int => {
-            try self.loadInt();
+            self.setRegister(try self.next(), .{ .int = @bitCast(self.readInt(u64)) });
             continue :blk try self.nextOp();
         },
         .load_float => {
-            try self.loadFloat();
+            self.setRegister(try self.next(), .{ .float = @bitCast(self.readInt(u64)) });
             continue :blk try self.nextOp();
         },
         .load_bool => {
-            try self.loadBool();
+            self.setRegister(try self.next(), .{ .boolean = try self.next() == 1 });
             continue :blk try self.nextOp();
         },
         .load_param => {
-            try self.loadParam();
+            const val = self.param_stack.pop();
+            if (val == null) {
+                return Error.InvalidParameter;
+            }
+            self.setRegister(try self.next(), val.?);
             continue :blk try self.nextOp();
         },
         .store_param => {
-            try self.storeParam();
+            const src = try self.next();
+            try self.param_stack.append(self.allocator, self.getRegister(src));
             continue :blk try self.nextOp();
         },
         .@"return" => {
@@ -284,246 +395,4 @@ fn call(self: *Vm) !void {
     try self.reg_stack.appendSlice(self.allocator, self.registers.items[1..self.current().reg_size]);
     // Update to new caller
     self.frame = frame_idx;
-}
-
-fn copy(self: *Vm) !void {
-    const src = try self.next();
-    const dst = try self.next();
-    self.setRegister(src, self.getRegister(dst));
-}
-
-fn add(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    return switch (fst) {
-        .int => {
-            if (snd != .int) return Error.MismatchedTypes;
-            self.setRegister(dst, .{ .int = fst.int + snd.int });
-        },
-        .float => {
-            if (snd != .float) return Error.MismatchedTypes;
-            self.setRegister(dst, .{ .float = fst.float + snd.float });
-        },
-        .boolean => return Error.Unknown,
-    };
-}
-
-fn sub(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    return switch (fst) {
-        .int => {
-            if (snd != .int) return Error.MismatchedTypes;
-            self.setRegister(dst, .{ .int = fst.int - snd.int });
-        },
-        .float => {
-            if (snd != .float) return Error.MismatchedTypes;
-            self.setRegister(dst, .{ .float = fst.float - snd.float });
-        },
-        .boolean => return Error.Unknown,
-    };
-}
-
-fn mul(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    return switch (fst) {
-        .int => {
-            if (snd != .int) return Error.MismatchedTypes;
-            self.setRegister(dst, .{ .int = fst.int * snd.int });
-        },
-        .float => {
-            if (snd != .float) return Error.MismatchedTypes;
-            self.setRegister(dst, .{ .float = fst.float * snd.float });
-        },
-        .boolean => return Error.Unknown,
-    };
-}
-
-fn div(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    return switch (fst) {
-        .int => {
-            if (snd != .int) return Error.MismatchedTypes;
-            self.setRegister(dst, .{ .int = @divFloor(fst.int, snd.int) });
-        },
-        .float => {
-            if (snd != .float) return Error.MismatchedTypes;
-            self.setRegister(dst, .{ .float = @divFloor(fst.float, snd.float) });
-        },
-        .boolean => return Error.Unknown,
-    };
-}
-
-fn logicalAnd(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    if (fst != .boolean or snd != .boolean) return Error.MismatchedTypes;
-    self.setRegister(dst, .{ .boolean = fst.boolean and snd.boolean });
-}
-
-fn logicalOr(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    if (fst != .boolean or snd != .boolean) return Error.MismatchedTypes;
-    self.setRegister(dst, .{ .boolean = fst.boolean or snd.boolean });
-}
-
-fn eql(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    const res: bool = switch (fst) {
-        .boolean => if (snd == .boolean) fst.boolean == snd.boolean else false,
-        .float => if (snd == .float) fst.float == snd.float else false,
-        .int => if (snd == .int) fst.int == snd.int else false,
-    };
-
-    self.setRegister(dst, .{ .boolean = res });
-}
-
-fn neq(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    const res = switch (fst) {
-        .boolean => if (snd == .boolean) fst.boolean != snd.boolean else false,
-        .float => if (snd == .float) fst.float != snd.float else false,
-        .int => if (snd == .int) fst.int != snd.int else false,
-    };
-
-    self.setRegister(dst, .{ .boolean = res });
-}
-
-fn lt(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    const res = try switch (fst) {
-        .boolean => Error.MismatchedTypes,
-        .float => if (snd == .float) fst.float < snd.float else false,
-        .int => if (snd == .int) fst.int < snd.int else false,
-    };
-
-    self.setRegister(dst, .{ .boolean = res });
-}
-
-fn lte(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    const res = try switch (fst) {
-        .boolean => Error.MismatchedTypes,
-        .float => if (snd == .float) fst.float <= snd.float else false,
-        .int => if (snd == .int) fst.int <= snd.int else false,
-    };
-
-    self.setRegister(dst, .{ .boolean = res });
-}
-
-fn gt(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    const res = try switch (fst) {
-        .boolean => Error.MismatchedTypes,
-        .float => if (snd == .float) fst.float > snd.float else false,
-        .int => if (snd == .int) fst.int > snd.int else false,
-    };
-
-    self.setRegister(dst, .{ .boolean = res });
-}
-
-fn gte(self: *Vm) !void {
-    const dst = try self.next();
-    const fst = self.getRegister(try self.next());
-    const snd = self.getRegister(try self.next());
-
-    const res = try switch (fst) {
-        .boolean => Error.MismatchedTypes,
-        .float => if (snd == .float) fst.float >= snd.float else false,
-        .int => if (snd == .int) fst.int >= snd.int else false,
-    };
-
-    self.setRegister(dst, .{ .boolean = res });
-}
-
-fn jeq(self: *Vm) !void {
-    const isEql = self.getRegister(try self.next());
-    if (isEql != .boolean) return;
-    if (!isEql.boolean) return;
-
-    const buf = self.current().body[self.current().ip .. self.current().ip + 2];
-    const ip = std.mem.readInt(u16, buf[0..2], .big);
-    self.current().ip = ip;
-}
-
-fn jne(self: *Vm) !void {
-    const isEql = self.getRegister(try self.next());
-    if (isEql != .boolean) return;
-    if (isEql.boolean) return;
-
-    const buf = self.current().body[self.current().ip .. self.current().ip + 2];
-    const ip = std.mem.readInt(u16, buf[0..2], .big);
-    self.current().ip = ip;
-}
-
-fn jmp(self: *Vm) !void {
-    const buf = self.current().body[self.current().ip .. self.current().ip + 2];
-    const ip = std.mem.readInt(u16, buf[0..2], .big);
-    self.current().ip = ip;
-}
-
-fn loadBool(self: *Vm) !void {
-    const dst = try self.next();
-    const val = try self.next() == 1;
-    self.setRegister(dst, .{ .boolean = val });
-}
-
-fn loadParam(self: *Vm) !void {
-    const dst = try self.next();
-    const val = self.param_stack.pop();
-    if (val == null) {
-        return Error.InvalidParameter;
-    }
-    self.setRegister(dst, val.?);
-}
-
-fn storeParam(self: *Vm) !void {
-    const src = try self.next();
-    try self.param_stack.append(self.allocator, self.getRegister(src));
-}
-
-fn loadFloat(self: *Vm) !void {
-    const dst = try self.next();
-    var buf = self.current().body[self.current().ip .. self.current().ip + 8];
-    self.current().ip += buf.len;
-    const val = std.mem.readInt(u64, buf[0..8], .big);
-    self.setRegister(dst, .{ .float = @bitCast(val) });
-}
-
-fn loadInt(self: *Vm) !void {
-    const dst = try self.next();
-    var buf = self.current().body[self.current().ip .. self.current().ip + 8];
-    self.current().ip += buf.len;
-    const val = std.mem.readInt(u64, buf[0..8], .big);
-    self.setRegister(dst, .{ .int = @bitCast(val) });
 }
