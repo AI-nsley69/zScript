@@ -233,11 +233,12 @@ fn ret(self: *Vm) !void {
     const caller = self.current().caller;
     self.frame = if (caller != null) caller.? else 0;
 
-    // std.debug.print("Setting return value {any} in {d}\n", .{ res, self.current().call_dst });
-    self.setRegister(self.current().call_dst, res);
     // Get back the values from the reg stack
     @memcpy(self.registers.items[1..self.current().reg_size], self.reg_stack.items[self.reg_stack.items.len - (self.current().reg_size - 1) ..]);
     self.reg_stack.items.len -= self.current().reg_size - 1;
+    // std.debug.print("Setting return value {any} in {d}\n", .{ res, self.current().call_dst });
+    // Set the return value
+    self.setRegister(self.current().call_dst, res);
 }
 
 fn call(self: *Vm) !void {
