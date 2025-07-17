@@ -266,9 +266,8 @@ fn variable(self: *Compiler, target: *Variable) Errors!u8 {
     }
     const dst = try self.allocateRegister();
     _ = try self.variables.fetchPut(self.allocator, target.name, dst);
-    if (target.initializer == null and metadata.?.is_param) {
-        return dst;
-    } else {
+    if (target.initializer == null) {
+        if (metadata.?.is_param) return dst;
         const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
