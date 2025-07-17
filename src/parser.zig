@@ -18,6 +18,7 @@ const TokenType = Lexer.TokenType;
 pub const VariableMetaData = struct {
     scope: []const u8 = "",
     mutable: bool = false,
+    is_param: bool = false,
     type: ?ValueType = null,
 };
 
@@ -35,6 +36,7 @@ tokens: std.ArrayListUnmanaged(Token) = undefined,
 current: usize = 0,
 errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
 variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnmanaged(VariableMetaData){},
+current_func: []const u8 = "main",
 
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
 
@@ -69,7 +71,7 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
     const init = try self.expression();
     _ = try self.consume(.semi_colon, "Expected ';' after expression.");
     // Add metadata for variable
-    _ = try self.variables.fetchPut(self.allocator, name.span, .{ .mutable = std.mem.eql(u8, var_decl.span, "mut"), .type = null });
+    _ = try self.variables.fetchPut(self.allocator, name.span, .{ .scope = self.current_func, .mutable = std.mem.eql(u8, var_decl.span, "mut"), .type = null });
 
     return try Ast.createVariable(self.allocator, init, name.span, var_decl);
 }
@@ -77,9 +79,17 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
 fn functionDeclaration(self: *Parser) Errors!Statement {
     const name = try self.consume(.identifier, "Expected function name.");
     _ = try self.consume(.left_paren, "Expected '(' after function declaration.");
+
+    const prev_func = self.current_func;
+    self.current_func = name.span;
+
     var params = std.ArrayListUnmanaged(*Ast.Variable){};
     while (self.match(.identifier)) {
+        const metadata: VariableMetaData = .{ .scope = name.span, .mutable = false, .is_param = true, .type = null };
+        try self.variables.put(self.allocator, self.previous().span, metadata);
+
         const param = try Ast.createVariable(self.allocator, null, self.previous().span, self.previous());
+
         try params.append(self.allocator, param.node.variable);
         _ = self.consume(.comma, "Expected ',' after function parameter") catch {
             // Remove last error since it can either be comma or right paren
@@ -93,6 +103,8 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
     }
     _ = try self.consume(.left_bracket, "Expected '{'");
     const body = try self.block();
+
+    self.current_func = prev_func;
 
     return try Ast.createFunction(self.allocator, name.span, body, try params.toOwnedSlice(self.allocator));
 }
