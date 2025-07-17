@@ -169,7 +169,24 @@ pub const Ast = struct {
                     try self.printStatement(block_stmt, indent + indent_step);
                 }
             },
-            else => return,
+            .loop => {
+                const loop = node.loop.*;
+                try self.writer.print("{s}loop:\n", .{indent_msg});
+                if (loop.initializer != null) try self.printExpressionHelper(loop.initializer.?, indent + indent_step);
+                try self.printExpressionHelper(loop.condition, indent + indent_step);
+                if (loop.post != null) try self.printExpressionHelper(loop.post.?, indent + indent_step);
+                try self.printStatement(loop.body, indent + indent_step);
+            },
+            .function => {
+                try self.writer.print("{s}fn:\n", .{indent_msg});
+                try self.writer.print("  {s}name: {s}\n", .{ indent_msg, node.function.*.name });
+                try self.printStatement(node.function.*.body, indent + indent_step);
+            },
+            .@"return" => {
+                const val = node.@"return".value;
+                try self.writer.print("{s}return:\n", .{indent_msg});
+                if (val != null) try self.printExpressionHelper(val.?, indent + indent_step);
+            },
         }
     }
 
