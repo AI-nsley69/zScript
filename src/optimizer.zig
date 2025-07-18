@@ -17,13 +17,17 @@ const Optimizer = @This();
 
 allocator: std.mem.Allocator = undefined,
 
-pub fn optimize(self: *Optimizer, allocator: std.mem.Allocator, program: Program) !Program {
+pub fn optimizeAst(self: *Optimizer, allocator: std.mem.Allocator, program: Program) !Program {
     var arena = std.heap.ArenaAllocator.init(allocator);
     self.allocator = arena.allocator();
 
     var stmts = std.ArrayListUnmanaged(Statement){};
     for (program.statements.items) |stmt| {
         const constant_fold = try self.optimizeStatement(stmt, constantFold);
+        // TODO: Peephole (On bytecode-level)
+        // TODO: Function inlining
+        // TODO: Loop unrolling
+        // TODO: Dead code elimination
         try stmts.append(self.allocator, constant_fold);
     }
     errdefer arena.deinit();

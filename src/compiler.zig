@@ -57,8 +57,14 @@ fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
 }
 
 pub fn compile(self: *Compiler) Errors!CompilerOutput {
-    defer self.variables.deinit(self.allocator);
-    defer self.comp_frames.deinit(self.allocator);
+    defer {
+        self.variables.deinit(self.allocator);
+        self.functions.deinit(self.allocator);
+        for (self.comp_frames.items) |comp_frame| {
+            self.allocator.destroy(comp_frame);
+        }
+        self.comp_frames.deinit(self.allocator);
+    }
     // Create a pseudo main function for initial frame
     var no_params: [0]*Ast.Variable = .{};
     var empty_block: [0]Ast.Statement = .{};

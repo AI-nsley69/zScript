@@ -52,6 +52,15 @@ pub fn init(allocator: std.mem.Allocator, compiled: CompilerOutput) !Vm {
 
 pub fn deinit(self: *Vm) void {
     self.registers.deinit(self.allocator);
+    for (self.frames) |frame| {
+        self.allocator.destroy(frame);
+    }
+    self.reg_stack.deinit(self.allocator);
+    for (self.call_stack.items) |call_elem| {
+        self.allocator.destroy(call_elem);
+    }
+    self.call_stack.deinit(self.allocator);
+    self.param_stack.deinit(self.allocator);
 }
 
 fn current(self: *Vm) *Frame {
@@ -311,6 +320,7 @@ fn ret(self: *Vm) !void {
     const dst = try self.next();
     const res = self.getRegister(dst);
     const popped_frame = self.call_stack.pop();
+    defer self.allocator.destroy(popped_frame.?);
     // Set the final result if there is no more caller
     if (self.current().caller == null or popped_frame == null) {
         self.result = res;

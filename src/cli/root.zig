@@ -64,10 +64,14 @@ fn printFileError(out: std.fs.File.Writer, err: fileErrors, file: []const u8) !v
 }
 
 fn run(ctx: zli.CommandContext) !void {
-    // Test files for development
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    defer {
+        const check = debug_allocator.deinit();
+        if (check == .leak) {
+            std.log.debug("Leak detected after freeing allocator.", .{});
+        }
+    }
+    const allocator = debug_allocator.allocator();
 
     const file = std.fs.cwd().openFile(ctx.positional_args[0], .{}) catch |err| {
         try printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);

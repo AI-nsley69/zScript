@@ -47,7 +47,6 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
     // Tokens -> Ast
     var parser = Parser{};
     var parsed = try parser.parse(allocator, tokens);
-    defer parsed.arena.deinit();
 
     const parser_errors = parser.errors.items;
     for (parser_errors) |err| {
@@ -59,8 +58,9 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
 
     if (!opt.do_not_optimize) {
         var optimizer = Optimizer{};
-        parsed = try optimizer.optimize(allocator, parsed);
+        parsed = try optimizer.optimizeAst(allocator, parsed);
     }
+    defer parsed.arena.deinit();
 
     if (opt.print_ast) {
         var ast = Debug.Ast{ .writer = writer, .allocator = allocator };
