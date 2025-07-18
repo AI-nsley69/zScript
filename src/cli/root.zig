@@ -31,7 +31,7 @@ fn showHelp(ctx: zli.CommandContext) !void {
 }
 
 const ast_dump: Flag = .{ .name = "print-ast", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump AST tree" };
-const asm_dump: Flag = .{ .name = "print-asm", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
+const asm_dump: Flag = .{ .name = "print-bytecode", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
 const optimize: Flag = .{ .name = "disable-optimization", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Apply optimization [WIP]" };
 
 fn run(ctx: zli.CommandContext) !void {
