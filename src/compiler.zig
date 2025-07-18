@@ -287,7 +287,8 @@ fn call(self: *Compiler, target: *Ast.Call) Errors!u8 {
 
     const dst = try self.allocateRegister();
     // Finalize the call instruction
-    try out.writeAll(&.{ @intFromEnum(OpCodes.call), frame_idx.?, dst });
+    try out.writeAll(&.{ @intFromEnum(OpCodes.call), frame_idx.? });
+    try out.writeAll(&.{ @intFromEnum(OpCodes.copy), dst, 0x00 });
     return dst;
 }
 

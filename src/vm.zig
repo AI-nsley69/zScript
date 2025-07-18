@@ -19,7 +19,6 @@ pub const Error = error{
 pub const Frame = struct {
     ip: usize = 0,
     metadata: usize, // Metadata
-    dst_reg: u8 = 0, // Set return value on said reg
 };
 
 const Vm = @This();
@@ -114,9 +113,6 @@ fn getRegister(self: *Vm, index: u8) Value {
 }
 
 fn setRegister(self: *Vm, index: u8, value: Value) void {
-    // Values to be discarded goes into reg0
-    if (index == 0) return;
-
     self.addRegister(index) catch {};
     self.registers.items[index] = value;
 }
@@ -342,13 +338,17 @@ fn ret(self: *Vm) !void {
     @memcpy(self.registers.items[1..self.metadata().reg_size], self.reg_stack.items[self.reg_stack.items.len - (self.metadata().reg_size - 1) ..]);
     self.reg_stack.items.len -= self.metadata().reg_size - 1;
     // Set the return value
-    self.setRegister(self.current().dst_reg, res);
+    // std.debug.print("Returning {any}\n", .{res});
+    self.setRegister(0x00, res);
 }
 
 fn call(self: *Vm) !void {
     const frame_idx = try self.next();
-    const dst = try self.next();
-    self.current().dst_reg = dst;
+
+    // const dst = try self.next();
+    // _ = dst;
+    // self.current().dst_reg = dst;
+
     // Push registers to the stack
     try self.reg_stack.appendSlice(self.allocator, self.registers.items[1..self.metadata().reg_size]);
     // Construct a new call_frame and push it to the stack
