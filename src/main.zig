@@ -23,10 +23,10 @@ pub fn main() !void {
 
 pub const runOpts = struct {
     file: []const u8 = "",
-    printAsm: bool = false,
-    printAst: bool = false,
-    printTokens: bool = false,
-    optimize: bool = false,
+    print_asm: bool = false,
+    print_ast: bool = false,
+    print_tokens: bool = false,
+    do_not_optimize: bool = false,
 };
 
 pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
@@ -36,7 +36,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
     const tokens = try lexer.scan();
     defer lexer.deinit();
 
-    if (opt.printTokens) {
+    if (opt.print_tokens) {
         for (tokens.items) |token| {
             try writer.print("{s}, ", .{@tagName(token.tag)});
         }
@@ -57,12 +57,12 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
     }
     if (parser_errors.len > 0) return null;
 
-    if (opt.optimize) {
+    if (!opt.do_not_optimize) {
         var optimizer = Optimizer{};
         parsed = try optimizer.optimize(allocator, parsed);
     }
 
-    if (opt.printAst) {
+    if (opt.print_ast) {
         var ast = Debug.Ast{ .writer = writer, .allocator = allocator };
         ast.print(parsed) catch {};
     }
@@ -76,7 +76,7 @@ pub fn run(allocator: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value 
     };
     defer compiled.deinit(allocator);
 
-    if (opt.printAsm) {
+    if (opt.print_asm) {
         Debug.disassemble(compiled, writer) catch {};
     }
     // Bytecode execution

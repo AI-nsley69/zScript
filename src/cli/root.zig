@@ -30,9 +30,9 @@ fn showHelp(ctx: zli.CommandContext) !void {
     try ctx.command.printHelp();
 }
 
-const ast_dump: Flag = .{ .name = "ast", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump AST tree" };
-const asm_dump: Flag = .{ .name = "asm", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
-const optimize: Flag = .{ .name = "optimize", .shortcut = "O", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Apply optimization [WIP]" };
+const ast_dump: Flag = .{ .name = "print-ast", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump AST tree" };
+const asm_dump: Flag = .{ .name = "print-asm", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
+const optimize: Flag = .{ .name = "disable-optimization", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Apply optimization [WIP]" };
 
 fn run(ctx: zli.CommandContext) !void {
     // Test files for development
@@ -49,9 +49,9 @@ fn run(ctx: zli.CommandContext) !void {
 
     const res = try main.run(allocator, contents, .{
         .file = ctx.positional_args[0],
-        .printAsm = ctx.flag("asm", bool),
-        .printAst = ctx.flag("ast", bool),
-        .optimize = ctx.flag("optimize", bool),
+        .print_asm = ctx.flag("print-bytecode", bool),
+        .print_ast = ctx.flag("print-ast", bool),
+        .do_not_optimize = ctx.flag("disable-optimization", bool),
     });
 
     std.log.debug("Return val: {?}\n", .{res});
