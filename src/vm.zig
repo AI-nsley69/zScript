@@ -6,8 +6,7 @@ const Value = @import("value.zig").Value;
 const ValueType = @import("value.zig").ValueType;
 
 const OpCodes = Bytecode.OpCodes;
-const Frame = Bytecode.Frame;
-const FrameMetadata = Bytecode.FrameMetadata;
+const Function = Bytecode.Function;
 const RegisterSize = Bytecode.RegisterSize;
 const CompilerOutput = Compiler.CompilerOutput;
 
@@ -17,11 +16,17 @@ pub const Error = error{
     Unknown,
 };
 
+pub const Frame = struct {
+    ip: usize = 0,
+    metadata: usize, // Metadata
+    dst_reg: u8 = 0, // Set return value on said reg
+};
+
 const Vm = @This();
 
 allocator: std.mem.Allocator,
 
-frames: []*FrameMetadata,
+functions: []*Function,
 // Holds the currently used registers
 registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 // Stack for parameters
@@ -36,7 +41,7 @@ result: ?Value = null,
 pub fn init(allocator: std.mem.Allocator, compiled: CompilerOutput) !Vm {
     var vm: Vm = .{
         .allocator = allocator,
-        .frames = compiled.frames,
+        .functions = compiled.frames,
     };
 
     const main = try allocator.create(Frame);
@@ -64,8 +69,8 @@ pub fn deinit(self: *Vm) void {
     self.param_stack.deinit(self.allocator);
 }
 
-fn metadata(self: *Vm) *FrameMetadata {
-    return self.frames[self.current().metadata];
+fn metadata(self: *Vm) *Function {
+    return self.functions[self.current().metadata];
 }
 
 fn current(self: *Vm) *Frame {
@@ -323,18 +328,15 @@ pub fn run(self: *Vm) !void {
 fn ret(self: *Vm) !void {
     const dst = try self.next();
     const res = self.getRegister(dst);
+
     const popped_frame = self.call_stack.pop();
     defer self.allocator.destroy(popped_frame.?);
     // Set the final result if there is no more caller
     if (popped_frame == null or self.call_stack.items.len < 1) {
+        @branchHint(.unlikely);
         self.result = res;
         return error.EndOfStream;
     }
-    // const frame = popped_frame.?.*;
-
-    // Update current caller
-    // const caller = frame.caller;
-    // self.frame_ptr = if (caller != null) caller.? else 0;
 
     // Get back the values from the reg stack
     @memcpy(self.registers.items[1..self.metadata().reg_size], self.reg_stack.items[self.reg_stack.items.len - (self.metadata().reg_size - 1) ..]);
