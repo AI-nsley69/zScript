@@ -7,6 +7,7 @@ const ValueType = @import("value.zig").ValueType;
 
 const OpCodes = Bytecode.OpCodes;
 const Frame = Bytecode.Frame;
+const FrameMetadata = Bytecode.FrameMetadata;
 const RegisterSize = Bytecode.RegisterSize;
 const CompilerOutput = Compiler.CompilerOutput;
 
@@ -16,18 +17,11 @@ pub const Error = error{
     Unknown,
 };
 
-pub const CallFrame = struct {
-    ip: usize = 0,
-    call_dst: u8 = 0,
-    caller: ?usize = null, // Points to the frame metadata
-};
-
 const Vm = @This();
 
 allocator: std.mem.Allocator,
-// Points to the current frame metadata
-frames: []*Frame,
-frame_ptr: usize = 0,
+
+frames: []*FrameMetadata,
 // Holds the currently used registers
 registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 // Stack for parameters
@@ -35,7 +29,7 @@ param_stack: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 // Stack for registers
 reg_stack: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 // Stack holding the call info, such as return register, ip on call, etc
-call_stack: std.ArrayListUnmanaged(*CallFrame) = std.ArrayListUnmanaged(*CallFrame){},
+call_stack: std.ArrayListUnmanaged(*Frame) = std.ArrayListUnmanaged(*Frame){},
 
 result: ?Value = null,
 
@@ -45,8 +39,8 @@ pub fn init(allocator: std.mem.Allocator, compiled: CompilerOutput) !Vm {
         .frames = compiled.frames,
     };
 
-    const main = try allocator.create(CallFrame);
-    main.* = .{};
+    const main = try allocator.create(Frame);
+    main.* = .{ .metadata = 0 };
     try vm.call_stack.append(allocator, main);
 
     try vm.registers.ensureUnusedCapacity(allocator, 256);
@@ -70,11 +64,11 @@ pub fn deinit(self: *Vm) void {
     self.param_stack.deinit(self.allocator);
 }
 
-fn metadata(self: *Vm) *Frame {
-    return self.frames[self.frame_ptr];
+fn metadata(self: *Vm) *FrameMetadata {
+    return self.frames[self.current().metadata];
 }
 
-fn current(self: *Vm) *CallFrame {
+fn current(self: *Vm) *Frame {
     return self.call_stack.items[self.call_stack.items.len - 1];
 }
 
@@ -332,34 +326,31 @@ fn ret(self: *Vm) !void {
     const popped_frame = self.call_stack.pop();
     defer self.allocator.destroy(popped_frame.?);
     // Set the final result if there is no more caller
-    if (self.current().caller == null or popped_frame == null) {
+    if (popped_frame == null or self.call_stack.items.len < 1) {
         self.result = res;
         return error.EndOfStream;
     }
-    const frame = popped_frame.?.*;
+    // const frame = popped_frame.?.*;
 
     // Update current caller
-    const caller = frame.caller;
-    self.frame_ptr = if (caller != null) caller.? else 0;
+    // const caller = frame.caller;
+    // self.frame_ptr = if (caller != null) caller.? else 0;
 
     // Get back the values from the reg stack
     @memcpy(self.registers.items[1..self.metadata().reg_size], self.reg_stack.items[self.reg_stack.items.len - (self.metadata().reg_size - 1) ..]);
     self.reg_stack.items.len -= self.metadata().reg_size - 1;
     // Set the return value
-    self.setRegister(self.current().call_dst, res);
+    self.setRegister(self.current().dst_reg, res);
 }
 
 fn call(self: *Vm) !void {
     const frame_idx = try self.next();
     const dst = try self.next();
-    self.current().call_dst = dst;
-    // Construct a new call_frame and push it to the stack
-    const new_call = try self.allocator.create(CallFrame);
-    new_call.* = .{ .caller = self.frame_ptr };
-    try self.call_stack.append(self.allocator, new_call);
-
+    self.current().dst_reg = dst;
     // Push registers to the stack
     try self.reg_stack.appendSlice(self.allocator, self.registers.items[1..self.metadata().reg_size]);
-    // Update to new caller
-    self.frame_ptr = frame_idx;
+    // Construct a new call_frame and push it to the stack
+    const new_call = try self.allocator.create(Frame);
+    new_call.* = .{ .metadata = frame_idx };
+    try self.call_stack.append(self.allocator, new_call);
 }

@@ -33,8 +33,14 @@ pub const OpCodes = enum(u8) {
 
 pub const RegisterSize = u16;
 
-pub const Frame = struct {
+pub const FrameMetadata = struct {
     name: []const u8,
     body: []u8,
     reg_size: RegisterSize,
+};
+
+pub const Frame = struct {
+    ip: usize = 0,
+    metadata: usize, // Metadata
+    dst_reg: u8 = 0, // Set return value on said reg
 };

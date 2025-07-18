@@ -7,7 +7,7 @@ const Value = @import("value.zig").Value;
 
 const TokenType = Lexer.TokenType;
 const OpCodes = Bytecode.OpCodes;
-// const Frame = Bytecode.Frame;
+// const Frame = Bytecode.FrameMetadata;
 // const RegisterSize = Bytecode.RegisterSize;
 
 const Error = error{
@@ -28,7 +28,7 @@ const Errors = (Error || std.mem.Allocator.Error);
 
 pub const CompilerOutput = struct {
     const Self = @This();
-    frames: []*Bytecode.Frame,
+    frames: []*Bytecode.FrameMetadata,
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         for (self.frames) |frame| {
@@ -78,9 +78,9 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     // Emit return instruction at the end
     try self.getOut().writeAll(&.{ @intFromEnum(OpCodes.@"return"), final_dst });
     // Convert all comp frames to vm frames
-    var frames: std.ArrayListUnmanaged(*Bytecode.Frame) = std.ArrayListUnmanaged(*Bytecode.Frame){};
+    var frames: std.ArrayListUnmanaged(*Bytecode.FrameMetadata) = std.ArrayListUnmanaged(*Bytecode.FrameMetadata){};
     for (self.comp_frames.items) |compilerFrame| {
-        const frame = try self.allocator.create(Bytecode.Frame);
+        const frame = try self.allocator.create(Bytecode.FrameMetadata);
         frame.* = .{ .name = compilerFrame.name, .body = try compilerFrame.instructions.toOwnedSlice(self.allocator), .reg_size = compilerFrame.reg_ptr };
         try frames.append(self.allocator, frame);
     }
