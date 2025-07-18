@@ -73,11 +73,11 @@ fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpress
             const func = node.function.*;
             const body = try self.optimizeStatement(func.body, optimizeExpression);
 
-            return try Ast.createFunction(self.allocator, func.name, body, func.params);
+            return try Ast.createFunction(self.allocator, try self.allocator.dupe(u8, func.name), body, try self.allocator.dupe(*Ast.Variable, func.params));
         },
         .@"return" => {
             const ret = node.@"return";
-            if (ret.value == null) return stmt;
+            if (ret.value == null) return try Ast.createReturn(null);
             return try Ast.createReturn(try optimizeExpression(self, ret.value.?));
         },
     }
@@ -178,8 +178,10 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
             for (call.args) |arg| {
                 try params.append(self.allocator, try self.constantFold(arg));
             }
-
-            return Ast.createCallExpression(self.allocator, call.callee, try params.toOwnedSlice(self.allocator), expr.src);
+            // Duplicate the callee node
+            const old_callee = call.callee.node.variable.*;
+            const callee = try Ast.createVariable(self.allocator, old_callee.initializer, old_callee.name, call.callee.src);
+            return Ast.createCallExpression(self.allocator, callee, try params.toOwnedSlice(self.allocator), expr.src);
         },
     }
 }

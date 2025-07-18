@@ -298,7 +298,6 @@ fn infix(self: *Compiler, target: *Ast.Infix, dst_reg: ?u8) Errors!u8 {
 
 fn assignment(self: *Compiler, target: *Ast.Infix) Errors!u8 {
     const target_var = target.lhs.node.variable;
-    std.debug.print("Compiling assignment: {s}\n", .{target_var.name});
     if (self.ast.variables.get(target_var.*.name)) |metadata| {
         if (!metadata.mutable) {
             const msg = try std.fmt.allocPrint(self.allocator, "Invalid assignment to immutable variable '{s}'", .{target_var.*.name});
