@@ -36,9 +36,5 @@ pub const RegisterSize = u16;
 pub const Frame = struct {
     name: []const u8,
     body: []u8,
-    ip: usize = 0,
-    call_dst: u8 = 0,
-    caller: ?usize = null,
-    result: ?Value = null,
     reg_size: RegisterSize,
 };

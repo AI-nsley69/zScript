@@ -33,6 +33,7 @@ pub const CompilerOutput = struct {
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         for (self.frames) |frame| {
             allocator.free(frame.*.body);
+            allocator.destroy(frame);
         }
         allocator.free(self.frames);
     }
