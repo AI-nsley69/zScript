@@ -1,7 +1,10 @@
 const std = @import("std");
 const main = @import("../main.zig");
 const zli = @import("zli");
+const ansi = @import("ansi_term");
+
 const Flag = zli.Flag;
+const format = ansi.format;
 
 const version = @import("version.zig");
 
@@ -32,7 +35,33 @@ fn showHelp(ctx: zli.CommandContext) !void {
 
 const ast_dump: Flag = .{ .name = "print-ast", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump AST tree" };
 const asm_dump: Flag = .{ .name = "print-bytecode", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
-const optimize: Flag = .{ .name = "disable-optimization", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Apply optimization [WIP]" };
+const optimize: Flag = .{ .name = "disable-optimization", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Disable optimizations" };
+
+const fileErrors = (std.fs.File.ReadError || std.fs.File.OpenError || std.posix.FlockError || std.mem.Allocator.Error);
+
+fn printFileError(out: std.fs.File.Writer, err: fileErrors, file: []const u8) !void {
+    try format.updateStyle(out, .{ .font_style = .{ .bold = true }, .foreground = .Red }, null);
+    try out.writeAll("Error: ");
+    try format.updateStyle(out, .{ .font_style = .{ .bold = true } }, null);
+    switch (err) {
+        error.AccessDenied => {
+            try out.writeAll("Permission denied: ");
+        },
+        error.FileNotFound => {
+            try out.writeAll("File not found: ");
+        },
+        error.IsDir => {
+            try out.writeAll("Source is a directory: ");
+        },
+        else => {
+            try out.print("{any}: ", .{err});
+        },
+    }
+    try format.resetStyle(out);
+    try out.writeAll(file);
+    try out.writeAll("\n");
+    std.process.exit(1);
+}
 
 fn run(ctx: zli.CommandContext) !void {
     // Test files for development
@@ -40,9 +69,15 @@ fn run(ctx: zli.CommandContext) !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    const file = try std.fs.cwd().openFile(ctx.positional_args[0], .{});
+    const file = std.fs.cwd().openFile(ctx.positional_args[0], .{}) catch |err| {
+        try printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);
+        std.process.exit(1);
+    };
 
-    const contents = try file.readToEndAlloc(allocator, 1 << 24);
+    const contents = file.readToEndAlloc(allocator, 1 << 24) catch |err| {
+        try printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);
+        std.process.exit(1);
+    };
     defer allocator.free(contents);
 
     std.log.debug("Source: {s}\n", .{contents});
