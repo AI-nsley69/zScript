@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const main = @import("../main.zig");
 const zli = @import("zli");
 const ansi = @import("ansi_term");
@@ -63,30 +64,36 @@ fn printFileError(out: std.fs.File.Writer, err: fileErrors, file: []const u8) !v
     std.process.exit(1);
 }
 
+var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+
 fn run(ctx: zli.CommandContext) !void {
-    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-    defer {
+    const gpa, const is_debug = gpa: {
+        break :gpa switch (builtin.mode) {
+            .Debug => .{ debug_allocator.allocator(), true },
+            else => .{ std.heap.smp_allocator, false },
+        };
+    };
+    defer if (is_debug) {
         const check = debug_allocator.deinit();
         if (check == .leak) {
             std.log.debug("Leak detected after freeing allocator.", .{});
         }
-    }
-    const allocator = debug_allocator.allocator();
+    };
 
     const file = std.fs.cwd().openFile(ctx.positional_args[0], .{}) catch |err| {
         try printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);
         std.process.exit(1);
     };
 
-    const contents = file.readToEndAlloc(allocator, 1 << 24) catch |err| {
+    const contents = file.readToEndAlloc(gpa, 1 << 24) catch |err| {
         try printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);
         std.process.exit(1);
     };
-    defer allocator.free(contents);
+    defer gpa.free(contents);
 
     std.log.debug("Source: {s}\n", .{contents});
 
-    const res = try main.run(allocator, contents, .{
+    const res = try main.run(gpa, contents, .{
         .file = ctx.positional_args[0],
         .print_asm = ctx.flag("print-bytecode", bool),
         .print_ast = ctx.flag("print-ast", bool),
