@@ -1,4 +1,5 @@
 const std = @import("std");
+const Bytecode = @import("bytecode.zig");
 const Vm = @import("vm.zig");
 const Compiler = @import("compiler.zig");
 const types = @import("ast.zig");
@@ -17,7 +18,7 @@ const Infix = types.Infix;
 const Unary = types.Unary;
 const Variable = types.Variable;
 
-fn codeToString(opcode: Vm.OpCodes) []const u8 {
+fn codeToString(opcode: Bytecode.OpCodes) []const u8 {
     return switch (opcode) {
         .@"return" => "RETURN",
         .halt => "HALT",
@@ -60,7 +61,7 @@ fn valueToString(allocator: std.mem.Allocator, value: Value) ![]u8 {
 pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std.io.FixedBufferStream([]u8)) !void {
     const pos = try instructions.getPos();
     const in = instructions.reader();
-    const opcode: Vm.OpCodes = @enumFromInt(try in.readByte());
+    const opcode: Bytecode.OpCodes = @enumFromInt(try in.readByte());
     const name = codeToString(opcode);
 
     switch (opcode) {
