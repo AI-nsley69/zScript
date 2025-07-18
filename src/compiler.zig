@@ -26,12 +26,11 @@ const Errors = (Error || std.mem.Allocator.Error);
 
 pub const CompilerOutput = struct {
     const Self = @This();
-    frames: []*Bytecode.Function,
+    frames: []Bytecode.Function,
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         for (self.frames) |frame| {
-            allocator.free(frame.*.body);
-            allocator.destroy(frame);
+            allocator.free(frame.body);
         }
         allocator.free(self.frames);
     }
@@ -76,10 +75,9 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     // Emit return instruction at the end
     try self.getOut().writeAll(&.{ @intFromEnum(OpCodes.@"return"), final_dst });
     // Convert all comp frames to vm frames
-    var frames: std.ArrayListUnmanaged(*Bytecode.Function) = std.ArrayListUnmanaged(*Bytecode.Function){};
+    var frames = std.ArrayListUnmanaged(Bytecode.Function){};
     for (self.comp_frames.items) |compilerFrame| {
-        const frame = try self.allocator.create(Bytecode.Function);
-        frame.* = .{ .name = compilerFrame.name, .body = try compilerFrame.instructions.toOwnedSlice(self.allocator), .reg_size = compilerFrame.reg_ptr };
+        const frame: Bytecode.Function = .{ .name = compilerFrame.name, .body = try compilerFrame.instructions.toOwnedSlice(self.allocator), .reg_size = compilerFrame.reg_ptr };
         try frames.append(self.allocator, frame);
     }
 

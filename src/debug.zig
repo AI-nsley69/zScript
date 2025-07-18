@@ -110,7 +110,7 @@ pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std
 
 pub fn disassemble(output: CompilerOutput, writer: std.fs.File.Writer) !void {
     for (output.frames) |frame_ptr| {
-        const frame = frame_ptr.*;
+        const frame = frame_ptr;
         var instructions = std.io.fixedBufferStream(frame.body);
         try writer.print("{s}:\n", .{frame.name});
         while (true) {
