@@ -21,6 +21,8 @@ pub const Frame = struct {
     metadata: usize, // Metadata
 };
 
+const max_call_depth = std.math.maxInt(u16);
+
 const Vm = @This();
 
 allocator: std.mem.Allocator,
@@ -337,9 +339,10 @@ fn ret(self: *Vm) !void {
 fn call(self: *Vm) !void {
     const frame_idx = try self.next();
 
-    // const dst = try self.next();
-    // _ = dst;
-    // self.current().dst_reg = dst;
+    if (self.call_stack.items.len >= max_call_depth) {
+        @branchHint(.cold);
+        @panic("Stack Overflow");
+    }
 
     // Push registers to the stack
     try self.reg_stack.appendSlice(self.allocator, self.registers.items[1..self.metadata().reg_size]);
