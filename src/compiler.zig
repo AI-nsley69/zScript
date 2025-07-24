@@ -40,14 +40,14 @@ const Compiler = @This();
 
 allocator: std.mem.Allocator,
 ast: Ast.Program,
-comp_frames: std.ArrayListUnmanaged(*CompilerFrame) = std.ArrayListUnmanaged(*CompilerFrame){},
+comp_frames: std.ArrayListUnmanaged(CompilerFrame) = std.ArrayListUnmanaged(CompilerFrame){},
 frame_idx: usize = 0,
 variables: std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)) = std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)){},
 functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 err_msg: ?[]u8 = null,
 
 inline fn current(self: *Compiler) *CompilerFrame {
-    return self.comp_frames.items[self.frame_idx];
+    return &self.comp_frames.items[self.frame_idx];
 }
 
 inline fn scope(self: *Compiler) *std.StringHashMapUnmanaged(u8) {
@@ -68,9 +68,6 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     defer {
         self.variables.deinit(self.allocator);
         self.functions.deinit(self.allocator);
-        for (self.comp_frames.items) |comp_frame| {
-            self.allocator.destroy(comp_frame);
-        }
         self.comp_frames.deinit(self.allocator);
     }
     // Create a pseudo main function for initial frame
@@ -88,8 +85,8 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     // Convert all comp frames to vm frames
     var frames = std.ArrayListUnmanaged(Bytecode.Function){};
     for (self.comp_frames.items) |compilerFrame| {
-        const frame: Bytecode.Function = .{ .name = compilerFrame.name, .body = try compilerFrame.instructions.toOwnedSlice(self.allocator), .reg_size = compilerFrame.reg_ptr };
-        try frames.append(self.allocator, frame);
+        var instructions = compilerFrame.instructions;
+        try frames.append(self.allocator, .{ .name = compilerFrame.name, .body = try instructions.toOwnedSlice(self.allocator), .reg_size = compilerFrame.reg_ptr });
     }
 
     return .{ .frames = try frames.toOwnedSlice(self.allocator) };
@@ -99,9 +96,7 @@ pub fn compileFrame(self: *Compiler, target: []Ast.Statement, func: *Ast.Functio
     const previous_frame = self.frame_idx;
     defer self.frame_idx = previous_frame;
     // Setup a new frame
-    const compilerFrame = try self.allocator.create(CompilerFrame);
-    compilerFrame.* = .{ .name = func.name };
-    try self.comp_frames.append(self.allocator, compilerFrame);
+    try self.comp_frames.append(self.allocator, .{ .name = func.name });
     self.frame_idx = self.comp_frames.items.len - 1;
     // Compile the new frame
     const out = self.getOut();
@@ -241,25 +236,6 @@ fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
     };
 }
 
-fn opcode(target: TokenType) !u8 {
-    const op: OpCodes = switch (target) {
-        .add => OpCodes.add,
-        .sub => OpCodes.sub,
-        .mul => OpCodes.mult,
-        .div => OpCodes.divide,
-        .logical_and => OpCodes.@"and",
-        .logical_or => OpCodes.@"or",
-        .eql => OpCodes.eql,
-        .neq => OpCodes.neq,
-        .less_than => OpCodes.less_than,
-        .lte => OpCodes.lte,
-        .greater_than => OpCodes.greater_than,
-        .gte => OpCodes.gte,
-        else => return Error.Unknown,
-    };
-    return @intFromEnum(op);
-}
-
 fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     const maybe_metadata = self.ast.variables.get(target.name);
     if (maybe_metadata == null) {
@@ -370,6 +346,7 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
 fn allocateRegister(self: *Compiler) Errors!u8 {
     var frame = self.current();
     if (frame.reg_ptr >= std.math.maxInt(u8)) {
+        @branchHint(.cold);
         try self.reportError("Out of registers");
         return Error.OutOfRegisters;
     }
@@ -381,4 +358,23 @@ fn reportError(self: *Compiler, msg: []const u8) Errors!void {
     const err_msg = try self.allocator.dupe(u8, msg);
     errdefer self.allocator.free(err_msg);
     self.err_msg = err_msg;
+}
+
+fn opcode(target: TokenType) !u8 {
+    const op: OpCodes = switch (target) {
+        .add => OpCodes.add,
+        .sub => OpCodes.sub,
+        .mul => OpCodes.mult,
+        .div => OpCodes.divide,
+        .logical_and => OpCodes.@"and",
+        .logical_or => OpCodes.@"or",
+        .eql => OpCodes.eql,
+        .neq => OpCodes.neq,
+        .less_than => OpCodes.less_than,
+        .lte => OpCodes.lte,
+        .greater_than => OpCodes.greater_than,
+        .gte => OpCodes.gte,
+        else => return Error.Unknown,
+    };
+    return @intFromEnum(op);
 }
