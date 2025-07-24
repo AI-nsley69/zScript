@@ -42,15 +42,25 @@ allocator: std.mem.Allocator,
 ast: Ast.Program,
 comp_frames: std.ArrayListUnmanaged(*CompilerFrame) = std.ArrayListUnmanaged(*CompilerFrame){},
 frame_idx: usize = 0,
-variables: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
+variables: std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)) = std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)){},
 functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 err_msg: ?[]u8 = null,
 
-fn current(self: *Compiler) *CompilerFrame {
+inline fn current(self: *Compiler) *CompilerFrame {
     return self.comp_frames.items[self.frame_idx];
 }
 
-fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
+inline fn scope(self: *Compiler) *std.StringHashMapUnmanaged(u8) {
+    return &self.variables.items[self.variables.items.len - 1];
+}
+
+inline fn destroyScope(self: *Compiler) void {
+    var popped = self.variables.pop();
+    if (popped == null) return;
+    popped.?.deinit(self.allocator);
+}
+
+inline fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
     return self.current().instructions.writer(self.allocator);
 }
 
@@ -68,6 +78,9 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     var main_func: Ast.Function = .{ .name = "main", .params = &.{}, .body = no_body };
 
     try self.functions.put(self.allocator, "main", 0);
+
+    try self.variables.append(self.allocator, .{});
+    defer self.destroyScope();
     // Compile the actual frame
     const final_dst = try self.compileFrame(self.ast.statements.items, &main_func);
     // Emit return instruction at the end
@@ -115,6 +128,8 @@ fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
         .conditional => try self.conditional(node.conditional),
         .block => {
             var dst: u8 = 0;
+            try self.variables.append(self.allocator, .{});
+            defer self.destroyScope();
             for (node.block.statements) |stmt| {
                 dst = try self.statement(stmt);
             }
@@ -129,6 +144,9 @@ fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
 fn conditional(self: *Compiler, target: *Ast.Conditional) Errors!u8 {
     const out = self.getOut();
     const frame = self.current();
+
+    try self.variables.append(self.allocator, .{});
+    defer self.destroyScope();
     // Ast.Conditional expression
     const cmp = try self.expression(target.expression, null);
     if (frame.instructions.items.len > std.math.maxInt(u16)) {
@@ -163,6 +181,9 @@ fn conditional(self: *Compiler, target: *Ast.Conditional) Errors!u8 {
 fn loop(self: *Compiler, target: *Ast.Loop) Errors!u8 {
     const frame = self.current();
     const out = self.getOut();
+
+    try self.variables.append(self.allocator, .{});
+    defer self.destroyScope();
     // Compile initializer if there is one (for-loop)
     if (target.initializer) |init| {
         _ = try self.expression(init, null);
@@ -195,6 +216,8 @@ fn loop(self: *Compiler, target: *Ast.Loop) Errors!u8 {
 
 fn function(self: *Compiler, target: *Ast.Function) Errors!u8 {
     const dst = try self.allocateRegister();
+    try self.variables.append(self.allocator, .{});
+    defer self.destroyScope();
     // Ast.Function always parses a body after it
     const func_body = target.body.node.block.statements;
     _ = try self.compileFrame(func_body, target);
@@ -245,12 +268,16 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
         return Error.Unknown;
     }
     const metadata = maybe_metadata.?;
-    // Check if variable exists in current scope
-    if (self.variables.contains(target.name) and std.mem.eql(u8, metadata.scope, self.current().name)) {
-        return self.variables.get(target.name).?;
+    // Find the variable in the scope
+    for (self.variables.items) |var_scope| {
+        std.debug.print("Scope size: {d}\n", .{var_scope.size});
+        if (!var_scope.contains(target.name)) continue;
+        return var_scope.get(target.name).?;
     }
     const dst = try self.allocateRegister();
-    _ = try self.variables.fetchPut(self.allocator, target.name, dst);
+
+    std.debug.print("Setting new variable: {s} at {d}\n", .{ target.name, dst });
+    try self.scope().put(self.allocator, target.name, dst);
     if (target.initializer == null) {
         // Ast.Return destination if the variable is a function parameter
         if (metadata.is_param) return dst;

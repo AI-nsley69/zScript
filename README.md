@@ -9,7 +9,7 @@ Based on my previous work in [nyasharp](https://github.com/AI-nsley69/nyasharp),
 
 ## TODO
 
-- [ ] Fix scoping on variables (limited to one variable name wherever)
+- [x] Fix scoping on variables (limited to one variable name wherever)
 - [ ] Add support for a module-like system
 - [ ] Add support for grouping values together
 - [ ] Strings!
