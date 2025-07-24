@@ -67,7 +67,7 @@ fn printFileError(out: std.fs.File.Writer, err: fileErrors, file: []const u8) !v
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 
 fn run(ctx: zli.CommandContext) !void {
-    const gpa, const is_debug = gpa: {
+    const gpa, const is_debug = comptime gpa: {
         break :gpa switch (builtin.mode) {
             .Debug => .{ debug_allocator.allocator(), true },
             else => .{ std.heap.smp_allocator, false },
