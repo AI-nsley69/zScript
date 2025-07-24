@@ -1,19 +1,27 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const lib = @import("../lib.zig");
+const utils = @import("../utils.zig");
 const zli = @import("zli");
 const ansi = @import("ansi_term");
 
 const Flag = zli.Flag;
 const format = ansi.format;
 
-const version = @import("version.zig");
+const version_cmd = @import("version.zig");
+const check_cmd = @import("check.zig");
 
-pub fn build(allocator: std.mem.Allocator) !*zli.Command {
-    const root = try zli.Command.init(allocator, .{
+pub fn build(gpa: std.mem.Allocator) !*zli.Command {
+    const root = try zli.Command.init(gpa, .{
         .name = "zScript",
         .description = "Yet another programming language",
     }, run);
+
+    try root.addCommands(&.{
+        try version_cmd.register(gpa),
+        try check_cmd.register(gpa),
+    });
+
     try root.addFlag(ast_dump);
     try root.addFlag(asm_dump);
     try root.addFlag(optimize);
@@ -21,10 +29,6 @@ pub fn build(allocator: std.mem.Allocator) !*zli.Command {
         .name = "source",
         .required = true,
         .description = "Source file to be executed",
-    });
-
-    try root.addCommands(&.{
-        try version.register(allocator),
     });
 
     return root;
@@ -38,34 +42,7 @@ const ast_dump: Flag = .{ .name = "print-ast", .type = .Bool, .default_value = .
 const asm_dump: Flag = .{ .name = "print-bytecode", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
 const optimize: Flag = .{ .name = "disable-optimization", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Disable optimizations" };
 
-const fileErrors = (std.fs.File.ReadError || std.fs.File.OpenError || std.posix.FlockError || std.mem.Allocator.Error);
-
-fn printFileError(out: std.fs.File.Writer, err: fileErrors, file: []const u8) !void {
-    try format.updateStyle(out, .{ .font_style = .{ .bold = true }, .foreground = .Red }, null);
-    try out.writeAll("Error: ");
-    try format.updateStyle(out, .{ .font_style = .{ .bold = true } }, null);
-    switch (err) {
-        error.AccessDenied => {
-            try out.writeAll("Permission denied: ");
-        },
-        error.FileNotFound => {
-            try out.writeAll("File not found: ");
-        },
-        error.IsDir => {
-            try out.writeAll("Source is a directory: ");
-        },
-        else => {
-            try out.print("{any}: ", .{err});
-        },
-    }
-    try format.resetStyle(out);
-    try out.writeAll(file);
-    try out.writeAll("\n");
-    std.process.exit(1);
-}
-
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-
 fn run(ctx: zli.CommandContext) !void {
     const gpa, const is_debug = comptime gpa: {
         break :gpa switch (builtin.mode) {
@@ -81,12 +58,12 @@ fn run(ctx: zli.CommandContext) !void {
     };
 
     const file = std.fs.cwd().openFile(ctx.positional_args[0], .{}) catch |err| {
-        try printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);
+        try utils.printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);
         std.process.exit(1);
     };
 
     const contents = file.readToEndAlloc(gpa, 1 << 24) catch |err| {
-        try printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);
+        try utils.printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);
         std.process.exit(1);
     };
     defer gpa.free(contents);

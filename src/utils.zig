@@ -52,3 +52,28 @@ pub fn printCompileErr(writer: Writer, msg: []const u8) !void {
     try writer.writeAll("\n");
     try format.resetStyle(writer);
 }
+
+const fileErrors = (std.fs.File.ReadError || std.fs.File.OpenError || std.posix.FlockError || std.mem.Allocator.Error);
+
+pub fn printFileError(out: std.fs.File.Writer, err: fileErrors, file: []const u8) !void {
+    try format.updateStyle(out, .{ .font_style = .{ .bold = true }, .foreground = .Red }, null);
+    try out.writeAll("Error: ");
+    try format.updateStyle(out, .{ .font_style = .{ .bold = true } }, null);
+    switch (err) {
+        error.AccessDenied => {
+            try out.writeAll("Permission denied: ");
+        },
+        error.FileNotFound => {
+            try out.writeAll("File not found: ");
+        },
+        error.IsDir => {
+            try out.writeAll("Source is a directory: ");
+        },
+        else => {
+            try out.print("{any}: ", .{err});
+        },
+    }
+    try format.resetStyle(out);
+    try out.writeAll(file);
+    try out.writeAll("\n");
+}
