@@ -70,7 +70,7 @@ pub fn compile(gpa: Allocator, out: Writer, parsed: Ast.Program, opt: runOpts) !
     const compiled = compiler.compile() catch {
         const stderr = std.io.getStdErr().writer();
         try utils.printCompileErr(stderr, compiler.err_msg.?);
-        return null;
+        return error.CompileError;
     };
 
     if (opt.print_asm) {
@@ -91,7 +91,7 @@ pub fn run(gpa: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
     defer parsed.arena.deinit();
 
     // Ast -> Bytecode
-    const compiled = try compile(gpa, out, parsed, opt);
+    var compiled = try compile(gpa, out, parsed, opt);
     defer compiled.deinit(gpa);
 
     // Bytecode execution
