@@ -105,14 +105,15 @@ fn peekNext(self: *Lexer) u8 {
 }
 
 fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
-    const curr = self.current;
+    const start = self.current;
     if (self.source[self.current - 1] != expected[0]) return false;
 
-    for (expected[1..]) |c| {
-        if (self.match(c)) continue;
-        // Move back current if it doesn't match the full string
-        self.current = curr;
-        return false;
+    inline for (expected[1..]) |c| {
+        if (!self.match(c)) {
+            // Move back current if it doesn't match the full string
+            self.current = start;
+            return false;
+        }
     }
 
     return true;
