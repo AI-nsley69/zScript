@@ -81,6 +81,7 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
     _ = try self.consume(.left_paren, "Expected '(' after function declaration.");
 
     const prev_func = self.current_func;
+    defer self.current_func = prev_func;
     self.current_func = name.span;
 
     var params = std.ArrayListUnmanaged(*Ast.Variable){};
@@ -103,8 +104,6 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
     }
     _ = try self.consume(.left_bracket, "Expected '{'");
     const body = try self.block();
-
-    self.current_func = prev_func;
 
     return try Ast.createFunction(self.allocator, name.span, body, try params.toOwnedSlice(self.allocator));
 }

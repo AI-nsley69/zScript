@@ -41,13 +41,13 @@ const Compiler = @This();
 allocator: std.mem.Allocator,
 ast: Ast.Program,
 comp_frames: std.ArrayListUnmanaged(*CompilerFrame) = std.ArrayListUnmanaged(*CompilerFrame){},
-frame_ptr: usize = 0,
+frame_idx: usize = 0,
 variables: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 err_msg: ?[]u8 = null,
 
 fn current(self: *Compiler) *CompilerFrame {
-    return self.comp_frames.items[self.frame_ptr];
+    return self.comp_frames.items[self.frame_idx];
 }
 
 fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
@@ -64,10 +64,8 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
         self.comp_frames.deinit(self.allocator);
     }
     // Create a pseudo main function for initial frame
-    var no_params: [0]*Ast.Variable = .{};
-    var empty_block: [0]Ast.Statement = .{};
-    const no_body: Ast.Statement = .{ .node = .{ .block = .{ .statements = &empty_block } } };
-    var main_func: Ast.Function = .{ .name = "main", .params = &no_params, .body = no_body };
+    const no_body: Ast.Statement = .{ .node = .{ .block = .{ .statements = &.{} } } };
+    var main_func: Ast.Function = .{ .name = "main", .params = &.{}, .body = no_body };
 
     try self.functions.put(self.allocator, "main", 0);
     // Compile the actual frame
@@ -85,13 +83,13 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
 }
 
 pub fn compileFrame(self: *Compiler, target: []Ast.Statement, func: *Ast.Function) Errors!u8 {
-    const previous_frame = self.frame_ptr;
+    const previous_frame = self.frame_idx;
+    defer self.frame_idx = previous_frame;
     // Setup a new frame
     const compilerFrame = try self.allocator.create(CompilerFrame);
     compilerFrame.* = .{ .name = func.name };
     try self.comp_frames.append(self.allocator, compilerFrame);
-
-    self.frame_ptr = self.comp_frames.items.len - 1;
+    self.frame_idx = self.comp_frames.items.len - 1;
     // Compile the new frame
     const out = self.getOut();
     // Load the parameters for the function (if exists)
@@ -106,7 +104,6 @@ pub fn compileFrame(self: *Compiler, target: []Ast.Statement, func: *Ast.Functio
     for (target) |elem| {
         final_dst = try self.statement(elem);
     }
-    self.frame_ptr = previous_frame;
 
     return final_dst;
 }
@@ -241,21 +238,22 @@ fn opcode(target: TokenType) !u8 {
 }
 
 fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
-    const metadata = self.ast.variables.get(target.name);
-    if (metadata == null) {
+    const maybe_metadata = self.ast.variables.get(target.name);
+    if (maybe_metadata == null) {
         const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
     }
+    const metadata = maybe_metadata.?;
     // Check if variable exists in current scope
-    if (self.variables.contains(target.name) and std.mem.eql(u8, metadata.?.scope, self.current().name)) {
+    if (self.variables.contains(target.name) and std.mem.eql(u8, metadata.scope, self.current().name)) {
         return self.variables.get(target.name).?;
     }
     const dst = try self.allocateRegister();
     _ = try self.variables.fetchPut(self.allocator, target.name, dst);
     if (target.initializer == null) {
         // Ast.Return destination if the variable is a function parameter
-        if (metadata.?.is_param) return dst;
+        if (metadata.is_param) return dst;
         const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
