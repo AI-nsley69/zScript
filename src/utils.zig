@@ -31,8 +31,8 @@ pub fn printParseError(allocator: Allocator, writer: Writer, token: Token, token
     const ptr_msg = try allocator.alloc(u8, 2 + tokenInfo.line_source.len + 1);
     defer allocator.free(ptr_msg);
     @memset(ptr_msg, ' ');
-    const start_pos = (tokenInfo.pos + 1) - (tokenInfo.len - 1);
-    const end_pos = start_pos + (tokenInfo.len);
+    const start_pos = if (tokenInfo.pos >= tokenInfo.len) (tokenInfo.pos + 1) - (tokenInfo.len - 1) else tokenInfo.pos + 1;
+    const end_pos = if (start_pos + (tokenInfo.len) < ptr_msg.len) start_pos + (tokenInfo.len) else start_pos + 1;
     @memset(ptr_msg[start_pos..end_pos], '^');
     // std.debug.print("{d} - {d}\n", .{ end_pos, ptr_msg.len });
     // ptr_msg[pos] = '^';
