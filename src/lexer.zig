@@ -68,13 +68,11 @@ tokenInfo: std.ArrayListUnmanaged(TokenInfo) = std.ArrayListUnmanaged(TokenInfo)
 arena: std.heap.ArenaAllocator,
 
 pub fn scan(self: *Lexer) !Tokens {
-    while (true) {
-        var token = self.scanToken();
+    var token: Token = self.scanToken();
+    while (token.tag != .eof and token.tag != .err) : (token = self.scanToken()) {
         try self.tokenInfo.append(self.arena.allocator(), self.makeTokenInfo(token));
         token.idx = self.tokenInfo.items.len - 1;
         try self.tokens.append(self.arena.allocator(), token);
-
-        if (token.tag == .eof or token.tag == .err) break;
     }
 
     return self.tokens;
@@ -165,10 +163,8 @@ fn scanToken(self: *Lexer) Token {
             return self.makeToken(.less_than, start);
         },
         '>' => {
-            if (self.match('=')) {
-                return self.makeToken(.gte, start);
-            }
-            return self.makeToken(.greater_than, start);
+            const op: TokenType = if (self.match('=')) .gte else .greater_than;
+            return self.makeToken(op, start);
         },
         '|' => {
             if (!self.match(c)) {
