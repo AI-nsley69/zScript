@@ -117,7 +117,7 @@ fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
     return true;
 }
 
-fn match(self: *Lexer, expected: u8) bool {
+inline fn match(self: *Lexer, expected: u8) bool {
     const condition = !self.isAtEnd() and self.source[self.current] == expected;
     self.current += 1 * @intFromBool(condition);
     return condition;
@@ -131,7 +131,7 @@ fn scanToken(self: *Lexer) Token {
     const c: u8 = self.advance();
 
     switch (c) {
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => return self.number(start),
+        '0'...'9' => return self.number(start),
         '+' => return self.makeToken(.add, start),
         '-' => return self.makeToken(.sub, start),
         '*' => return self.makeToken(.mul, start),
