@@ -95,11 +95,11 @@ fn advance(self: *Lexer) u8 {
 }
 
 inline fn peek(self: *Lexer) u8 {
-    return self.source[self.current] * @intFromBool(self.isAtEnd());
+    return self.source[self.current] * @intFromBool(!self.isAtEnd());
 }
 
 inline fn peekNext(self: *Lexer) u8 {
-    return self.source[self.current + 1] * @intFromBool(self.isAtEnd());
+    return self.source[self.current + 1] * @intFromBool(!self.isAtEnd());
 }
 
 fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
