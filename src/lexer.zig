@@ -118,9 +118,9 @@ fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
 }
 
 fn match(self: *Lexer, expected: u8) bool {
-    if (self.isAtEnd() or self.source[self.current] != expected) return false;
-    self.current += 1;
-    return true;
+    const condition = !self.isAtEnd() and self.source[self.current] == expected;
+    self.current += 1 * @intFromBool(condition);
+    return condition;
 }
 
 fn scanToken(self: *Lexer) Token {
