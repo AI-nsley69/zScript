@@ -75,6 +75,10 @@ pub fn scan(self: *Lexer) !Tokens {
         try self.tokens.append(self.arena.allocator(), token);
     }
 
+    try self.tokenInfo.append(self.arena.allocator(), self.makeTokenInfo(token));
+    token.idx = self.tokenInfo.items.len - 1;
+    try self.tokens.append(self.arena.allocator(), token);
+
     return self.tokens;
 }
 
