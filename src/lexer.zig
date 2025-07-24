@@ -119,7 +119,7 @@ fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
     return true;
 }
 
-inline fn match(self: *Lexer, expected: u8) bool {
+inline fn match(self: *Lexer, comptime expected: u8) bool {
     const condition = !self.isAtEnd() and self.source[self.current] == expected;
     self.current += 1 * @intFromBool(condition);
     return condition;
@@ -165,7 +165,7 @@ fn scanToken(self: *Lexer) Token {
             return self.makeToken(op, start);
         },
         '|' => {
-            if (!self.match(c)) {
+            if (!self.match('|')) {
                 const msg = std.fmt.allocPrint(self.arena.allocator(), "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
                 return reportError(msg);
             }
@@ -173,7 +173,7 @@ fn scanToken(self: *Lexer) Token {
             return self.makeToken(.logical_or, start);
         },
         '&' => {
-            if (!self.match(c)) {
+            if (!self.match('&')) {
                 const msg = std.fmt.allocPrint(self.arena.allocator(), "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
                 return reportError(msg);
             }
