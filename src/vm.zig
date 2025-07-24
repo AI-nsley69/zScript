@@ -3,6 +3,7 @@ const Bytecode = @import("bytecode.zig");
 const Debug = @import("debug.zig");
 const Compiler = @import("compiler.zig");
 const Value = @import("value.zig").Value;
+const Native = @import("native.zig");
 const ValueType = @import("value.zig").ValueType;
 
 const OpCodes = Bytecode.OpCodes;
@@ -290,6 +291,7 @@ pub fn run(self: *Vm) !void {
         .load_param => {
             const val = self.param_stack.pop();
             if (val == null) {
+                @branchHint(.cold);
                 return Error.InvalidParameter;
             }
             self.setRegister(try self.next(), val.?);
@@ -306,6 +308,19 @@ pub fn run(self: *Vm) !void {
         },
         .call => {
             try self.call();
+            continue :blk try self.nextOp();
+        },
+        .native_call => {
+            const fn_idx = try self.next();
+            const val = self.param_stack.pop();
+            if (val == null) {
+                @branchHint(.cold);
+                return Error.InvalidParameter;
+            }
+
+            const native_fn = try Native.idxToFn(fn_idx);
+            native_fn(val.?);
+
             continue :blk try self.nextOp();
         },
         .halt => return,
@@ -332,7 +347,6 @@ fn ret(self: *Vm) !void {
     @memcpy(self.registers.items[1..self.metadata().reg_size], self.reg_stack.items[self.reg_stack.items.len - (self.metadata().reg_size - 1) ..]);
     self.reg_stack.items.len -= self.metadata().reg_size - 1;
     // Set the return value
-    // std.debug.print("Returning {any}\n", .{res});
     self.setRegister(0x00, res);
 }
 

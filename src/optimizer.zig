@@ -187,5 +187,14 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
             const callee = try Ast.createVariable(self.allocator, old_callee.initializer, old_callee.name, call.callee.src);
             return Ast.createCallExpression(self.allocator, callee, try params.toOwnedSlice(self.allocator), expr.src);
         },
+        .native_call => {
+            const call = expr.node.native_call.*;
+            var params = std.ArrayListUnmanaged(Expression){};
+            for (call.args) |arg| {
+                try params.append(self.allocator, try self.constantFold(arg));
+            }
+            // Duplicate the callee node
+            return Ast.createNativeCallExpression(self.allocator, try params.toOwnedSlice(self.allocator), call.idx, expr.src);
+        },
     }
 }

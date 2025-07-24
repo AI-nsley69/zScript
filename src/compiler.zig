@@ -233,6 +233,7 @@ fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
         .literal => try self.literal(node.literal, dst_reg),
         .variable => try self.variable(node.variable),
         .call => try self.call(node.call),
+        .native_call => try self.nativeCall(node.native_call),
     };
 }
 
@@ -266,7 +267,6 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
 
 fn call(self: *Compiler, target: *Ast.Call) Errors!u8 {
     const out = self.getOut();
-
     const node = target.*;
     const call_expr = node.callee.node;
     const func_name = call_expr.variable.*.name;
@@ -285,6 +285,22 @@ fn call(self: *Compiler, target: *Ast.Call) Errors!u8 {
     const dst = try self.allocateRegister();
     // Finalize the call instruction
     try out.writeAll(&.{ @intFromEnum(OpCodes.call), frame_idx.? });
+    try out.writeAll(&.{ @intFromEnum(OpCodes.copy), dst, 0x00 });
+    return dst;
+}
+
+fn nativeCall(self: *Compiler, target: *Ast.NativeCall) Errors!u8 {
+    const out = self.getOut();
+    const node = target.*;
+    // Compile store instructions for all parameters
+    for (node.args) |arg| {
+        const arg_dst = try self.expression(arg, null);
+        try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), arg_dst });
+    }
+
+    const dst = try self.allocateRegister();
+    // Finalize the call instruction
+    try out.writeAll(&.{ @intFromEnum(OpCodes.native_call), @truncate(target.idx) });
     try out.writeAll(&.{ @intFromEnum(OpCodes.copy), dst, 0x00 });
     return dst;
 }

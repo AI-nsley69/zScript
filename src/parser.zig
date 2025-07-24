@@ -3,6 +3,7 @@ const Ast = @import("ast.zig");
 const Lexer = @import("lexer.zig");
 const Vm = @import("vm.zig");
 const val = @import("value.zig");
+const Native = @import("native.zig");
 
 const Value = val.Value;
 const ValueType = val.ValueType;
@@ -27,7 +28,7 @@ pub const Error = error{
     UnexpectedToken,
 };
 
-const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError);
+const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || Native.Error);
 
 const Parser = @This();
 
@@ -261,6 +262,28 @@ fn unary(self: *Parser) Errors!Expression {
         const rhs = try self.unary();
 
         return Ast.createUnary(self.allocator, op, rhs, self.previous());
+    }
+
+    return self.nativeCall();
+}
+
+fn nativeCall(self: *Parser) Errors!Expression {
+    if (self.match(.native_fn)) {
+        const src = self.previous();
+        _ = try self.consume(.left_paren, "Expected '('after native function call.");
+
+        var args = std.ArrayListUnmanaged(Expression){};
+        if (!self.check(.right_paren)) {
+            try args.append(self.allocator, try self.expression());
+            while (self.match(.comma)) {
+                try args.append(self.allocator, try self.expression());
+            }
+        }
+
+        _ = try self.consume(.right_paren, "Expected ')' after native function call.");
+
+        const idx: usize = Native.nameToIdx(src.span);
+        return try Ast.createNativeCallExpression(self.allocator, try args.toOwnedSlice(self.allocator), idx, src);
     }
 
     return self.call();

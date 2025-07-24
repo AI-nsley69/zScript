@@ -17,6 +17,7 @@ pub const TokenType = enum {
     semi_colon,
     var_declaration,
     fn_declaration,
+    native_fn,
     @"return",
     comma,
     identifier,
@@ -263,7 +264,14 @@ fn alpha(self: *Lexer, start: usize) Token {
         return self.makeToken(.@"return", start);
     }
 
-    return self.makeToken(.identifier, self.takeWhile(isAlpha));
+    const identifier_token = self.makeToken(.identifier, self.takeWhile(isAlpha));
+
+    if (std.mem.eql(u8, identifier_token.span, "print")) {
+        const tkn = self.makeToken(.native_fn, start);
+        return tkn;
+    }
+
+    return identifier_token;
 }
 
 fn reportError(msg: []const u8) Token {

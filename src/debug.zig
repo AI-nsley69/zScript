@@ -30,6 +30,7 @@ fn codeToString(opcode: Bytecode.OpCodes) []const u8 {
         .load_param => "LOAD_PARAM",
         .store_param => "STORE_PARAM",
         .call => "CALL",
+        .native_call => "NATIVE_CALL",
         .add => "ADD",
         .sub => "SUBTRACT",
         .mult => "MULT",
@@ -79,7 +80,7 @@ pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std
             try writer.print("  [{x:0>6}] {s} #{x}\n", .{ pos, name, imm });
         },
         // 1x reg arg
-        .@"return", .load_param, .store_param, .call => {
+        .@"return", .load_param, .store_param, .call, .native_call => {
             try writer.print("  [{x:0>6}] {s} ${d}\n", .{ pos, name, try in.readByte() });
         },
         .load_bool => {
@@ -200,6 +201,7 @@ pub const Ast = struct {
             .variable => try self.printVariable(node.variable, indent),
             // TODO: Implement AST dump for call
             .call => {},
+            .native_call => {},
         };
     }
 

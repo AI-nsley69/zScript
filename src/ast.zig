@@ -16,6 +16,7 @@ const ExpressionType = enum {
     infix,
     unary,
     literal,
+    native_call,
 };
 
 pub const ExpressionValue = union(ExpressionType) {
@@ -24,11 +25,17 @@ pub const ExpressionValue = union(ExpressionType) {
     infix: *Infix,
     unary: *Unary,
     literal: Value,
+    native_call: *NativeCall,
 };
 
 pub const Call = struct {
     callee: Expression,
     args: []Expression,
+};
+
+pub const NativeCall = struct {
+    args: []Expression,
+    idx: usize,
 };
 
 pub const Variable = struct {
@@ -120,6 +127,19 @@ pub fn createCallExpression(allocator: std.mem.Allocator, callee: Expression, ar
 
     return .{
         .node = .{ .call = call },
+        .src = src,
+    };
+}
+
+pub fn createNativeCallExpression(allocator: std.mem.Allocator, args: []Expression, idx: usize, src: Token) !Expression {
+    const call = try allocator.create(NativeCall);
+    call.* = .{
+        .args = args,
+        .idx = idx,
+    };
+
+    return .{
+        .node = .{ .native_call = call },
         .src = src,
     };
 }

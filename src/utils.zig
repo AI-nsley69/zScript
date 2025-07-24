@@ -34,8 +34,6 @@ pub fn printParseError(allocator: Allocator, writer: Writer, token: Token, token
     const start_pos = if (tokenInfo.pos >= tokenInfo.len) (tokenInfo.pos + 1) - (tokenInfo.len - 1) else tokenInfo.pos + 1;
     const end_pos = if (start_pos + (tokenInfo.len) < ptr_msg.len) start_pos + (tokenInfo.len) else start_pos + 1;
     @memset(ptr_msg[start_pos..end_pos], '^');
-    // std.debug.print("{d} - {d}\n", .{ end_pos, ptr_msg.len });
-    // ptr_msg[pos] = '^';
     ptr_msg[ptr_msg.len - 1] = '\n';
     try format.updateStyle(writer, .{ .foreground = .Green }, null);
     try writer.writeAll(ptr_msg);

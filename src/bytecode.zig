@@ -12,6 +12,7 @@ pub const OpCodes = enum(u8) {
     load_param,
     store_param,
     call,
+    native_call,
     add,
     sub,
     mult,
