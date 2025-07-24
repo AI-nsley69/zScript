@@ -13,7 +13,8 @@ pub fn register(allocator: std.mem.Allocator) !*zli.Command {
 
 fn show(ctx: zli.CommandContext) !void {
     _ = ctx;
-    std.debug.print("v{s}\n", .{version() orelse "(unknown version)"});
+    const out = std.io.getStdOut().writer();
+    try out.print("v{s}\n", .{version() orelse "(unknown version)"});
 }
 
 // https://renerocks.ai/blog/2025-04-27--version-in-zig/
