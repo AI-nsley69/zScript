@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const main = @import("../main.zig");
+const lib = @import("../lib.zig");
 const zli = @import("zli");
 const ansi = @import("ansi_term");
 
@@ -93,7 +93,7 @@ fn run(ctx: zli.CommandContext) !void {
 
     std.log.debug("Source: {s}\n", .{contents});
 
-    const res = try main.run(gpa, contents, .{
+    const res = try lib.run(gpa, contents, .{
         .file = ctx.positional_args[0],
         .print_asm = ctx.flag("print-bytecode", bool),
         .print_ast = ctx.flag("print-ast", bool),
