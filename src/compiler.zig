@@ -270,13 +270,11 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     const metadata = maybe_metadata.?;
     // Find the variable in the scope
     for (self.variables.items) |var_scope| {
-        std.debug.print("Scope size: {d}\n", .{var_scope.size});
         if (!var_scope.contains(target.name)) continue;
         return var_scope.get(target.name).?;
     }
     const dst = try self.allocateRegister();
 
-    std.debug.print("Setting new variable: {s} at {d}\n", .{ target.name, dst });
     try self.scope().put(self.allocator, target.name, dst);
     if (target.initializer == null) {
         // Ast.Return destination if the variable is a function parameter
