@@ -145,26 +145,20 @@ fn scanToken(self: *Lexer) Token {
         ';' => return self.makeToken(.semi_colon, start),
         ',' => return self.makeToken(.comma, start),
         '=' => {
-            if (self.match('=')) {
-                return self.makeToken(.eql, self.current - 2);
-            }
-
-            return self.makeToken(.assign, start);
+            const op: TokenType = if (self.match('=')) .eql else .assign;
+            return self.makeToken(op, start);
         },
         '!' => {
             if (self.match('=')) {
-                return self.makeToken(.neq, self.current - 2);
+                return self.makeToken(.neq, start);
             }
 
             const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
             return reportError(msg);
         },
         '<' => {
-            if (self.match('=')) {
-                return self.makeToken(.lte, start);
-            }
-
-            return self.makeToken(.less_than, start);
+            const op: TokenType = if (self.match('=')) .lte else .less_than;
+            return self.makeToken(op, start);
         },
         '>' => {
             const op: TokenType = if (self.match('=')) .gte else .greater_than;
