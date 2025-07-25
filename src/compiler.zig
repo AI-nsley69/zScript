@@ -232,8 +232,8 @@ fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
         .unary => try self.unary(node.unary, dst_reg),
         .literal => try self.literal(node.literal, dst_reg),
         .variable => try self.variable(node.variable),
-        .call => try self.call(node.call),
-        .native_call => try self.nativeCall(node.native_call),
+        .call => try self.call(node.call, dst_reg),
+        .native_call => try self.nativeCall(node.native_call, dst_reg),
     };
 }
 
@@ -265,7 +265,7 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     return dst;
 }
 
-fn call(self: *Compiler, target: *Ast.Call) Errors!u8 {
+fn call(self: *Compiler, target: *Ast.Call, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
     const node = target.*;
     const call_expr = node.callee.node;
@@ -282,14 +282,14 @@ fn call(self: *Compiler, target: *Ast.Call) Errors!u8 {
         try self.functions.put(self.allocator, func_name, frame_idx.?);
     }
 
-    const dst = try self.allocateRegister();
+    const dst = dst_reg orelse try self.allocateRegister();
     // Finalize the call instruction
     try out.writeAll(&.{ @intFromEnum(OpCodes.call), frame_idx.? });
     try out.writeAll(&.{ @intFromEnum(OpCodes.copy), dst, 0x00 });
     return dst;
 }
 
-fn nativeCall(self: *Compiler, target: *Ast.NativeCall) Errors!u8 {
+fn nativeCall(self: *Compiler, target: *Ast.NativeCall, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
     const node = target.*;
     // Compile store instructions for all parameters
@@ -298,7 +298,7 @@ fn nativeCall(self: *Compiler, target: *Ast.NativeCall) Errors!u8 {
         try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), arg_dst });
     }
 
-    const dst = try self.allocateRegister();
+    const dst = dst_reg orelse try self.allocateRegister();
     // Finalize the call instruction
     try out.writeAll(&.{ @intFromEnum(OpCodes.native_call), @truncate(target.idx) });
     try out.writeAll(&.{ @intFromEnum(OpCodes.copy), dst, 0x00 });
