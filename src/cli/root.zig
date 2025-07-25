@@ -11,6 +11,10 @@ const format = ansi.format;
 const version_cmd = @import("version.zig");
 const check_cmd = @import("check.zig");
 
+const ast_dump: Flag = .{ .name = "print-ast", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump AST tree" };
+const asm_dump: Flag = .{ .name = "print-bytecode", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
+const optimize: Flag = .{ .name = "disable-optimization", .type = .Bool, .default_value = .{ .Bool = true }, .description = "Disable optimizations" };
+
 pub fn build(gpa: std.mem.Allocator) !*zli.Command {
     const root = try zli.Command.init(gpa, .{
         .name = "zScript",
@@ -37,10 +41,6 @@ pub fn build(gpa: std.mem.Allocator) !*zli.Command {
 fn showHelp(ctx: zli.CommandContext) !void {
     try ctx.command.printHelp();
 }
-
-const ast_dump: Flag = .{ .name = "print-ast", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump AST tree" };
-const asm_dump: Flag = .{ .name = "print-bytecode", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Dump asm instructions" };
-const optimize: Flag = .{ .name = "disable-optimization", .type = .Bool, .default_value = .{ .Bool = false }, .description = "Disable optimizations" };
 
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 fn run(ctx: zli.CommandContext) !void {
