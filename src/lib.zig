@@ -68,7 +68,7 @@ pub fn parse(gpa: Allocator, out: Writer, tokens: std.ArrayListUnmanaged(Lexer.T
     return parsed;
 }
 
-pub fn compile(gpa: Allocator, out: Writer, gc: Gc, parsed: Ast.Program, opt: runOpts) !Compiler.CompilerOutput {
+pub fn compile(gpa: Allocator, out: Writer, gc: *Gc, parsed: Ast.Program, opt: runOpts) !Compiler.CompilerOutput {
     var compiler = Compiler{ .allocator = gpa, .gc = gc, .ast = parsed };
     const compiled = compiler.compile() catch {
         const stderr = std.io.getStdErr().writer();

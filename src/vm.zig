@@ -29,7 +29,7 @@ const max_call_depth = std.math.maxInt(u16);
 
 const Vm = @This();
 
-gc: Gc,
+gc: *Gc,
 
 functions: []Function,
 constants: []Value,
@@ -44,7 +44,7 @@ call_stack: std.ArrayListUnmanaged(Frame) = std.ArrayListUnmanaged(Frame){},
 
 result: ?Value = null,
 
-pub fn init(gc: Gc, compiled: CompilerOutput) !Vm {
+pub fn init(gc: *Gc, compiled: CompilerOutput) !Vm {
     var vm: Vm = .{
         .gc = gc,
         .functions = compiled.frames,
@@ -140,8 +140,8 @@ pub fn run(self: *Vm) !void {
                 .float => .{ .float = try Value.asFloat(fst) + try Value.asFloat(snd) },
                 .boolean => return Error.UnsupportedOperation,
                 .string => {
-                    const fst_str = try Value.asString(fst);
-                    const snd_str = try Value.asString(snd);
+                    const fst_str = try Value.asString(self.gc, fst);
+                    const snd_str = try Value.asString(self.gc, snd);
                     const new_str = try self.gc.alloc(.string, fst_str.len + snd_str.len);
                     @memcpy(new_str.string[0..fst_str.len], fst_str);
                     @memcpy(new_str.string[fst_str.len..], snd_str);
@@ -209,7 +209,7 @@ pub fn run(self: *Vm) !void {
                 .boolean => try Value.asBool(fst) == try Value.asBool(snd),
                 .float => try Value.asFloat(fst) == try Value.asFloat(snd),
                 .int => try Value.asInt(fst) == try Value.asInt(snd),
-                .string => std.mem.eql(u8, try Value.asString(fst), try Value.asString(snd)),
+                .string => std.mem.eql(u8, try Value.asString(self.gc, fst), try Value.asString(self.gc, snd)),
             };
             self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
@@ -222,7 +222,7 @@ pub fn run(self: *Vm) !void {
                 .boolean => try Value.asBool(fst) != try Value.asBool(snd),
                 .float => try Value.asFloat(fst) != try Value.asFloat(snd),
                 .int => try Value.asInt(fst) != try Value.asInt(snd),
-                .string => !std.mem.eql(u8, try Value.asString(fst), try Value.asString(snd)),
+                .string => !std.mem.eql(u8, try Value.asString(self.gc, fst), try Value.asString(self.gc, snd)),
             };
             self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();

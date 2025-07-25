@@ -16,6 +16,8 @@ const Program = Ast.Program;
 const Token = Lexer.Token;
 const TokenType = Lexer.TokenType;
 
+const log = std.log.scoped(.parser);
+
 pub const VariableMetaData = struct {
     scope: []const u8 = "",
     mutable: bool = false,
@@ -50,6 +52,7 @@ current_func: []const u8 = "main",
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
 
 pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.ArrayListUnmanaged(Token)) Errors!Program {
+    log.debug("Parsing tokens..", .{});
     var arena = std.heap.ArenaAllocator.init(alloc);
     self.allocator = arena.allocator();
     self.tokens = tokens;

@@ -41,7 +41,7 @@ pub const CompilerOutput = struct {
 const Compiler = @This();
 
 allocator: std.mem.Allocator,
-gc: Gc,
+gc: *Gc,
 ast: Ast.Program,
 
 comp_frames: std.ArrayListUnmanaged(CompilerFrame) = std.ArrayListUnmanaged(CompilerFrame){},

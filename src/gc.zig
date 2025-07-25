@@ -16,20 +16,24 @@ size_threshold: usize = 1024 * 1024,
 allocated: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 marked: std.AutoHashMap(usize, void),
 
-pub fn init(gpa: Allocator) !Gc {
-    return .{
+pub fn init(gpa: Allocator) !*Gc {
+    const gc = try gpa.create(Gc);
+    gc.* = .{
         .gpa = gpa,
         .marked = std.AutoHashMap(usize, void).init(gpa),
     };
+
+    return gc;
 }
 
 pub fn deinit(self: *Gc) void {
-    self.marked.deinit();
-    log.debug("Deallocating {d} elements.", .{self.allocated.items.len});
-    for (self.allocated.items) |elem| {
-        _ = self.free(elem, null);
+    log.debug("Deallocating {d} bytes, from {d} elements", .{ self.allocated_bytes, self.allocated.items.len });
+    for (self.allocated.items) |item| {
+        _ = self.free(item, null);
     }
     self.allocated.deinit(self.gpa);
+    self.marked.deinit();
+    self.gpa.destroy(self);
 }
 
 pub fn markRoots(self: *Gc, vm: *Vm) !void {
@@ -53,9 +57,13 @@ fn markValue(self: *Gc, value: Value) !void {
 }
 
 pub fn sweep(self: *Gc) !void {
-    // Traverse the list backwards to remove issues with removing items
-    var removed_bytes: usize = 0;
-    for (self.allocated.items.len - 1..0) |i| {
+    // If there's nothing on the heap, then exit.
+    if (self.allocated.items.len < 1) return;
+
+    var idx_to_remove = std.ArrayListUnmanaged(usize){};
+    defer idx_to_remove.deinit(self.gpa);
+
+    for (0..self.allocated.items.len) |i| {
         const elem = self.allocated.items[i];
 
         const ptr = switch (elem) {
@@ -63,12 +71,19 @@ pub fn sweep(self: *Gc) !void {
             .string => @intFromPtr(elem.string.ptr),
         };
         if (self.marked.contains(ptr)) continue;
-
-        removed_bytes += self.free(elem, i);
+        try idx_to_remove.append(self.gpa, i);
     }
-    log.debug("Removed {d} bytes", .{removed_bytes});
-    self.allocated_bytes -= removed_bytes;
+
+    // Deallocate found indexes
+    var freed_bytes: usize = 0;
+    for (idx_to_remove.items) |elem| {
+        freed_bytes += self.free(self.allocated.items[elem], elem);
+        _ = self.allocated.swapRemove(elem);
+    }
+
+    self.allocated_bytes -= freed_bytes;
     if (self.allocated_bytes >= self.size_threshold) self.size_threshold *= 2;
+    self.marked.clearRetainingCapacity();
 }
 
 fn free(self: *Gc, value: Value, idx: ?usize) usize {
