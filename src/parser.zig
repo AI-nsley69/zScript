@@ -23,9 +23,16 @@ pub const VariableMetaData = struct {
     type: ?ValueType = null,
 };
 
+pub const FunctionMetadata = struct {
+    params: usize,
+    return_type: ?ValueType = null,
+};
+
 pub const Error = error{
     ExpressionExpected,
     UnexpectedToken,
+    Undefined,
+    InvalidArguments,
 };
 
 const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || Native.Error);
@@ -37,6 +44,7 @@ tokens: std.ArrayListUnmanaged(Token) = undefined,
 current: usize = 0,
 errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
 variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnmanaged(VariableMetaData){},
+functions: std.StringHashMapUnmanaged(FunctionMetadata) = std.StringHashMapUnmanaged(FunctionMetadata){},
 current_func: []const u8 = "main",
 
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
@@ -51,6 +59,9 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.ArrayListUnman
         const stmt = self.declaration() catch dummy_stmt;
         try statements.append(self.allocator, stmt);
     }
+
+    // Tear down functions, since their metadata is no longer needed after parsing
+    self.functions.deinit(self.allocator);
 
     return .{
         .arena = arena,
@@ -103,6 +114,9 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
             }
         };
     }
+    // Add function metadata
+    try self.functions.put(self.allocator, name.span, .{ .params = params.items.len });
+    // Parse function body
     _ = try self.consume(.left_bracket, "Expected '{'");
     const body = try self.block();
 
@@ -305,12 +319,26 @@ fn call(self: *Parser) Errors!Expression {
 
 fn finishCall(self: *Parser, callee: Expression) Errors!Expression {
     const src = self.previous();
+    const name = callee.node.variable.name;
+    const metadata = self.functions.get(name);
+    if (metadata == null) {
+        const err_msg = try std.fmt.allocPrint(self.allocator, "Undefined function: '{s}'", .{name});
+        try self.reportError(err_msg);
+        return Error.Undefined;
+    }
+
     var args = std.ArrayListUnmanaged(Expression){};
     if (!self.check(.right_paren)) {
         try args.append(self.allocator, try self.expression());
         while (self.match(.comma)) {
             try args.append(self.allocator, try self.expression());
         }
+    }
+
+    if (args.items.len != metadata.?.params) {
+        const err_msg = try std.fmt.allocPrint(self.allocator, "Expected {d} arguments, found {d}", .{ metadata.?.params, args.items.len });
+        try self.reportError(err_msg);
+        return Error.InvalidArguments;
     }
 
     _ = try self.consume(.right_paren, "Expected ')' after call arguments");
