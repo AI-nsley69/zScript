@@ -6,6 +6,8 @@ const Vm = @import("vm.zig");
 const Ast = @import("ast.zig");
 const Value = @import("value.zig").Value;
 
+const log = std.log.scoped(.compiler);
+
 const TokenType = Lexer.TokenType;
 const OpCodes = Bytecode.OpCodes;
 
@@ -20,7 +22,7 @@ const CompilerFrame = struct {
     name: []const u8,
     ip: usize = 0,
     instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
-    reg_ptr: u8 = 1,
+    reg_idx: u8 = 1,
 };
 
 const Errors = (Error || std.mem.Allocator.Error);
@@ -72,6 +74,7 @@ inline fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
 }
 
 pub fn compile(self: *Compiler) Errors!CompilerOutput {
+    log.debug("Compiling bytecode..", .{});
     defer {
         self.variables.deinit(self.allocator);
         self.functions.deinit(self.allocator);
@@ -93,8 +96,10 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     var frames = std.ArrayListUnmanaged(Bytecode.Function){};
     for (self.comp_frames.items) |compilerFrame| {
         var instructions = compilerFrame.instructions;
-        try frames.append(self.allocator, .{ .name = compilerFrame.name, .body = try instructions.toOwnedSlice(self.allocator), .reg_size = compilerFrame.reg_ptr });
+        try frames.append(self.allocator, .{ .name = compilerFrame.name, .body = try instructions.toOwnedSlice(self.allocator), .reg_size = compilerFrame.reg_idx });
     }
+
+    log.debug("Finished compilation with {d} functions & {d} constants", .{ frames.items.len, self.constants.items.len });
 
     return .{
         .frames = try frames.toOwnedSlice(self.allocator),
@@ -155,6 +160,7 @@ fn conditional(self: *Compiler, target: *Ast.Conditional) Errors!u8 {
     // Ast.Conditional expression
     const cmp = try self.expression(target.expression, null);
     if (frame.instructions.items.len > std.math.maxInt(u16)) {
+        log.debug("conditional -> out of instructions", .{});
         try self.reportError("Invalid jump target");
         return Error.InvalidJmpTarget;
     }
@@ -197,6 +203,7 @@ fn loop(self: *Compiler, target: *Ast.Loop) Errors!u8 {
     const start_ip = frame.instructions.items.len;
     const cmp = try self.expression(target.condition, null);
     if (frame.instructions.items.len > std.math.maxInt(u16)) {
+        log.debug("loop -> out of instructions", .{});
         try self.reportError("Invalid jump target");
         return Error.InvalidJmpTarget;
     }
@@ -250,6 +257,7 @@ fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
 fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     const maybe_metadata = self.ast.variables.get(target.name);
     if (maybe_metadata == null) {
+        log.debug("No available metadata", .{});
         const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
@@ -266,6 +274,7 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     if (target.initializer == null) {
         // Ast.Return destination if the variable is a function parameter
         if (metadata.is_param) return dst;
+        log.debug("Variable is not a parameter, nor does it have an initializer.", .{});
         const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
@@ -378,13 +387,13 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
 
 fn allocateRegister(self: *Compiler) Errors!u8 {
     var frame = self.current();
-    if (frame.reg_ptr >= std.math.maxInt(u8)) {
+    if (frame.reg_idx >= std.math.maxInt(u8)) {
         @branchHint(.cold);
         try self.reportError("Out of registers");
         return Error.OutOfRegisters;
     }
-    frame.reg_ptr += 1;
-    return frame.reg_ptr - 1;
+    frame.reg_idx += 1;
+    return frame.reg_idx - 1;
 }
 
 fn reportError(self: *Compiler, msg: []const u8) Errors!void {

@@ -13,6 +13,8 @@ const Function = Bytecode.Function;
 const RegisterSize = Bytecode.RegisterSize;
 const CompilerOutput = Compiler.CompilerOutput;
 
+const log = std.log.scoped(.vm);
+
 pub const Error = error{
     MismatchedTypes,
     InvalidParameter,
@@ -125,6 +127,7 @@ fn setRegister(self: *Vm, index: u8, value: Value) void {
 }
 
 pub fn run(self: *Vm) !void {
+    log.debug("Executing bytecode..", .{});
     const opcode: OpCodes = try self.nextOp();
     return blk: switch (opcode) {
         .copy => {

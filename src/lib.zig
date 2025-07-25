@@ -38,7 +38,6 @@ pub fn tokenize(gpa: Allocator, out: Writer, src: []const u8, opt: runOpts) !Tok
 
         try out.writeAll("\n");
     }
-
     return .{ tokens, lexer.tokenInfo, lexer.arena };
 }
 
