@@ -2,6 +2,8 @@ const std = @import("std");
 const Bytecode = @import("bytecode.zig");
 const Debug = @import("debug.zig");
 const Compiler = @import("compiler.zig");
+const Gc = @import("gc.zig");
+
 const Value = @import("value.zig").Value;
 const Native = @import("native.zig");
 const ValueType = @import("value.zig").ValueType;
@@ -14,6 +16,7 @@ const CompilerOutput = Compiler.CompilerOutput;
 pub const Error = error{
     MismatchedTypes,
     InvalidParameter,
+    UnsupportedOperation,
     Unknown,
 };
 
@@ -26,9 +29,10 @@ const max_call_depth = std.math.maxInt(u16);
 
 const Vm = @This();
 
-allocator: std.mem.Allocator,
+gc: Gc,
 
 functions: []Function,
+constants: []Value,
 // Holds the currently used registers
 registers: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 // Stack for parameters
@@ -40,28 +44,31 @@ call_stack: std.ArrayListUnmanaged(Frame) = std.ArrayListUnmanaged(Frame){},
 
 result: ?Value = null,
 
-pub fn init(allocator: std.mem.Allocator, compiled: CompilerOutput) !Vm {
+pub fn init(gc: Gc, compiled: CompilerOutput) !Vm {
     var vm: Vm = .{
-        .allocator = allocator,
+        .gc = gc,
         .functions = compiled.frames,
+        .constants = compiled.constants,
     };
 
     const main: Frame = .{ .metadata = 0 };
-    try vm.call_stack.append(allocator, main);
+    try vm.call_stack.append(gc.gpa, main);
 
-    try vm.registers.ensureUnusedCapacity(allocator, 256);
+    try vm.registers.ensureUnusedCapacity(gc.gpa, 256);
     for (0..256) |_| {
-        try vm.registers.append(allocator, Value{ .int = 0 });
+        try vm.registers.append(gc.gpa, Value{ .int = 0 });
     }
 
     return vm;
 }
 
 pub fn deinit(self: *Vm) void {
-    self.registers.deinit(self.allocator);
-    self.reg_stack.deinit(self.allocator);
-    self.call_stack.deinit(self.allocator);
-    self.param_stack.deinit(self.allocator);
+    self.registers.deinit(self.gc.gpa);
+    self.reg_stack.deinit(self.gc.gpa);
+    self.call_stack.deinit(self.gc.gpa);
+    self.param_stack.deinit(self.gc.gpa);
+
+    self.gc.gpa.free(self.constants);
 }
 
 pub fn metadata(self: *Vm) *Function {
@@ -99,7 +106,7 @@ fn nextReg(self: *Vm) !Value {
 
 fn addRegister(self: *Vm, index: RegisterSize) !void {
     while (index >= self.registers.items.len) {
-        try self.registers.append(self.allocator, Value{ .int = 0 });
+        try self.registers.append(self.gc.gpa, Value{ .int = 0 });
     }
 }
 
@@ -124,10 +131,18 @@ pub fn run(self: *Vm) !void {
             const dst = try self.next();
             const fst = try self.nextReg();
             const snd = try self.nextReg();
-            const res: Value = switch (fst) {
+            const res: Value = val: switch (fst) {
                 .int => .{ .int = try Value.asInt(fst) + try Value.asInt(snd) },
                 .float => .{ .float = try Value.asFloat(fst) + try Value.asFloat(snd) },
-                .boolean => return Error.Unknown,
+                .boolean => return Error.UnsupportedOperation,
+                .string => {
+                    const fst_str = try Value.asString(fst);
+                    const snd_str = try Value.asString(snd);
+                    const new_str = try self.gc.alloc(u8, fst_str.len + snd_str.len);
+                    @memcpy(new_str[0..fst_str.len], fst_str);
+                    @memcpy(new_str[fst_str.len..], snd_str);
+                    break :val .{ .string = new_str };
+                },
             };
             self.setRegister(dst, res);
             continue :blk try self.nextOp();
@@ -139,7 +154,7 @@ pub fn run(self: *Vm) !void {
             const res: Value = switch (fst) {
                 .int => .{ .int = try Value.asInt(fst) - try Value.asInt(snd) },
                 .float => .{ .float = try Value.asFloat(fst) - try Value.asFloat(snd) },
-                .boolean => return Error.Unknown,
+                .boolean, .string => return Error.UnsupportedOperation,
             };
             self.setRegister(dst, res);
             continue :blk try self.nextOp();
@@ -151,7 +166,7 @@ pub fn run(self: *Vm) !void {
             const res: Value = switch (fst) {
                 .int => .{ .int = try Value.asInt(fst) * try Value.asInt(snd) },
                 .float => .{ .float = try Value.asFloat(fst) * try Value.asFloat(snd) },
-                .boolean => return Error.Unknown,
+                .boolean, .string => return Error.UnsupportedOperation,
             };
             self.setRegister(dst, res);
             continue :blk try self.nextOp();
@@ -163,7 +178,7 @@ pub fn run(self: *Vm) !void {
             const res: Value = switch (fst) {
                 .int => .{ .int = @divFloor(try Value.asInt(fst), try Value.asInt(snd)) },
                 .float => .{ .float = @divFloor(try Value.asFloat(fst), try Value.asFloat(snd)) },
-                .boolean => return Error.Unknown,
+                .boolean, .string => return Error.UnsupportedOperation,
             };
             self.setRegister(dst, res);
             continue :blk try self.nextOp();
@@ -190,6 +205,7 @@ pub fn run(self: *Vm) !void {
                 .boolean => try Value.asBool(fst) == try Value.asBool(snd),
                 .float => try Value.asFloat(fst) == try Value.asFloat(snd),
                 .int => try Value.asInt(fst) == try Value.asInt(snd),
+                .string => std.mem.eql(u8, try Value.asString(fst), try Value.asString(snd)),
             };
             self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
@@ -199,9 +215,10 @@ pub fn run(self: *Vm) !void {
             const fst = try self.nextReg();
             const snd = try self.nextReg();
             const res = switch (fst) {
-                .boolean => if (snd == .boolean) fst.boolean != snd.boolean else false,
-                .float => if (snd == .float) fst.float != snd.float else false,
-                .int => if (snd == .int) fst.int != snd.int else false,
+                .boolean => try Value.asBool(fst) != try Value.asBool(snd),
+                .float => try Value.asFloat(fst) != try Value.asFloat(snd),
+                .int => try Value.asInt(fst) != try Value.asInt(snd),
+                .string => !std.mem.eql(u8, try Value.asString(fst), try Value.asString(snd)),
             };
             self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
@@ -211,7 +228,7 @@ pub fn run(self: *Vm) !void {
             const fst = try self.nextReg();
             const snd = try self.nextReg();
             const res = try switch (fst) {
-                .boolean => Error.MismatchedTypes,
+                .boolean, .string => Error.MismatchedTypes,
                 .float => try Value.asFloat(fst) < try Value.asFloat(snd),
                 .int => try Value.asInt(fst) < try Value.asInt(snd),
             };
@@ -223,7 +240,7 @@ pub fn run(self: *Vm) !void {
             const fst = try self.nextReg();
             const snd = try self.nextReg();
             const res = try switch (fst) {
-                .boolean => Error.MismatchedTypes,
+                .boolean, .string => Error.MismatchedTypes,
                 .float => try Value.asFloat(fst) <= try Value.asFloat(snd),
                 .int => try Value.asInt(fst) <= try Value.asInt(snd),
             };
@@ -235,7 +252,7 @@ pub fn run(self: *Vm) !void {
             const fst = try self.nextReg();
             const snd = try self.nextReg();
             const res = try switch (fst) {
-                .boolean => Error.MismatchedTypes,
+                .boolean, .string => Error.MismatchedTypes,
                 .float => try Value.asFloat(fst) > try Value.asFloat(snd),
                 .int => try Value.asInt(fst) > try Value.asInt(snd),
             };
@@ -247,7 +264,7 @@ pub fn run(self: *Vm) !void {
             const fst = try self.nextReg();
             const snd = try self.nextReg();
             const res = try switch (fst) {
-                .boolean => Error.MismatchedTypes,
+                .boolean, .string => Error.MismatchedTypes,
                 .float => try Value.asFloat(fst) >= try Value.asFloat(snd),
                 .int => try Value.asInt(fst) >= try Value.asInt(snd),
             };
@@ -265,7 +282,7 @@ pub fn run(self: *Vm) !void {
         .jump_neq => {
             const isEql = try self.nextReg();
             const ip = self.readInt(u16);
-            if (!try Value.asBool(isEql)) {
+            if (!(try Value.asBool(isEql))) {
                 self.current().ip = ip;
             }
             continue :blk try self.nextOp();
@@ -286,6 +303,10 @@ pub fn run(self: *Vm) !void {
             self.setRegister(try self.next(), .{ .boolean = try self.next() == 1 });
             continue :blk try self.nextOp();
         },
+        .load_const => {
+            self.setRegister(try self.next(), self.constants[try self.next()]);
+            continue :blk try self.nextOp();
+        },
         .load_param => {
             const val = self.param_stack.pop();
             if (val == null) {
@@ -297,7 +318,7 @@ pub fn run(self: *Vm) !void {
         },
         .store_param => {
             const src = try self.next();
-            try self.param_stack.append(self.allocator, self.getRegister(src));
+            try self.param_stack.append(self.gc.gpa, self.getRegister(src));
             continue :blk try self.nextOp();
         },
         .@"return" => {
@@ -354,8 +375,8 @@ fn call(self: *Vm) !void {
     }
 
     // Push registers to the stack
-    try self.reg_stack.appendSlice(self.allocator, self.registers.items[1..self.metadata().reg_size]);
+    try self.reg_stack.appendSlice(self.gc.gpa, self.registers.items[1..self.metadata().reg_size]);
     // Construct a new call_frame and push it to the stack
     const new_call: Frame = .{ .metadata = frame_idx };
-    try self.call_stack.append(self.allocator, new_call);
+    try self.call_stack.append(self.gc.gpa, new_call);
 }

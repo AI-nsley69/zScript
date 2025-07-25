@@ -4,6 +4,7 @@ const Ast = @import("ast.zig");
 const Parser = @import("parser.zig");
 const Optimizer = @import("optimizer.zig");
 const Compiler = @import("compiler.zig");
+const Gc = @import("gc.zig");
 const Vm = @import("vm.zig");
 const Debug = @import("debug.zig");
 const utils = @import("utils.zig");
@@ -67,8 +68,8 @@ pub fn parse(gpa: Allocator, out: Writer, tokens: std.ArrayListUnmanaged(Lexer.T
     return parsed;
 }
 
-pub fn compile(gpa: Allocator, out: Writer, parsed: Ast.Program, opt: runOpts) !Compiler.CompilerOutput {
-    var compiler = Compiler{ .allocator = gpa, .ast = parsed };
+pub fn compile(gpa: Allocator, out: Writer, gc: Gc, parsed: Ast.Program, opt: runOpts) !Compiler.CompilerOutput {
+    var compiler = Compiler{ .allocator = gpa, .gc = gc, .ast = parsed };
     const compiled = compiler.compile() catch {
         const stderr = std.io.getStdErr().writer();
         try utils.printCompileErr(stderr, compiler.err_msg.?);
@@ -93,12 +94,13 @@ pub fn run(gpa: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
     const parsed = try parse(gpa, out, tokens, token_info, opt);
     defer parsed.arena.deinit();
 
+    const gc = try Gc.init(gpa);
     // Ast -> Bytecode
-    var compiled = try compile(gpa, out, parsed, opt);
+    var compiled = try compile(gpa, out, gc, parsed, opt);
     defer compiled.deinit(gpa);
 
     // Bytecode execution
-    var vm = try Vm.init(gpa, compiled);
+    var vm = try Vm.init(gc, compiled);
     defer vm.deinit();
     vm.run() catch |err| switch (err) {
         error.EndOfStream => {},

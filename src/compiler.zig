@@ -1,6 +1,7 @@
 const std = @import("std");
 const Lexer = @import("lexer.zig");
 const Bytecode = @import("bytecode.zig");
+const Gc = @import("gc.zig");
 const Vm = @import("vm.zig");
 const Ast = @import("ast.zig");
 const Value = @import("value.zig").Value;
@@ -27,6 +28,7 @@ const Errors = (Error || std.mem.Allocator.Error);
 pub const CompilerOutput = struct {
     const Self = @This();
     frames: []Bytecode.Function,
+    constants: []Value,
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         for (self.frames) |frame| {
@@ -39,11 +41,16 @@ pub const CompilerOutput = struct {
 const Compiler = @This();
 
 allocator: std.mem.Allocator,
+gc: Gc,
 ast: Ast.Program,
+
 comp_frames: std.ArrayListUnmanaged(CompilerFrame) = std.ArrayListUnmanaged(CompilerFrame){},
 frame_idx: usize = 0,
+
 variables: std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)) = std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)){},
 functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
+constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+
 err_msg: ?[]u8 = null,
 
 inline fn current(self: *Compiler) *CompilerFrame {
@@ -89,7 +96,10 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
         try frames.append(self.allocator, .{ .name = compilerFrame.name, .body = try instructions.toOwnedSlice(self.allocator), .reg_size = compilerFrame.reg_ptr });
     }
 
-    return .{ .frames = try frames.toOwnedSlice(self.allocator) };
+    return .{
+        .frames = try frames.toOwnedSlice(self.allocator),
+        .constants = try self.constants.toOwnedSlice(self.allocator),
+    };
 }
 
 pub fn compileFrame(self: *Compiler, target: []Ast.Statement, func: *Ast.Function) Errors!u8 {
@@ -343,7 +353,7 @@ fn unary(self: *Compiler, target: *Ast.Unary, dst_reg: ?u8) Errors!u8 {
 }
 
 fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
-    const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
+    const dst = dst_reg orelse try self.allocateRegister();
     const out = self.getOut();
     switch (val) {
         .boolean => try out.writeAll(&.{ @intFromEnum(OpCodes.load_bool), dst, @intFromBool(val.boolean) }),
@@ -354,6 +364,13 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
         .int => {
             try out.writeAll(&.{ @intFromEnum(OpCodes.load_int), dst });
             try out.writeInt(u64, @bitCast(val.int), .big);
+        },
+        .string => {
+            const str = try self.gc.alloc(u8, val.string.len);
+            @memcpy(str, val.string);
+            try self.constants.append(self.allocator, .{ .string = str });
+            const const_idx = self.constants.items.len - 1;
+            try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
         },
     }
     return dst;

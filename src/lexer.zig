@@ -3,6 +3,7 @@ const std = @import("std");
 pub const TokenType = enum {
     number,
     bool,
+    string,
     add,
     sub,
     mul,
@@ -58,6 +59,10 @@ fn isDigit(char: u8) bool {
     return '0' <= char and char <= '9';
 }
 
+fn isNotQuote(char: u8) bool {
+    return char != '"';
+}
+
 const Lexer = @This();
 
 source: []const u8,
@@ -98,11 +103,17 @@ fn advance(self: *Lexer) u8 {
 }
 
 fn peek(self: *Lexer) u8 {
-    return self.source[self.current] * @intFromBool(!self.isAtEnd());
+    if (self.isAtEnd()) {
+        return 0;
+    }
+    return self.source[self.current];
 }
 
 fn peekNext(self: *Lexer) u8 {
-    return self.source[self.current + 1] * @intFromBool(!self.isAtEnd());
+    if (self.isAtEnd()) {
+        return 0;
+    }
+    return self.source[self.current + 1];
 }
 
 fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
@@ -180,6 +191,12 @@ fn scanToken(self: *Lexer) Token {
             }
 
             return self.makeToken(.logical_and, start);
+        },
+        '"' => {
+            _ = self.takeWhile(isNotQuote);
+            // Stops at '"', jump over the trailing quote
+            self.current += 1;
+            return self.makeToken(.string, start);
         },
         'a'...'z', 'A'...'Z' => return self.alpha(start),
         else => {

@@ -27,6 +27,7 @@ fn codeToString(opcode: Bytecode.OpCodes) []const u8 {
         .load_bool => "LOAD_BOOL",
         .load_float => "LOAD_FLOAT",
         .load_int => "LOAD_INT",
+        .load_const => "LOAD_CONST",
         .load_param => "LOAD_PARAM",
         .store_param => "STORE_PARAM",
         .call => "CALL",
@@ -99,7 +100,7 @@ pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std
             try writer.print("  [{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(i64, @bitCast(val)) });
         },
         // 2x reg arg
-        .copy => {
+        .copy, .load_const => {
             try writer.print("  [{x:0>6}] {s} ${d} ${d}\n", .{ pos, name, try in.readByte(), try in.readByte() });
         },
         // 3x reg arg
@@ -240,6 +241,7 @@ pub const Ast = struct {
             .int => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.int }),
             .float => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.float }),
             .boolean => try self.writer.print("{s}lit: {any}\n", .{ indent_msg, value.boolean }),
+            .string => try self.writer.print("{s}str: {s}\n", .{ indent_msg, value.string }),
         };
     }
 

@@ -97,6 +97,7 @@ fn isFoldable(self: *Optimizer, expr: Expression) bool {
                 .boolean => false,
                 .float => true,
                 .int => true,
+                .string => false,
             };
         },
         else => false,

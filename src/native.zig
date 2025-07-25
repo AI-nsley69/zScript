@@ -36,6 +36,7 @@ fn print(ctx: Context) void {
         .int => out.print("{d}\n", .{value.int}),
         .float => out.print("{d}\n", .{value.float}),
         .boolean => out.print("{any}\n", .{value.boolean}),
+        .string => out.print("{s}\n", .{value.string}),
     } catch {};
 }
 

@@ -6,13 +6,14 @@ pub const ValueType = enum {
     int,
     float,
     boolean,
+    string,
 };
 
 pub const Value = union(ValueType) {
     int: i64,
     float: f64,
     boolean: bool,
-    // string: *[]const u8,
+    string: []u8,
 
     // Helper functions
     pub fn asInt(value: Value) !i64 {
@@ -28,5 +29,10 @@ pub const Value = union(ValueType) {
     pub fn asBool(value: Value) !bool {
         if (value != .boolean) return Error.InvalidType;
         return value.boolean;
+    }
+
+    pub fn asString(value: Value) ![]u8 {
+        if (value != .string) return Error.InvalidType;
+        return value.string;
     }
 };

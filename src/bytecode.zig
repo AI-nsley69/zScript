@@ -9,6 +9,7 @@ pub const OpCodes = enum(u8) {
     load_int,
     load_float,
     load_bool,
+    load_const,
     load_param,
     store_param,
     call,

@@ -371,6 +371,13 @@ fn primary(self: *Parser) Errors!Expression {
         return Ast.createLiteral(.{ .int = value }, self.previous());
     }
 
+    if (self.match(.string)) {
+        const value = self.previous().span;
+        const str = try self.allocator.alloc(u8, value.len - 2);
+        @memcpy(str, value[1 .. value.len - 1]);
+        return Ast.createLiteral(.{ .string = str }, self.previous());
+    }
+
     if (self.match(.identifier)) {
         return Ast.createVariable(self.allocator, null, self.previous().span, self.previous());
     }
