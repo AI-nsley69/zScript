@@ -94,7 +94,8 @@ pub fn run(gpa: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
     const parsed = try parse(gpa, out, tokens, token_info, opt);
     defer parsed.arena.deinit();
 
-    const gc = try Gc.init(gpa);
+    var gc = try Gc.init(gpa);
+    defer gc.deinit();
     // Ast -> Bytecode
     var compiled = try compile(gpa, out, gc, parsed, opt);
     defer compiled.deinit(gpa);

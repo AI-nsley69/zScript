@@ -366,9 +366,9 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
             try out.writeInt(u64, @bitCast(val.int), .big);
         },
         .string => {
-            const str = try self.gc.alloc(u8, val.string.len);
-            @memcpy(str, val.string);
-            try self.constants.append(self.allocator, .{ .string = str });
+            const str = try self.gc.alloc(.string, val.string.len);
+            @memcpy(str.string, val.string);
+            try self.constants.append(self.allocator, str);
             const const_idx = self.constants.items.len - 1;
             try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
         },

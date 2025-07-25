@@ -95,6 +95,10 @@ fn readInt(self: *Vm, comptime T: type) T {
 }
 
 fn nextOp(self: *Vm) !OpCodes {
+    if (self.gc.allocated_bytes >= self.gc.size_threshold) {
+        try self.gc.markRoots(self);
+        try self.gc.sweep();
+    }
     const op: OpCodes = @enumFromInt(try self.next());
     // std.debug.print("Next op: {s}\n", .{@tagName(op)});
     return op;
@@ -138,10 +142,10 @@ pub fn run(self: *Vm) !void {
                 .string => {
                     const fst_str = try Value.asString(fst);
                     const snd_str = try Value.asString(snd);
-                    const new_str = try self.gc.alloc(u8, fst_str.len + snd_str.len);
-                    @memcpy(new_str[0..fst_str.len], fst_str);
-                    @memcpy(new_str[fst_str.len..], snd_str);
-                    break :val .{ .string = new_str };
+                    const new_str = try self.gc.alloc(.string, fst_str.len + snd_str.len);
+                    @memcpy(new_str.string[0..fst_str.len], fst_str);
+                    @memcpy(new_str.string[fst_str.len..], snd_str);
+                    break :val new_str;
                 },
             };
             self.setRegister(dst, res);
