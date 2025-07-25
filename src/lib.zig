@@ -29,6 +29,7 @@ const TokenizerOutput = struct {
 pub fn tokenize(gpa: Allocator, out: Writer, src: []const u8, opt: runOpts) !TokenizerOutput {
     var lexer = Lexer{ .source = src, .arena = std.heap.ArenaAllocator.init(gpa) };
     const tokens = try lexer.scan();
+
     if (opt.print_tokens) {
         for (tokens.items) |token| {
             try out.print("{s}, ", .{@tagName(token.tag)});
@@ -43,6 +44,7 @@ pub fn tokenize(gpa: Allocator, out: Writer, src: []const u8, opt: runOpts) !Tok
 pub fn parse(gpa: Allocator, out: Writer, tokens: std.ArrayListUnmanaged(Lexer.Token), token_info: std.ArrayListUnmanaged(Lexer.TokenInfo), opt: runOpts) !Ast.Program {
     var parser = Parser{};
     var parsed = try parser.parse(gpa, tokens);
+    errdefer parsed.arena.deinit();
 
     const parser_errors = parser.errors.items;
     for (parser_errors) |err| {
@@ -72,6 +74,7 @@ pub fn compile(gpa: Allocator, out: Writer, parsed: Ast.Program, opt: runOpts) !
         try utils.printCompileErr(stderr, compiler.err_msg.?);
         return error.CompileError;
     };
+    errdefer compiled.deinit(gpa);
 
     if (opt.print_asm) {
         Debug.disassemble(compiled, out) catch {};
