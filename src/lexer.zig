@@ -227,51 +227,25 @@ fn number(self: *Lexer, start: usize) Token {
     return self.makeToken(.number, start);
 }
 
+const keywords = std.StaticStringMap(TokenType).initComptime(&.{
+    &.{ "true", .bool },
+    &.{ "false", .bool },
+    &.{ "mut", .var_declaration },
+    &.{ "immut", .var_declaration },
+    &.{ "if", .if_stmt },
+    &.{ "while", .while_stmt },
+    &.{ "for", .for_stmt },
+    &.{ "fn", .fn_declaration },
+    &.{ "return", .@"return" },
+    // Native functions
+    &.{ "print", .native_fn },
+});
+
 fn alpha(self: *Lexer, start: usize) Token {
-    if (self.matchFull("true")) {
-        return self.makeToken(.bool, start);
-    }
+    const name = self.source[self.takeWhile(isAlpha)..self.current];
+    const op: TokenType = keywords.get(name) orelse .identifier;
 
-    if (self.matchFull("false")) {
-        return self.makeToken(.bool, start);
-    }
-
-    if (self.matchFull("mut")) {
-        return self.makeToken(.var_declaration, start);
-    }
-
-    if (self.matchFull("immut")) {
-        return self.makeToken(.var_declaration, start);
-    }
-
-    if (self.matchFull("if")) {
-        return self.makeToken(.if_stmt, start);
-    }
-
-    if (self.matchFull("while")) {
-        return self.makeToken(.while_stmt, start);
-    }
-
-    if (self.matchFull("for")) {
-        return self.makeToken(.for_stmt, start);
-    }
-
-    if (self.matchFull("fn")) {
-        return self.makeToken(.fn_declaration, start);
-    }
-
-    if (self.matchFull("return")) {
-        return self.makeToken(.@"return", start);
-    }
-
-    const identifier_token = self.makeToken(.identifier, self.takeWhile(isAlpha));
-
-    if (std.mem.eql(u8, identifier_token.span, "print")) {
-        const tkn = self.makeToken(.native_fn, start);
-        return tkn;
-    }
-
-    return identifier_token;
+    return self.makeToken(op, start);
 }
 
 fn reportError(msg: []const u8) Token {
