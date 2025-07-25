@@ -312,14 +312,11 @@ pub fn run(self: *Vm) !void {
         },
         .native_call => {
             const fn_idx = try self.next();
-            const val = self.param_stack.pop();
-            if (val == null) {
-                @branchHint(.cold);
-                return Error.InvalidParameter;
-            }
 
             const native_fn = try Native.idxToFn(fn_idx);
-            native_fn(val.?);
+            const args = self.param_stack.items[self.param_stack.items.len - native_fn.params ..];
+            defer self.param_stack.items.len -= native_fn.params;
+            native_fn.run(.{ .params = args });
 
             continue :blk try self.nextOp();
         },

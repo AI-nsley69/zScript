@@ -284,6 +284,7 @@ fn unary(self: *Parser) Errors!Expression {
 fn nativeCall(self: *Parser) Errors!Expression {
     if (self.match(.native_fn)) {
         const src = self.previous();
+        const idx: u8 = Native.nameToIdx(src.span);
         _ = try self.consume(.left_paren, "Expected '('after native function call.");
 
         var args = std.ArrayListUnmanaged(Expression){};
@@ -294,9 +295,16 @@ fn nativeCall(self: *Parser) Errors!Expression {
             }
         }
 
+        const params = (try Native.idxToFn(idx)).params;
+        // Ensure call args == function params
+        if (params != args.items.len) {
+            const err_msg = try std.fmt.allocPrint(self.allocator, "Expected {d} arguments, found {d}", .{ params, args.items.len });
+            try self.reportError(err_msg);
+            return Error.InvalidArguments;
+        }
+
         _ = try self.consume(.right_paren, "Expected ')' after native function call.");
 
-        const idx: usize = Native.nameToIdx(src.span);
         return try Ast.createNativeCallExpression(self.allocator, try args.toOwnedSlice(self.allocator), idx, src);
     }
 

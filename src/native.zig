@@ -5,11 +5,20 @@ pub const Error = error{
     UnknownFunction,
 };
 
+pub const Context = struct {
+    params: []Value,
+};
+
+pub const NativeFn = struct {
+    params: usize,
+    run: *const fn (Context) void,
+};
+
 const Errors = (Error || std.mem.Allocator.Error);
 
-pub fn idxToFn(idx: u8) Error!*const fn (Value) void {
+pub fn idxToFn(idx: u8) Error!NativeFn {
     return switch (idx) {
-        0 => &print,
+        0 => printFn,
         else => Error.UnknownFunction,
     };
 }
@@ -20,11 +29,14 @@ pub fn nameToIdx(name: []const u8) u8 {
     return 0;
 }
 
-pub fn print(value: Value) void {
+fn print(ctx: Context) void {
     const out = std.io.getStdOut().writer();
+    const value = ctx.params[0];
     return switch (value) {
         .int => out.print("{d}\n", .{value.int}),
         .float => out.print("{d}\n", .{value.float}),
         .boolean => out.print("{any}\n", .{value.boolean}),
     } catch {};
 }
+
+pub const printFn: NativeFn = .{ .params = 1, .run = &print };
