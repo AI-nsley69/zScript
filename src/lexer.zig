@@ -262,10 +262,12 @@ fn makeToken(self: *Lexer, tokenType: TokenType, start: usize) Token {
 
 fn getLineSource(self: *Lexer) []const u8 {
     var current = self.line_pos;
+    // If next line is just an empty line, return empty string
+    if (current >= self.source.len) return "";
     var c = self.source[current];
     const endPos = while (true) {
         current += 1;
-        if (c == '\n' or self.source.len == current) break current;
+        if (c == '\n' or current == self.source.len) break current;
         c = self.source[current];
     };
 
