@@ -1,4 +1,5 @@
 const std = @import("std");
+const tracy = @import("tracy");
 
 const log = std.log.scoped(.lexer);
 
@@ -76,6 +77,9 @@ tokenInfo: std.ArrayListUnmanaged(TokenInfo) = std.ArrayListUnmanaged(TokenInfo)
 arena: std.heap.ArenaAllocator,
 
 pub fn scan(self: *Lexer) !Tokens {
+    const tr = tracy.trace(@src());
+    defer tr.end();
+
     log.debug("Tokenizing source..", .{});
 
     var token: Token = self.scanToken();

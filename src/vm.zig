@@ -3,6 +3,7 @@ const Bytecode = @import("bytecode.zig");
 const Debug = @import("debug.zig");
 const Compiler = @import("compiler.zig");
 const Gc = @import("gc.zig");
+const tracy = @import("tracy");
 
 const Value = @import("value.zig").Value;
 const Native = @import("native.zig");
@@ -127,6 +128,8 @@ fn setRegister(self: *Vm, index: u8, value: Value) void {
 }
 
 pub fn run(self: *Vm) !void {
+    const tr = tracy.trace(@src());
+    defer tr.end();
     log.debug("Executing bytecode..", .{});
     const opcode: OpCodes = try self.nextOp();
     return blk: switch (opcode) {

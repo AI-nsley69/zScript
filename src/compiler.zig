@@ -6,6 +6,8 @@ const Vm = @import("vm.zig");
 const Ast = @import("ast.zig");
 const Value = @import("value.zig").Value;
 
+const tracy = @import("tracy");
+
 const log = std.log.scoped(.compiler);
 
 const TokenType = Lexer.TokenType;
@@ -74,6 +76,8 @@ inline fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
 }
 
 pub fn compile(self: *Compiler) Errors!CompilerOutput {
+    const tr = tracy.trace(@src());
+    defer tr.end();
     log.debug("Compiling bytecode..", .{});
     defer {
         self.variables.deinit(self.allocator);

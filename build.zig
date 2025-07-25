@@ -32,6 +32,14 @@ pub fn build(b: *std.Build) void {
     build_conf.addOption([]const u8, "contents", build_zig_zon);
     exe.root_module.addOptions("build.zig.zon", build_conf);
 
+    const tracy_dep = b.dependency("tracy", .{
+        .target = target,
+        .optimize = optimize,
+        .enable = b.option(bool, "tracy", "Enable profiling with Tracy") orelse false,
+        .wait = true,
+    });
+    exe.root_module.addImport("tracy", tracy_dep.module("tracy"));
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);

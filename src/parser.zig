@@ -5,6 +5,8 @@ const Vm = @import("vm.zig");
 const val = @import("value.zig");
 const Native = @import("native.zig");
 
+const tracy = @import("tracy");
+
 const Value = val.Value;
 const ValueType = val.ValueType;
 
@@ -52,6 +54,9 @@ current_func: []const u8 = "main",
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
 
 pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.ArrayListUnmanaged(Token)) Errors!Program {
+    const tr = tracy.trace(@src());
+    defer tr.end();
+
     log.debug("Parsing tokens..", .{});
     var arena = std.heap.ArenaAllocator.init(alloc);
     self.allocator = arena.allocator();

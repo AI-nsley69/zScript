@@ -1,6 +1,9 @@
 const std = @import("std");
 const Vm = @import("vm.zig");
 const Val = @import("value.zig");
+
+const tracy = @import("tracy");
+
 const Value = Val.Value;
 const ValueType = Val.ValueType;
 
@@ -37,6 +40,8 @@ pub fn deinit(self: *Gc) void {
 }
 
 pub fn markRoots(self: *Gc, vm: *Vm) !void {
+    const tr = tracy.trace(@src());
+    defer tr.end();
     for (1..vm.metadata().reg_size) |i| {
         const value = vm.registers.items[i];
         try self.markValue(value);
@@ -57,6 +62,8 @@ fn markValue(self: *Gc, value: Value) !void {
 }
 
 pub fn sweep(self: *Gc) !void {
+    const tr = tracy.trace(@src());
+    defer tr.end();
     // If there's nothing on the heap, then exit.
     if (self.allocated.items.len < 1) return;
 

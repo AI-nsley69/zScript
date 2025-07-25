@@ -48,6 +48,10 @@
             .url = "https://github.com/ziglibs/ansi_term/archive/refs/tags/v0.1.0.tar.gz",
             .hash = "ansi_term-0.1.0-_baAy9djAABNQdiVAt7Iwk4wlBh2kL-UAxEDd3wDs-09",
         },
+        .tracy = .{
+            .url = "git+https://github.com/silversquirl/zig-tracy#ce199f286098ad97f518ae53e2591814b8f30934",
+            .hash = "tracy-0.11.1-ta-nfqNJAABI0bPZYDJNeWwi7NV9kGHnpYeB3692U1mX",
+        },
     },
     .paths = .{
         "build.zig",
