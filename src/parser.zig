@@ -102,6 +102,7 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
 }
 
 fn functionDeclaration(self: *Parser) Errors!Statement {
+    std.debug.print("Func name: {any}\n", .{self.peek().tag});
     const name = try self.consume(.identifier, "Expected function name.");
     _ = try self.consume(.left_paren, "Expected '(' after function declaration.");
 
@@ -125,10 +126,7 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
             }
         };
     }
-
-    if (self.previous().tag != .right_paren) {
-        _ = try self.consume(.right_paren, "Expected ')' after function parameters");
-    }
+    _ = try self.consume(.right_paren, "Expected ')' after function parameters");
     // Add function metadata
     try self.functions.put(self.allocator, name.span, .{ .params = params.items.len });
     // Parse function body
@@ -464,6 +462,11 @@ fn primary(self: *Parser) Errors!Expression {
     }
 
     if (self.match(.identifier)) {
+        const root = self.previous();
+        _ = root;
+        if (self.match(.dot)) {
+            @panic("Not implemented");
+        }
         return Ast.createVariable(self.allocator, null, self.previous().span, self.previous());
     }
 
