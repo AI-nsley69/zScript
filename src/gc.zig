@@ -58,6 +58,7 @@ fn markValue(self: *Gc, value: Value) !void {
         // No heap allocations done for these values
         .int, .float, .boolean => {},
         .string => try self.marked.put(@intFromPtr(value.string.ptr), undefined),
+        .object => unreachable,
     }
 }
 
@@ -76,6 +77,7 @@ pub fn sweep(self: *Gc) !void {
         const ptr = switch (elem) {
             .boolean, .float, .int => unreachable,
             .string => @intFromPtr(elem.string.ptr),
+            .object => unreachable,
         };
         if (self.marked.contains(ptr)) continue;
         try idx_to_remove.append(self.gpa, i);
@@ -102,6 +104,7 @@ fn free(self: *Gc, value: Value, idx: ?usize) usize {
             self.gpa.free(value.string);
             break :blk value.string.len * 8;
         },
+        .object => unreachable,
     };
 }
 
@@ -115,6 +118,7 @@ pub fn alloc(self: *Gc, value_type: ValueType, count: usize) !Value {
             self.allocated_bytes += count;
             break :val .{ .string = str };
         },
+        .object => unreachable,
     };
     try self.allocated.append(self.gpa, val);
     return val;

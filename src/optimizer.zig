@@ -84,6 +84,7 @@ fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpress
             if (ret.value == null) return try Ast.createReturn(null);
             return try Ast.createReturn(try optimizeExpression(self, ret.value.?));
         },
+        else => unreachable,
     }
 }
 
@@ -98,6 +99,7 @@ fn isFoldable(self: *Optimizer, expr: Expression) bool {
                 .float => true,
                 .int => true,
                 .string => false,
+                .object => false,
             };
         },
         else => false,
@@ -197,5 +199,6 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
             // Duplicate the callee node
             return Ast.createNativeCallExpression(self.allocator, try params.toOwnedSlice(self.allocator), call.idx, expr.src);
         },
+        else => unreachable,
     }
 }

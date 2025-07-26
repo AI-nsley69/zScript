@@ -190,6 +190,7 @@ pub const Ast = struct {
                 try self.writer.print("{s}return:\n", .{indent_msg});
                 if (val != null) try self.printExpressionHelper(val.?, indent + indent_step);
             },
+            else => unreachable,
         }
     }
 
@@ -201,8 +202,9 @@ pub const Ast = struct {
             .unary => try self.printUnary(node.unary, indent),
             .variable => try self.printVariable(node.variable, indent),
             // TODO: Implement AST dump for call
-            .call => {},
-            .native_call => {},
+            .call, .native_call, .new_object => {
+                std.log.debug("Implement AST Dump for call, native call & new object", .{});
+            },
         };
     }
 
@@ -242,6 +244,10 @@ pub const Ast = struct {
             .float => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.float }),
             .boolean => try self.writer.print("{s}lit: {any}\n", .{ indent_msg, value.boolean }),
             .string => try self.writer.print("{s}str: {s}\n", .{ indent_msg, value.string }),
+            .object => {
+                std.log.debug("Not implemented objs yet", .{});
+                unreachable;
+            },
         };
     }
 

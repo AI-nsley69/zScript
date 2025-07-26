@@ -17,6 +17,7 @@ const ExpressionType = enum {
     unary,
     literal,
     native_call,
+    new_object,
 };
 
 pub const ExpressionValue = union(ExpressionType) {
@@ -26,6 +27,12 @@ pub const ExpressionValue = union(ExpressionType) {
     unary: *Unary,
     literal: Value,
     native_call: *NativeCall,
+    new_object: NewObject,
+};
+
+pub const NewObject = struct {
+    name: []const u8,
+    params: []Expression,
 };
 
 pub const Call = struct {
@@ -68,6 +75,7 @@ const StatementType = enum {
     loop,
     function,
     @"return",
+    object,
 };
 
 pub const StatementValue = union(StatementType) {
@@ -77,6 +85,13 @@ pub const StatementValue = union(StatementType) {
     loop: *Loop,
     function: *Function,
     @"return": Return,
+    object: *Object,
+};
+
+pub const Object = struct {
+    name: []const u8,
+    properties: std.StringHashMap(?Expression),
+    functions: []Statement,
 };
 
 pub const Return = struct {
@@ -117,6 +132,18 @@ pub const Program = struct {
 };
 
 // Expression helpers
+
+pub fn createNewObject(name: []const u8, params: []Expression, src: Token) !Expression {
+    const obj: NewObject = .{
+        .name = name,
+        .params = params,
+    };
+
+    return .{
+        .node = .{ .new_object = obj },
+        .src = src,
+    };
+}
 
 pub fn createCallExpression(allocator: std.mem.Allocator, callee: Expression, args: []Expression, src: Token) !Expression {
     const call = try allocator.create(Call);
@@ -246,5 +273,18 @@ pub fn createReturn(expr: ?Expression) !Statement {
 
     return .{
         .node = .{ .@"return" = ret },
+    };
+}
+
+pub fn createObject(gpa: std.mem.Allocator, name: []const u8, properties: std.StringHashMap(?Expression), functions: []Statement) !Statement {
+    const obj = try gpa.create(Object);
+    obj.* = .{
+        .name = name,
+        .properties = properties,
+        .functions = functions,
+    };
+
+    return .{
+        .node = .{ .object = obj },
     };
 }

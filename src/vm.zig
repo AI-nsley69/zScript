@@ -144,7 +144,6 @@ pub fn run(self: *Vm) !void {
             const res: Value = val: switch (fst) {
                 .int => .{ .int = try Value.asInt(fst) + try Value.asInt(snd) },
                 .float => .{ .float = try Value.asFloat(fst) + try Value.asFloat(snd) },
-                .boolean => return Error.UnsupportedOperation,
                 .string => {
                     const fst_str = try Value.asString(self.gc, fst);
                     const snd_str = try Value.asString(self.gc, snd);
@@ -153,6 +152,7 @@ pub fn run(self: *Vm) !void {
                     @memcpy(new_str.string[fst_str.len..], snd_str);
                     break :val new_str;
                 },
+                .boolean, .object => return Error.UnsupportedOperation,
             };
             self.setRegister(dst, res);
             continue :blk try self.nextOp();
@@ -164,7 +164,7 @@ pub fn run(self: *Vm) !void {
             const res: Value = switch (fst) {
                 .int => .{ .int = try Value.asInt(fst) - try Value.asInt(snd) },
                 .float => .{ .float = try Value.asFloat(fst) - try Value.asFloat(snd) },
-                .boolean, .string => return Error.UnsupportedOperation,
+                .boolean, .string, .object => return Error.UnsupportedOperation,
             };
             self.setRegister(dst, res);
             continue :blk try self.nextOp();
@@ -176,7 +176,7 @@ pub fn run(self: *Vm) !void {
             const res: Value = switch (fst) {
                 .int => .{ .int = try Value.asInt(fst) * try Value.asInt(snd) },
                 .float => .{ .float = try Value.asFloat(fst) * try Value.asFloat(snd) },
-                .boolean, .string => return Error.UnsupportedOperation,
+                .boolean, .string, .object => return Error.UnsupportedOperation,
             };
             self.setRegister(dst, res);
             continue :blk try self.nextOp();
@@ -188,7 +188,7 @@ pub fn run(self: *Vm) !void {
             const res: Value = switch (fst) {
                 .int => .{ .int = @divFloor(try Value.asInt(fst), try Value.asInt(snd)) },
                 .float => .{ .float = @divFloor(try Value.asFloat(fst), try Value.asFloat(snd)) },
-                .boolean, .string => return Error.UnsupportedOperation,
+                .boolean, .string, .object => return Error.UnsupportedOperation,
             };
             self.setRegister(dst, res);
             continue :blk try self.nextOp();
@@ -216,6 +216,7 @@ pub fn run(self: *Vm) !void {
                 .float => try Value.asFloat(fst) == try Value.asFloat(snd),
                 .int => try Value.asInt(fst) == try Value.asInt(snd),
                 .string => std.mem.eql(u8, try Value.asString(self.gc, fst), try Value.asString(self.gc, snd)),
+                .object => unreachable,
             };
             self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
@@ -229,6 +230,7 @@ pub fn run(self: *Vm) !void {
                 .float => try Value.asFloat(fst) != try Value.asFloat(snd),
                 .int => try Value.asInt(fst) != try Value.asInt(snd),
                 .string => !std.mem.eql(u8, try Value.asString(self.gc, fst), try Value.asString(self.gc, snd)),
+                .object => unreachable,
             };
             self.setRegister(dst, .{ .boolean = res });
             continue :blk try self.nextOp();
@@ -238,7 +240,7 @@ pub fn run(self: *Vm) !void {
             const fst = try self.nextReg();
             const snd = try self.nextReg();
             const res = try switch (fst) {
-                .boolean, .string => Error.MismatchedTypes,
+                .boolean, .string, .object => Error.MismatchedTypes,
                 .float => try Value.asFloat(fst) < try Value.asFloat(snd),
                 .int => try Value.asInt(fst) < try Value.asInt(snd),
             };
@@ -250,7 +252,7 @@ pub fn run(self: *Vm) !void {
             const fst = try self.nextReg();
             const snd = try self.nextReg();
             const res = try switch (fst) {
-                .boolean, .string => Error.MismatchedTypes,
+                .boolean, .string, .object => Error.MismatchedTypes,
                 .float => try Value.asFloat(fst) <= try Value.asFloat(snd),
                 .int => try Value.asInt(fst) <= try Value.asInt(snd),
             };
@@ -262,7 +264,7 @@ pub fn run(self: *Vm) !void {
             const fst = try self.nextReg();
             const snd = try self.nextReg();
             const res = try switch (fst) {
-                .boolean, .string => Error.MismatchedTypes,
+                .boolean, .string, .object => Error.MismatchedTypes,
                 .float => try Value.asFloat(fst) > try Value.asFloat(snd),
                 .int => try Value.asInt(fst) > try Value.asInt(snd),
             };
@@ -274,7 +276,7 @@ pub fn run(self: *Vm) !void {
             const fst = try self.nextReg();
             const snd = try self.nextReg();
             const res = try switch (fst) {
-                .boolean, .string => Error.MismatchedTypes,
+                .boolean, .string, .object => Error.MismatchedTypes,
                 .float => try Value.asFloat(fst) >= try Value.asFloat(snd),
                 .int => try Value.asInt(fst) >= try Value.asInt(snd),
             };

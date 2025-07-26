@@ -1,22 +1,23 @@
 const std = @import("std");
 const Gc = @import("gc.zig");
+const Bytecode = @import("bytecode.zig");
 
 pub const Error = error{
     InvalidType,
 };
 
-pub const ValueType = enum {
-    int,
-    float,
-    boolean,
-    string,
+pub const Object = struct {
+    fields: std.StringHashMap(Value),
+    functions: []Bytecode.Function,
 };
 
+pub const ValueType = enum { int, float, boolean, string, object };
 pub const Value = union(ValueType) {
     int: i64,
     float: f64,
     boolean: bool,
     string: []u8,
+    object: *Object,
 
     // Helper functions
     pub fn asInt(value: Value) !i64 {
@@ -58,6 +59,10 @@ pub const Value = union(ValueType) {
                 return str.string;
             },
             .string => value.string,
+            else => {
+                std.log.debug("Implement object -> string conversion", .{});
+                unreachable;
+            },
         };
     }
 };

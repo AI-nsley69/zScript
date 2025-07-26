@@ -81,6 +81,7 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.ArrayListUnman
 fn declaration(self: *Parser) Errors!Statement {
     if (self.match(.var_declaration)) return try Ast.createExpressionStatement(try self.variableDeclaration());
     if (self.match(.fn_declaration)) return try self.functionDeclaration();
+    if (self.match(.obj_declaration)) return try self.objectDeclaration();
     return try self.statement();
 }
 
@@ -97,6 +98,7 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
 }
 
 fn functionDeclaration(self: *Parser) Errors!Statement {
+    std.debug.print("Func name: {any}\n", .{self.peek().tag});
     const name = try self.consume(.identifier, "Expected function name.");
     _ = try self.consume(.left_paren, "Expected '(' after function declaration.");
 
@@ -117,11 +119,10 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
             if (self.match(.right_paren)) {
                 _ = self.errors.pop();
                 break;
-            } else {
-                _ = try self.consume(.right_paren, "Expected ')' after function parameters");
             }
         };
     }
+    _ = try self.consume(.right_paren, "Expected ')' after function parameters");
     // Add function metadata
     try self.functions.put(self.allocator, name.span, .{ .params = params.items.len });
     // Parse function body
@@ -129,6 +130,32 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
     const body = try self.block();
 
     return try Ast.createFunction(self.allocator, name.span, body, try params.toOwnedSlice(self.allocator));
+}
+
+fn objectDeclaration(self: *Parser) Errors!Statement {
+    const name = try self.consume(.identifier, "Expected object name.");
+    _ = try self.consume(.left_bracket, "Expected '{' after object declaration.");
+
+    var properties = std.StringHashMap(?Expression).init(self.allocator);
+    var functions = std.ArrayListUnmanaged(Statement){};
+    while (!self.match(.right_bracket)) {
+        if (self.match(.dot)) {
+            const property_name = try self.consume(.identifier, "Expected property name");
+            const expr = if (self.match(.assign)) try self.expression() else null;
+            try properties.put(property_name.span, expr);
+        }
+
+        if (self.match(.fn_declaration)) {
+            try functions.append(self.allocator, try self.functionDeclaration());
+        }
+    }
+
+    if (self.previous().tag != .right_bracket) {
+        try self.reportError("Expected '}' after object declaration.");
+    }
+
+    log.debug("Previous: {}", .{self.previous().tag});
+    return Ast.createObject(self.allocator, name.span, properties, try functions.toOwnedSlice(self.allocator));
 }
 
 fn statement(self: *Parser) Errors!Statement {
@@ -386,7 +413,38 @@ fn primary(self: *Parser) Errors!Expression {
         return Ast.createLiteral(.{ .string = str }, self.previous());
     }
 
+    if (self.match(.obj_self)) {
+        const root = self.previous();
+        var name = root.span;
+        while (self.match(.dot)) {
+            _ = try self.consume(.identifier, "Expected identifier");
+            const nested_name = self.previous().span;
+            var new_name = try self.allocator.alloc(u8, name.len + nested_name.len);
+            @memcpy(new_name[0..name.len], name);
+            @memcpy(new_name[name.len..], nested_name);
+            self.allocator.free(name);
+            name = new_name;
+        }
+        return Ast.createVariable(self.allocator, null, name, self.previous());
+    }
+
+    if (self.match(.new_obj)) {
+        const src = self.previous();
+        const name = try self.consume(.identifier, "Expected object name after 'new'");
+        _ = try self.consume(.left_paren, "Expected '(' after new object creation.");
+        log.debug("Implemented new object params.", .{});
+        _ = try self.consume(.right_paren, "Expected ')§' after new object creation.");
+
+        const dummy_arr: []Expression = &[0]Expression{};
+        return Ast.createNewObject(name.span, dummy_arr, src);
+    }
+
     if (self.match(.identifier)) {
+        const root = self.previous();
+        _ = root;
+        if (self.match(.dot)) {
+            @panic("Not implemented");
+        }
         return Ast.createVariable(self.allocator, null, self.previous().span, self.previous());
     }
 

@@ -152,6 +152,7 @@ fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
         .loop => try self.loop(node.loop),
         .function => try self.function(node.function),
         .@"return" => try self.@"return"(node.@"return"),
+        .object => try self.object(node.object),
     };
 }
 
@@ -246,6 +247,11 @@ fn @"return"(self: *Compiler, target: Ast.Return) Errors!u8 {
     return dst;
 }
 
+fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
+    _, _ = .{ self, target };
+    @panic("Not implemented");
+}
+
 fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
     const node = target.node;
     return switch (target.node) {
@@ -255,6 +261,7 @@ fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
         .variable => try self.variable(node.variable),
         .call => try self.call(node.call, dst_reg),
         .native_call => try self.nativeCall(node.native_call, dst_reg),
+        else => unreachable,
     };
 }
 
@@ -385,6 +392,7 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
             const const_idx = self.constants.items.len - 1;
             try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
         },
+        else => unreachable,
     }
     return dst;
 }

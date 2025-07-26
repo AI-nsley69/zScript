@@ -21,9 +21,13 @@ pub const TokenType = enum {
     semi_colon,
     var_declaration,
     fn_declaration,
+    obj_declaration,
+    obj_self,
+    new_obj,
     native_fn,
     @"return",
     comma,
+    dot,
     identifier,
     if_stmt,
     else_stmt,
@@ -166,6 +170,7 @@ fn scanToken(self: *Lexer) Token {
         '}' => return self.makeToken(.right_bracket, start),
         ';' => return self.makeToken(.semi_colon, start),
         ',' => return self.makeToken(.comma, start),
+        '.' => return self.makeToken(.dot, start),
         '=' => {
             const op: TokenType = if (self.match('=')) .eql else .assign;
             return self.makeToken(op, start);
@@ -259,10 +264,13 @@ const keywords = std.StaticStringMap(TokenType).initComptime(&.{
     &.{ "false", .bool },
     &.{ "mut", .var_declaration },
     &.{ "immut", .var_declaration },
+    &.{ "fn", .fn_declaration },
+    &.{ "object", .obj_declaration },
+    &.{ "self", .obj_self },
+    &.{ "new", .new_obj },
     &.{ "if", .if_stmt },
     &.{ "while", .while_stmt },
     &.{ "for", .for_stmt },
-    &.{ "fn", .fn_declaration },
     &.{ "return", .@"return" },
     // Native functions
     &.{ "print", .native_fn },
