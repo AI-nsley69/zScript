@@ -105,7 +105,6 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
 }
 
 fn functionDeclaration(self: *Parser) Errors!Statement {
-    std.debug.print("Func name: {any}\n", .{self.peek().tag});
     const name = try self.consume(.identifier, "Expected function name.");
     _ = try self.consume(.left_paren, "Expected '(' after function declaration.");
 
