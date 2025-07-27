@@ -105,7 +105,6 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
 }
 
 fn functionDeclaration(self: *Parser) Errors!Statement {
-    std.debug.print("Func name: {any}\n", .{self.peek().tag});
     const name = try self.consume(.identifier, "Expected function name.");
     _ = try self.consume(.left_paren, "Expected '(' after function declaration.");
 
@@ -202,17 +201,18 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
     const name = try self.consume(.identifier, "Expected object name.");
     _ = try self.consume(.left_bracket, "Expected '{' after object declaration.");
 
-    var properties = std.StringHashMap(?Expression).init(self.allocator);
+    var fields = std.StringHashMap(?Expression).init(self.gpa);
     var functions = std.ArrayListUnmanaged(Statement){};
     while (!self.match(.right_bracket)) {
-        if (self.match(.dot)) {
-            const property_name = try self.consume(.identifier, "Expected property name");
+        if (self.match(.dot)) { // Check for properties
+            const field_name = try self.consume(.identifier, "Expected property name");
             const expr = if (self.match(.assign)) try self.expression() else null;
-            try properties.put(property_name.span, expr);
-        }
-
-        if (self.match(.fn_declaration)) {
-            try functions.append(self.allocator, try self.functionDeclaration());
+            try fields.put(field_name.span, expr);
+        } else if (self.match(.fn_declaration)) { // Check for functions
+            try functions.append(self.gpa, try self.functionDeclaration());
+        } else {
+            // Break if no functions or properties are defined
+            break;
         }
     }
 
@@ -220,8 +220,9 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         try self.reportError("Expected '}' after object declaration.");
     }
 
-    log.debug("Previous: {}", .{self.previous().tag});
-    return Ast.createObject(self.allocator, name.span, properties, try functions.toOwnedSlice(self.allocator));
+    try self.objects.put(self.gpa, .{ .fields = });
+
+    return Ast.createObject(self.gpa, name.span, properties, try functions.toOwnedSlice(self.gpa));
 }
 
 fn statement(self: *Parser) Errors!Statement {
@@ -394,6 +395,21 @@ fn new(self: *Parser) Errors!Expression {
         return Ast.NewObject.create(name.span, dummy_arr, src);
     }
 
+    return self.new();
+}
+
+fn new(self: *Parser) Errors!Expression {
+    if (self.match(.new_obj)) {
+        const src = self.previous();
+        const name = try self.consume(.identifier, "Expected object name after 'new'");
+        _ = try self.consume(.left_paren, "Expected '(' after new object creation.");
+        log.debug("TODO: Implement new object params.", .{});
+        _ = try self.consume(.right_paren, "Expected ')§' after new object creation.");
+
+        const dummy_arr: []Expression = &[0]Expression{};
+        return Ast.createNewObject(name.span, dummy_arr, src);
+    }
+
     return self.nativeCall();
 }
 
@@ -543,24 +559,13 @@ fn primary(self: *Parser) Errors!Expression {
         while (self.match(.dot)) {
             _ = try self.consume(.identifier, "Expected identifier");
             const nested_name = self.previous().span;
-            var new_name = try self.allocator.alloc(u8, name.len + nested_name.len);
+            var new_name = try self.gpa.alloc(u8, name.len + nested_name.len);
             @memcpy(new_name[0..name.len], name);
             @memcpy(new_name[name.len..], nested_name);
-            self.allocator.free(name);
+            self.gpa.free(name);
             name = new_name;
         }
-        return Ast.createVariable(self.allocator, null, name, self.previous());
-    }
-
-    if (self.match(.new_obj)) {
-        const src = self.previous();
-        const name = try self.consume(.identifier, "Expected object name after 'new'");
-        _ = try self.consume(.left_paren, "Expected '(' after new object creation.");
-        log.debug("Implemented new object params.", .{});
-        _ = try self.consume(.right_paren, "Expected ')§' after new object creation.");
-
-        const dummy_arr: []Expression = &[0]Expression{};
-        return Ast.createNewObject(name.span, dummy_arr, src);
+        return Ast.createVariable(self.gpa, null, name, self.previous());
     }
 
     if (self.match(.identifier)) {
