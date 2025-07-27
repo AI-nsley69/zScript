@@ -202,8 +202,8 @@ pub const Ast = struct {
             .unary => try self.printUnary(node.unary, indent),
             .variable => try self.printVariable(node.variable, indent),
             // TODO: Implement AST dump for call
-            .call, .native_call, .new_object => {
-                std.log.debug("Implement AST Dump for call, native call & new object", .{});
+            .call, .native_call, .new_object, .property_access => {
+                std.log.debug("Implement AST Dump for call, native call, new object & property access", .{});
             },
         };
     }

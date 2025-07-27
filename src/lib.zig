@@ -18,7 +18,7 @@ pub const runOpts = struct {
     print_asm: bool = false,
     print_ast: bool = false,
     print_tokens: bool = false,
-    do_not_optimize: bool = false,
+    do_not_optimize: bool = true,
 };
 
 const TokenizerOutput = struct {

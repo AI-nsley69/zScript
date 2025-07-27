@@ -4,11 +4,28 @@ const Bytecode = @import("bytecode.zig");
 
 pub const Error = error{
     InvalidType,
+    UnknownField,
 };
 
 pub const Object = struct {
-    fields: std.StringHashMap(Value),
+    pub const Schema = struct {
+        fields: [*:0]const u8,
+
+        pub fn getIndex(self: *Schema, name: []const u8) !usize {
+            var ptr: [*:0]const u8 = self.fields;
+            var idx = 0;
+            while (ptr[0] != 0) {
+                const field = std.mem.span(ptr);
+                if (std.mem.eql(u8, field, name)) return idx;
+                ptr += field.len + 1; // skip over the field data, as well as its sentinel
+                idx += 1;
+            }
+            return Error.UnknownField;
+        }
+    };
+    fields: [*]Value,
     functions: []Bytecode.Function,
+    schema: *const Schema,
 };
 
 pub const ValueType = enum { int, float, boolean, string, object };

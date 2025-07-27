@@ -1,4 +1,5 @@
 const std = @import("std");
+const Bytecode = @import("bytecode.zig");
 const Vm = @import("vm.zig");
 const Val = @import("value.zig");
 
@@ -119,6 +120,37 @@ pub fn alloc(self: *Gc, value_type: ValueType, count: usize) !Value {
             break :val .{ .string = str };
         },
         .object => unreachable,
+    };
+    try self.allocated.append(self.gpa, val);
+    return val;
+}
+
+pub fn dupe(self: *Gc, value: Value) !Value {
+    const val: Value = val: switch (value) {
+        // Should never be on the heap
+        .boolean, .int, .float => unreachable,
+        .string => {
+            const str = try self.gpa.dupe(u8, value.string);
+            self.allocated_bytes += str.len;
+            break :val .{ .string = str };
+        },
+        .object => {
+            const old = value.object;
+            // Reuse the old functions
+            const functions = old.functions;
+            const fields = try old.fields.clone(self.gpa);
+
+            const it = fields.iterator();
+            var next = it.next();
+            while (next != null) : (next = it.next()) {
+                self.allocated_bytes += next.?.key_ptr.len;
+            }
+
+            break :val .{ .object = .{
+                .fields = fields,
+                .functions = functions,
+            } };
+        },
     };
     try self.allocated.append(self.gpa, val);
     return val;

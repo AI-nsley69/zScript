@@ -18,6 +18,7 @@ const ExpressionType = enum {
     literal,
     native_call,
     new_object,
+    property_access,
 };
 
 pub const ExpressionValue = union(ExpressionType) {
@@ -28,6 +29,13 @@ pub const ExpressionValue = union(ExpressionType) {
     literal: Value,
     native_call: *NativeCall,
     new_object: NewObject,
+    property_access: *PropertyAccess,
+};
+
+pub const PropertyAccess = struct {
+    root: Expression,
+    field: []const u8,
+    assignment: ?Expression,
 };
 
 pub const NewObject = struct {
@@ -132,6 +140,16 @@ pub const Program = struct {
 };
 
 // Expression helpers
+
+pub fn createPropertyAccess(gpa: std.mem.Allocator, root: Expression, field: []const u8, assignment: ?Expression, src: Token) !Expression {
+    const prop_access = try gpa.create(PropertyAccess);
+    prop_access.* = .{ .root = root, .field = field, .assignment = assignment };
+
+    return .{
+        .node = .{ .property_access = prop_access },
+        .src = src,
+    };
+}
 
 pub fn createNewObject(name: []const u8, params: []Expression, src: Token) !Expression {
     const obj: NewObject = .{

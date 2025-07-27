@@ -33,12 +33,14 @@ pub const CompilerOutput = struct {
     const Self = @This();
     frames: []Bytecode.Function,
     constants: []Value,
+    objects: []Value,
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         for (self.frames) |frame| {
             allocator.free(frame.body);
         }
         allocator.free(self.frames);
+        allocator.free(self.objects);
     }
 };
 
@@ -54,6 +56,9 @@ frame_idx: usize = 0,
 variables: std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)) = std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)){},
 functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+
+objects: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+object_lookup: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 
 err_msg: ?[]u8 = null,
 
@@ -108,6 +113,7 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     return .{
         .frames = try frames.toOwnedSlice(self.allocator),
         .constants = try self.constants.toOwnedSlice(self.allocator),
+        .objects = try self.objects.toOwnedSlice(self.allocator),
     };
 }
 
@@ -120,10 +126,10 @@ pub fn compileFrame(self: *Compiler, target: []Ast.Statement, func: *Ast.Functio
     // Compile the new frame
     const out = self.getOut();
     // Load the parameters for the function (if exists)
-    const reversed = try self.allocator.dupe(*Ast.Variable, func.params);
-    defer self.allocator.free(reversed);
-    std.mem.reverse(*Ast.Variable, reversed);
-    for (reversed) |param| {
+    // const reversed = try self.allocator.dupe(*Ast.Variable, func.params);
+    // defer self.allocator.free(reversed);
+    // std.mem.reverse(*Ast.Variable, reversed);
+    for (func.params) |param| {
         try out.writeAll(&.{ @intFromEnum(OpCodes.load_param), try self.variable(param) });
     }
     // Compile the statements
@@ -248,7 +254,13 @@ fn @"return"(self: *Compiler, target: Ast.Return) Errors!u8 {
 }
 
 fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
-    _, _ = .{ self, target };
+    try self.variables.append(self.allocator, .{});
+    defer self.destroyScope();
+
+    // Create "init" function for initializing
+
+    _ = target;
+
     @panic("Not implemented");
 }
 

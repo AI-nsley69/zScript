@@ -7,6 +7,7 @@ const Native = @import("native.zig");
 
 const tracy = @import("tracy");
 
+const Object = val.Object;
 const Value = val.Value;
 const ValueType = val.ValueType;
 
@@ -44,11 +45,16 @@ const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std
 const Parser = @This();
 
 allocator: std.mem.Allocator = undefined,
+
+errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
+
 tokens: std.ArrayListUnmanaged(Token) = undefined,
 current: usize = 0,
-errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
+
 variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnmanaged(VariableMetaData){},
 functions: std.StringHashMapUnmanaged(FunctionMetadata) = std.StringHashMapUnmanaged(FunctionMetadata){},
+objects: std.StringHashMapUnmanaged(Object.Schema) = std.StringHashMapUnmanaged(Object.Schema){},
+
 current_func: []const u8 = "main",
 
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
@@ -98,7 +104,6 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
 }
 
 fn functionDeclaration(self: *Parser) Errors!Statement {
-    std.debug.print("Func name: {any}\n", .{self.peek().tag});
     const name = try self.consume(.identifier, "Expected function name.");
     _ = try self.consume(.left_paren, "Expected '(' after function declaration.");
 
@@ -136,17 +141,18 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
     const name = try self.consume(.identifier, "Expected object name.");
     _ = try self.consume(.left_bracket, "Expected '{' after object declaration.");
 
-    var properties = std.StringHashMap(?Expression).init(self.allocator);
+    var fields = std.StringHashMap(?Expression).init(self.allocator);
     var functions = std.ArrayListUnmanaged(Statement){};
     while (!self.match(.right_bracket)) {
-        if (self.match(.dot)) {
-            const property_name = try self.consume(.identifier, "Expected property name");
+        if (self.match(.dot)) { // Check for properties
+            const field_name = try self.consume(.identifier, "Expected property name");
             const expr = if (self.match(.assign)) try self.expression() else null;
-            try properties.put(property_name.span, expr);
-        }
-
-        if (self.match(.fn_declaration)) {
+            try fields.put(field_name.span, expr);
+        } else if (self.match(.fn_declaration)) { // Check for functions
             try functions.append(self.allocator, try self.functionDeclaration());
+        } else {
+            // Break if no functions or properties are defined
+            break;
         }
     }
 
@@ -154,7 +160,8 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         try self.reportError("Expected '}' after object declaration.");
     }
 
-    log.debug("Previous: {}", .{self.previous().tag});
+    try self.objects.put(self.allocator, .{ .fields = });
+
     return Ast.createObject(self.allocator, name.span, properties, try functions.toOwnedSlice(self.allocator));
 }
 
@@ -313,6 +320,21 @@ fn unary(self: *Parser) Errors!Expression {
         return Ast.createUnary(self.allocator, op, rhs, self.previous());
     }
 
+    return self.new();
+}
+
+fn new(self: *Parser) Errors!Expression {
+    if (self.match(.new_obj)) {
+        const src = self.previous();
+        const name = try self.consume(.identifier, "Expected object name after 'new'");
+        _ = try self.consume(.left_paren, "Expected '(' after new object creation.");
+        log.debug("TODO: Implement new object params.", .{});
+        _ = try self.consume(.right_paren, "Expected ')§' after new object creation.");
+
+        const dummy_arr: []Expression = &[0]Expression{};
+        return Ast.createNewObject(name.span, dummy_arr, src);
+    }
+
     return self.nativeCall();
 }
 
@@ -347,7 +369,7 @@ fn nativeCall(self: *Parser) Errors!Expression {
 }
 
 fn call(self: *Parser) Errors!Expression {
-    var expr = try self.primary();
+    var expr = try self.dot();
 
     while (true) {
         if (self.match(.left_paren)) {
@@ -358,6 +380,18 @@ fn call(self: *Parser) Errors!Expression {
     }
 
     return expr;
+}
+
+fn dot(self: *Parser) Errors!Expression {
+    const root = try self.primary();
+
+    if (self.match(.dot)) {
+        const field = try self.consume(.identifier, "Expected expression after '.'");
+        const prop_assignment: ?Expression = if (self.match(.assign)) try self.expression() else null;
+        return try Ast.createPropertyAccess(self.allocator, root, field.span, prop_assignment, self.previous());
+    }
+
+    return root;
 }
 
 fn finishCall(self: *Parser, callee: Expression) Errors!Expression {
@@ -428,23 +462,7 @@ fn primary(self: *Parser) Errors!Expression {
         return Ast.createVariable(self.allocator, null, name, self.previous());
     }
 
-    if (self.match(.new_obj)) {
-        const src = self.previous();
-        const name = try self.consume(.identifier, "Expected object name after 'new'");
-        _ = try self.consume(.left_paren, "Expected '(' after new object creation.");
-        log.debug("Implemented new object params.", .{});
-        _ = try self.consume(.right_paren, "Expected ')§' after new object creation.");
-
-        const dummy_arr: []Expression = &[0]Expression{};
-        return Ast.createNewObject(name.span, dummy_arr, src);
-    }
-
     if (self.match(.identifier)) {
-        const root = self.previous();
-        _ = root;
-        if (self.match(.dot)) {
-            @panic("Not implemented");
-        }
         return Ast.createVariable(self.allocator, null, self.previous().span, self.previous());
     }
 
