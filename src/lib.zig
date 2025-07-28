@@ -24,11 +24,12 @@ pub const runOpts = struct {
 const TokenizerOutput = struct {
     std.ArrayListUnmanaged(Lexer.Token),
     std.ArrayListUnmanaged(Lexer.TokenInfo),
-    std.heap.ArenaAllocator,
+    Lexer,
 };
 
 pub fn tokenize(gpa: Allocator, out: Writer, src: []const u8, opt: runOpts) !TokenizerOutput {
-    var lexer = Lexer{ .source = src, .arena = std.heap.ArenaAllocator.init(gpa) };
+    var lexer = Lexer.init(src, gpa);
+    errdefer lexer.deinit();
     const tokens = try lexer.scan();
 
     if (opt.print_tokens) {
@@ -38,7 +39,7 @@ pub fn tokenize(gpa: Allocator, out: Writer, src: []const u8, opt: runOpts) !Tok
 
         try out.writeAll("\n");
     }
-    return .{ tokens, lexer.tokenInfo, lexer.arena };
+    return .{ tokens, lexer.tokenInfo, lexer };
 }
 
 pub fn parse(gpa: Allocator, out: Writer, tokens: std.ArrayListUnmanaged(Lexer.Token), token_info: std.ArrayListUnmanaged(Lexer.TokenInfo), opt: runOpts) !Ast.Program {
@@ -86,8 +87,8 @@ pub fn compile(gpa: Allocator, out: Writer, gc: *Gc, parsed: Ast.Program, opt: r
 pub fn run(gpa: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
     const out = std.io.getStdOut().writer();
     // Source -> Tokens
-    const tokens, const token_info, const lexer_arena = try tokenize(gpa, out, src, opt);
-    defer lexer_arena.deinit();
+    const tokens, const token_info, var lexer = try tokenize(gpa, out, src, opt);
+    defer lexer.deinit();
 
     // Tokens -> Ast
     const parsed = try parse(gpa, out, tokens, token_info, opt);

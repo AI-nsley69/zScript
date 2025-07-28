@@ -72,7 +72,7 @@ fn isNotQuote(char: u8) bool {
 
 const Lexer = @This();
 
-buf: [:0]const u8,
+buf: []const u8,
 current: usize = 0,
 
 line: usize = 1,
@@ -83,7 +83,7 @@ tokenInfo: std.ArrayListUnmanaged(TokenInfo) = std.ArrayListUnmanaged(TokenInfo)
 
 gpa: std.mem.Allocator,
 
-pub fn init(buffer: [:0]const u8, gpa: std.mem.Allocator) Lexer {
+pub fn init(buffer: []const u8, gpa: std.mem.Allocator) Lexer {
     // Skip the UTF-8 BOM if present.
     return .{
         .buf = buffer,
@@ -98,6 +98,7 @@ pub fn deinit(self: *Lexer) void {
         self.gpa.free(token.span);
     }
     self.tokens.deinit(self.gpa);
+    self.tokenInfo.deinit(self.gpa);
 }
 
 pub fn scan(self: *Lexer) !Tokens {

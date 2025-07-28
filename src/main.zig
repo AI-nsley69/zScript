@@ -11,6 +11,7 @@ fn benchmark() !void {
 }
 
 pub fn main() !void {
+    // try benchmark();
     const allocator = std.heap.smp_allocator;
     var root = try cli.build(allocator);
     defer root.deinit();

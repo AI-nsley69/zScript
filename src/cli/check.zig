@@ -48,8 +48,8 @@ fn check(ctx: zli.CommandContext) !void {
 
     const out = std.io.getStdOut().writer();
 
-    const tokens, const token_info, const arena = try lib.tokenize(gpa, out, contents, .{});
-    defer arena.deinit();
+    const tokens, const token_info, var lexer = try lib.tokenize(gpa, out, contents, .{});
+    defer lexer.deinit();
 
     const parsed = try lib.parse(gpa, out, tokens, token_info, .{ .file = ctx.positional_args[0] });
     defer parsed.arena.deinit();
