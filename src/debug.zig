@@ -57,11 +57,11 @@ fn codeToString(opcode: Bytecode.OpCodes) []const u8 {
     };
 }
 
-fn valueToString(allocator: std.mem.Allocator, value: Value) ![]u8 {
+fn valueToString(gpa: std.mem.Allocator, value: Value) ![]u8 {
     return switch (value) {
-        .int => std.fmt.allocPrint(allocator, "(int){d}", .{value.int}),
-        .float => std.fmt.allocPrint(allocator, "(float){d}", .{value.float}),
-        .boolean => std.fmt.allocPrint(allocator, "(bool){any}", .{value.boolean}),
+        .int => std.fmt.allocPrint(gpa, "(int){d}", .{value.int}),
+        .float => std.fmt.allocPrint(gpa, "(float){d}", .{value.float}),
+        .boolean => std.fmt.allocPrint(gpa, "(bool){any}", .{value.boolean}),
     };
 }
 
@@ -116,8 +116,7 @@ pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std
 }
 
 pub fn disassemble(output: CompilerOutput, writer: std.fs.File.Writer) !void {
-    for (output.frames) |frame_ptr| {
-        const frame = frame_ptr;
+    for (output.frames) |frame| {
         var instructions = std.io.fixedBufferStream(frame.body);
         try writer.print("{s}:\n", .{frame.name});
         while (true) {
@@ -129,9 +128,9 @@ pub fn disassemble(output: CompilerOutput, writer: std.fs.File.Writer) !void {
     }
 }
 
-fn createIndent(allocator: std.mem.Allocator, indent_step: usize) ![]u8 {
-    const indent_msg = try allocator.alloc(u8, indent_step);
-    errdefer allocator.free(indent_msg);
+fn createIndent(gpa: std.mem.Allocator, indent_step: usize) ![]u8 {
+    const indent_msg = try gpa.alloc(u8, indent_step);
+    errdefer gpa.free(indent_msg);
     @memset(indent_msg, ' ');
     return indent_msg;
 }
@@ -141,12 +140,12 @@ const Errors = (std.mem.Allocator.Error || std.fs.File.WriteError);
 pub const Ast = struct {
     const Self = @This();
     writer: std.fs.File.Writer,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     const indent_step = 2;
 
     pub fn print(self: *Self, input: Program) !void {
-        const indent_msg = try createIndent(self.allocator, indent_step);
-        defer self.allocator.free(indent_msg);
+        const indent_msg = try createIndent(self.gpa, indent_step);
+        defer self.gpa.free(indent_msg);
 
         const list = input.statements.items;
         try self.writer.print("(program)\n", .{});
@@ -156,8 +155,8 @@ pub const Ast = struct {
     }
 
     fn printStatement(self: *Self, stmt: Statement, indent: usize) !void {
-        const indent_msg = try createIndent(self.allocator, indent);
-        defer self.allocator.free(indent_msg);
+        const indent_msg = try createIndent(self.gpa, indent);
+        defer self.gpa.free(indent_msg);
         const node = stmt.node;
         switch (node) {
             .expression => {
@@ -214,8 +213,8 @@ pub const Ast = struct {
     }
 
     fn printInfix(self: *Self, infix: *Infix, indent: usize) !void {
-        const indent_msg = try createIndent(self.allocator, indent);
-        defer self.allocator.free(indent_msg);
+        const indent_msg = try createIndent(self.gpa, indent);
+        defer self.gpa.free(indent_msg);
         try self.writer.print("{s}infix:\n", .{indent_msg});
 
         const lhs = infix.lhs;
@@ -229,8 +228,8 @@ pub const Ast = struct {
     }
 
     fn printUnary(self: *Self, unary: *Unary, indent: usize) !void {
-        const indent_msg = try createIndent(self.allocator, indent);
-        defer self.allocator.free(indent_msg);
+        const indent_msg = try createIndent(self.gpa, indent);
+        defer self.gpa.free(indent_msg);
         try self.writer.print("{s}unary:\n", .{indent_msg});
 
         const op = unary.op;
@@ -241,8 +240,8 @@ pub const Ast = struct {
     }
 
     fn printLiteral(self: *Self, value: Value, indent: usize) !void {
-        const indent_msg = try createIndent(self.allocator, indent);
-        defer self.allocator.free(indent_msg);
+        const indent_msg = try createIndent(self.gpa, indent);
+        defer self.gpa.free(indent_msg);
 
         return switch (value) {
             .int => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.int }),
@@ -257,12 +256,12 @@ pub const Ast = struct {
     }
 
     fn printVariable(self: *Self, variable: *Variable, indent: usize) !void {
-        var indent_msg = try createIndent(self.allocator, indent);
-        defer self.allocator.free(indent_msg);
+        var indent_msg = try createIndent(self.gpa, indent);
+        defer self.gpa.free(indent_msg);
 
         try self.writer.print("{s}var:\n", .{indent_msg});
 
-        indent_msg = try createIndent(self.allocator, indent + indent_step);
+        indent_msg = try createIndent(self.gpa, indent + indent_step);
         try self.writer.print("{s}name: {s}\n", .{ indent_msg, variable.name });
 
         if (variable.initializer) |init| {
@@ -272,8 +271,8 @@ pub const Ast = struct {
     }
 
     fn printOperand(self: *Self, op: TokenType, indent: usize) !void {
-        const indent_msg = try self.allocator.alloc(u8, indent);
-        defer self.allocator.free(indent_msg);
+        const indent_msg = try self.gpa.alloc(u8, indent);
+        defer self.gpa.free(indent_msg);
         @memset(indent_msg, ' ');
 
         try self.writer.print("{s}op: {s}\n", .{ indent_msg, @tagName(op) });

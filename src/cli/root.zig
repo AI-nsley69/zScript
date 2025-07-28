@@ -42,18 +42,18 @@ fn showHelp(ctx: zli.CommandContext) !void {
     try ctx.command.printHelp();
 }
 
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
 fn run(ctx: zli.CommandContext) !void {
     const gpa, const is_debug = comptime gpa: {
         break :gpa switch (builtin.mode) {
-            .Debug => .{ debug_allocator.allocator(), true },
-            else => .{ std.heap.smp_allocator, false },
+            .Debug => .{ debug_gpa.gpa(), true },
+            else => .{ std.heap.smp_gpa, false },
         };
     };
     defer if (is_debug) {
-        const check = debug_allocator.deinit();
+        const check = debug_gpa.deinit();
         if (check == .leak) {
-            std.log.debug("Leak detected after freeing allocator.", .{});
+            std.log.debug("Leak detected after freeing gpa.", .{});
         }
     };
 

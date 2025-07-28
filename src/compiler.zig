@@ -38,18 +38,18 @@ pub const CompilerOutput = struct {
     constants: []Value,
     objects: std.StringArrayHashMapUnmanaged(Value),
 
-    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
         for (self.frames) |frame| {
-            allocator.free(frame.body);
+            gpa.free(frame.body);
         }
-        allocator.free(self.frames);
-        self.objects.deinit(allocator);
+        gpa.free(self.frames);
+        self.objects.deinit(gpa);
     }
 };
 
 const Compiler = @This();
 
-allocator: std.mem.Allocator,
+gpa: std.mem.Allocator,
 gc: *Gc,
 ast: Ast.Program,
 
@@ -75,7 +75,7 @@ inline fn scope(self: *Compiler) *std.StringHashMapUnmanaged(u8) {
 inline fn destroyScope(self: *Compiler) void {
     var popped = self.variables.pop();
     if (popped == null) return;
-    popped.?.deinit(self.allocator);
+    popped.?.deinit(self.gpa);
 }
 
 fn getVariableDst(self: *Compiler, name: []const u8) ?u8 {
@@ -89,7 +89,7 @@ fn getVariableDst(self: *Compiler, name: []const u8) ?u8 {
 }
 
 inline fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
-    return self.current().instructions.writer(self.allocator);
+    return self.current().instructions.writer(self.gpa);
 }
 
 pub fn compile(self: *Compiler) Errors!CompilerOutput {
@@ -97,18 +97,18 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     defer tr.end();
     log.debug("Compiling bytecode..", .{});
     defer {
-        self.variables.deinit(self.allocator);
-        self.functions.deinit(self.allocator);
-        self.comp_frames.deinit(self.allocator);
+        self.variables.deinit(self.gpa);
+        self.functions.deinit(self.gpa);
+        self.comp_frames.deinit(self.gpa);
     }
     // Create a pseudo main function for initial frame
     const main_body: Ast.Statement = try Ast.Block.create(self.ast.statements.items);
-    const main_func = try Ast.Function.create(self.allocator, "main", main_body, &.{});
-    defer self.allocator.destroy(main_func.node.function);
+    const main_func = try Ast.Function.create(self.gpa, "main", main_body, &.{});
+    defer self.gpa.destroy(main_func.node.function);
 
-    try self.functions.put(self.allocator, "main", 0);
+    try self.functions.put(self.gpa, "main", 0);
 
-    try self.variables.append(self.allocator, .{});
+    try self.variables.append(self.gpa, .{});
     defer self.destroyScope();
     // Compile the actual frame
     const final_dst = try self.compileFrame(main_func.node.function);
@@ -118,14 +118,14 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     var frames = std.ArrayListUnmanaged(Bytecode.Function){};
     for (self.comp_frames.items) |compilerFrame| {
         var instructions = compilerFrame.instructions;
-        try frames.append(self.allocator, .{ .name = compilerFrame.name, .body = try instructions.toOwnedSlice(self.allocator), .reg_size = compilerFrame.reg_idx });
+        try frames.append(self.gpa, .{ .name = compilerFrame.name, .body = try instructions.toOwnedSlice(self.gpa), .reg_size = compilerFrame.reg_idx });
     }
 
     log.debug("Finished compilation with {d} functions & {d} constants", .{ frames.items.len, self.constants.items.len });
 
     return .{
-        .frames = try frames.toOwnedSlice(self.allocator),
-        .constants = try self.constants.toOwnedSlice(self.allocator),
+        .frames = try frames.toOwnedSlice(self.gpa),
+        .constants = try self.constants.toOwnedSlice(self.gpa),
         .objects = self.objects,
     };
 }
@@ -134,7 +134,7 @@ pub fn compileFrame(self: *Compiler, func: *Ast.Function) Errors!u8 {
     const previous_frame = self.frame_idx;
     defer self.frame_idx = previous_frame;
     // Setup a new frame
-    try self.comp_frames.append(self.allocator, .{ .name = func.name });
+    try self.comp_frames.append(self.gpa, .{ .name = func.name });
     self.frame_idx = self.comp_frames.items.len - 1;
     // Compile the new frame
     const out = self.getOut();
@@ -156,16 +156,16 @@ fn compileObjectFrame(self: *Compiler, func: *Ast.Function) Errors!Bytecode.Func
     const previous_frame = self.frame_idx;
     defer self.frame_idx = previous_frame;
     // Create new scope for the variable
-    try self.variables.append(self.allocator, .{});
+    try self.variables.append(self.gpa, .{});
     defer self.destroyScope();
     // Setup a new frame
-    try self.comp_frames.append(self.allocator, .{ .name = func.name });
+    try self.comp_frames.append(self.gpa, .{ .name = func.name });
     self.frame_idx = self.comp_frames.items.len - 1;
     // Compile new frame
     const out = self.getOut();
     // Setup self variable in scope
     const dst = try self.allocateRegister();
-    try self.scope().put(self.allocator, "self", dst);
+    try self.scope().put(self.gpa, "self", dst);
     try out.writeAll(&.{ @intFromEnum(OpCodes.load_param), dst });
 
     var final_dst: u8 = 0;
@@ -177,7 +177,7 @@ fn compileObjectFrame(self: *Compiler, func: *Ast.Function) Errors!Bytecode.Func
 
     const comp_frame = self.comp_frames.pop();
     var instructions = comp_frame.?.instructions;
-    return .{ .name = comp_frame.?.name, .body = try instructions.toOwnedSlice(self.allocator), .reg_size = comp_frame.?.reg_idx };
+    return .{ .name = comp_frame.?.name, .body = try instructions.toOwnedSlice(self.gpa), .reg_size = comp_frame.?.reg_idx };
 }
 
 fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
@@ -187,7 +187,7 @@ fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
         .conditional => try self.conditional(node.conditional),
         .block => {
             var dst: u8 = 0;
-            try self.variables.append(self.allocator, .{});
+            try self.variables.append(self.gpa, .{});
             defer self.destroyScope();
             for (node.block.statements) |stmt| {
                 dst = try self.statement(stmt);
@@ -205,7 +205,7 @@ fn conditional(self: *Compiler, target: *Ast.Conditional) Errors!u8 {
     const out = self.getOut();
     const frame = self.current();
 
-    try self.variables.append(self.allocator, .{});
+    try self.variables.append(self.gpa, .{});
     defer self.destroyScope();
     // Ast.Conditional expression
     const cmp = try self.expression(target.expression, null);
@@ -243,7 +243,7 @@ fn loop(self: *Compiler, target: *Ast.Loop) Errors!u8 {
     const frame = self.current();
     const out = self.getOut();
 
-    try self.variables.append(self.allocator, .{});
+    try self.variables.append(self.gpa, .{});
     defer self.destroyScope();
     // Compile initializer if there is one (for-loop)
     if (target.initializer) |init| {
@@ -278,7 +278,7 @@ fn loop(self: *Compiler, target: *Ast.Loop) Errors!u8 {
 
 fn function(self: *Compiler, target: *Ast.Function) Errors!u8 {
     const dst = try self.allocateRegister();
-    try self.variables.append(self.allocator, .{});
+    try self.variables.append(self.gpa, .{});
     defer self.destroyScope();
     // Ast.Function always parses a body after it
     _ = try self.compileFrame(target);
@@ -292,7 +292,7 @@ fn @"return"(self: *Compiler, target: Ast.Return) Errors!u8 {
 }
 
 fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
-    try self.variables.append(self.allocator, .{});
+    try self.variables.append(self.gpa, .{});
     defer self.destroyScope();
 
     var field_values = std.ArrayListUnmanaged(Value){};
@@ -308,7 +308,7 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
     var functions = std.ArrayListUnmanaged(Bytecode.Function){};
     for (target.functions) |func| {
         const node = func.node.function;
-        try functions.append(self.allocator, try self.compileObjectFrame(node));
+        try functions.append(self.gpa, try self.compileObjectFrame(node));
     }
 
     const obj = try self.gc.gpa.create(Object);
@@ -348,7 +348,7 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     const metadata = self.ast.variables.get(target.name);
     if (metadata == null) {
         log.debug("No available metadata", .{});
-        const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
+        const msg = try std.fmt.allocPrint(self.gpa, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
     }
@@ -358,12 +358,12 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     }
     const dst = try self.allocateRegister();
 
-    try self.scope().put(self.allocator, target.name, dst);
+    try self.scope().put(self.gpa, target.name, dst);
     if (target.initializer == null) {
         // Ast.Return destination if the variable is a function parameter
         if (metadata.?.is_param) return dst;
         log.debug("Variable is not a parameter, nor does it have an initializer.", .{});
-        const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
+        const msg = try std.fmt.allocPrint(self.gpa, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
     }
@@ -391,7 +391,7 @@ fn call(self: *Compiler, target: *Ast.Call, dst_reg: ?u8) Errors!u8 {
     var frame_idx: ?u8 = self.functions.get(func_name);
     if (frame_idx == null) {
         frame_idx = @truncate(self.functions.size);
-        try self.functions.put(self.allocator, func_name, frame_idx.?);
+        try self.functions.put(self.gpa, func_name, frame_idx.?);
     }
 
     const dst = dst_reg orelse try self.allocateRegister();
@@ -421,12 +421,12 @@ fn newObject(self: *Compiler, target: Ast.NewObject, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
     const val = self.objects.get(target.name);
     if (val == null) {
-        const msg = try std.fmt.allocPrint(self.allocator, "Undefined object '{s}'", .{target.name});
+        const msg = try std.fmt.allocPrint(self.gpa, "Undefined object '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
     }
 
-    try self.constants.append(self.allocator, val.?);
+    try self.constants.append(self.gpa, val.?);
     const dst = dst_reg orelse try self.allocateRegister();
     try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(self.constants.items.len - 1) });
     return dst;
@@ -471,7 +471,7 @@ fn infix(self: *Compiler, target: *Ast.Infix, dst_reg: ?u8) Errors!u8 {
     }
     const lhs = try self.expression(target.lhs, null);
     const rhs = try self.expression(target.rhs, null);
-    const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
+    const dst = dst_reg orelse try self.allocateRegister();
     const op = try opcode(target.op);
     try self.getOut().writeAll(&.{ op, dst, lhs, rhs });
     return dst;
@@ -481,7 +481,7 @@ fn assignment(self: *Compiler, target: *Ast.Infix) Errors!u8 {
     const target_var = target.lhs.node.variable;
     if (self.ast.variables.get(target_var.*.name)) |metadata| {
         if (!metadata.mutable) {
-            const msg = try std.fmt.allocPrint(self.allocator, "Invalid assignment to immutable variable '{s}'", .{target_var.*.name});
+            const msg = try std.fmt.allocPrint(self.gpa, "Invalid assignment to immutable variable '{s}'", .{target_var.*.name});
             try self.reportError(msg);
             return Error.Unknown;
         }
@@ -520,7 +520,7 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
         .string => {
             const str = try self.gc.alloc(.string, val.string.len);
             @memcpy(str.string, val.string);
-            try self.constants.append(self.allocator, str);
+            try self.constants.append(self.gpa, str);
             const const_idx = self.constants.items.len - 1;
             try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
         },
@@ -541,8 +541,8 @@ fn allocateRegister(self: *Compiler) Errors!u8 {
 }
 
 fn reportError(self: *Compiler, msg: []const u8) Errors!void {
-    const err_msg = try self.allocator.dupe(u8, msg);
-    errdefer self.allocator.free(err_msg);
+    const err_msg = try self.gpa.dupe(u8, msg);
+    errdefer self.gpa.free(err_msg);
     self.err_msg = err_msg;
 }
 

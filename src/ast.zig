@@ -90,8 +90,8 @@ pub const Call = struct {
     callee: Expression,
     args: []Expression,
 
-    pub fn create(allocator: std.mem.Allocator, callee: Expression, args: []Expression, src: TokenData) !Expression {
-        const call = try allocator.create(Call);
+    pub fn create(gpa: std.mem.Allocator, callee: Expression, args: []Expression, src: TokenData) !Expression {
+        const call = try gpa.create(Call);
         call.* = .{
             .callee = callee,
             .args = args,
@@ -108,8 +108,8 @@ pub const NativeCall = struct {
     args: []Expression,
     idx: usize,
 
-    pub fn create(allocator: std.mem.Allocator, args: []Expression, idx: usize, src: TokenData) !Expression {
-        const call = try allocator.create(NativeCall);
+    pub fn create(gpa: std.mem.Allocator, args: []Expression, idx: usize, src: TokenData) !Expression {
+        const call = try gpa.create(NativeCall);
         call.* = .{
             .args = args,
             .idx = idx,
@@ -126,9 +126,9 @@ pub const Variable = struct {
     name: []const u8,
     initializer: ?Expression,
 
-    pub fn create(allocator: std.mem.Allocator, init: ?Expression, name: []const u8, src: TokenData) !Expression {
-        const variable = try allocator.create(Variable);
-        errdefer allocator.destroy(variable);
+    pub fn create(gpa: std.mem.Allocator, init: ?Expression, name: []const u8, src: TokenData) !Expression {
+        const variable = try gpa.create(Variable);
+        errdefer gpa.destroy(variable);
         variable.* = .{ .initializer = init, .name = name };
 
         return .{
@@ -143,9 +143,9 @@ pub const Infix = struct {
     op: TokenType,
     rhs: Expression,
 
-    pub fn create(allocator: std.mem.Allocator, op: TokenType, lhs: Expression, rhs: Expression, src: TokenData) !Expression {
-        const infix = try allocator.create(Infix);
-        errdefer allocator.destroy(infix);
+    pub fn create(gpa: std.mem.Allocator, op: TokenType, lhs: Expression, rhs: Expression, src: TokenData) !Expression {
+        const infix = try gpa.create(Infix);
+        errdefer gpa.destroy(infix);
         infix.* = .{ .op = op, .lhs = lhs, .rhs = rhs };
 
         return .{
@@ -159,9 +159,9 @@ pub const Unary = struct {
     op: TokenType,
     rhs: Expression,
 
-    pub fn create(allocator: std.mem.Allocator, op: TokenType, rhs: Expression, src: TokenData) !Expression {
-        const unary = try allocator.create(Unary);
-        errdefer allocator.destroy(unary);
+    pub fn create(gpa: std.mem.Allocator, op: TokenType, rhs: Expression, src: TokenData) !Expression {
+        const unary = try gpa.create(Unary);
+        errdefer gpa.destroy(unary);
         unary.* = .{ .op = op, .rhs = rhs };
 
         return .{
@@ -233,8 +233,8 @@ pub const Function = struct {
     params: []*Variable,
     body: Statement,
 
-    pub fn create(allocator: std.mem.Allocator, name: []const u8, body: Statement, params: []*Variable) !Statement {
-        const func = try allocator.create(Function);
+    pub fn create(gpa: std.mem.Allocator, name: []const u8, body: Statement, params: []*Variable) !Statement {
+        const func = try gpa.create(Function);
         func.* = .{ .name = name, .body = body, .params = params };
         return .{ .node = .{ .function = func } };
     }
@@ -246,8 +246,8 @@ pub const Loop = struct {
     post: ?Expression,
     body: Statement,
 
-    pub fn create(allocator: std.mem.Allocator, initializer: ?Expression, condition: Expression, post: ?Expression, body: Statement) !Statement {
-        const loop = try allocator.create(Loop);
+    pub fn create(gpa: std.mem.Allocator, initializer: ?Expression, condition: Expression, post: ?Expression, body: Statement) !Statement {
+        const loop = try gpa.create(Loop);
         loop.* = .{ .body = body, .condition = condition, .initializer = initializer, .post = post };
         return .{ .node = .{ .loop = loop } };
     }
@@ -266,8 +266,8 @@ pub const Conditional = struct {
     body: Statement,
     otherwise: ?Statement,
 
-    pub fn create(allocator: std.mem.Allocator, expr: Expression, body: Statement, otherwise: ?Statement) !Statement {
-        const conditional = try allocator.create(Conditional);
+    pub fn create(gpa: std.mem.Allocator, expr: Expression, body: Statement, otherwise: ?Statement) !Statement {
+        const conditional = try gpa.create(Conditional);
         conditional.* = .{ .expression = expr, .body = body, .otherwise = otherwise };
         return .{ .node = .{ .conditional = conditional } };
     }

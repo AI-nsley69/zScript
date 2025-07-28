@@ -58,18 +58,6 @@ pub const Token = struct {
     info: TokenInfo,
 };
 
-fn isAlpha(char: u8) bool {
-    return ('a' <= char and char <= 'z') or ('A' <= char and char <= 'Z');
-}
-
-fn isDigit(char: u8) bool {
-    return '0' <= char and char <= '9';
-}
-
-fn isNotQuote(char: u8) bool {
-    return char != '"';
-}
-
 const Lexer = @This();
 
 buf: []const u8,
@@ -289,8 +277,19 @@ const keywords = std.StaticStringMap(TokenType).initComptime(&.{
 fn alpha(self: *Lexer, start: usize) TokenData {
     const name = self.buf[self.takeWhile(isAlpha)..self.current];
     const op: TokenType = keywords.get(name) orelse .identifier;
-
     return self.makeToken(op, start);
+}
+
+fn isAlpha(char: u8) bool {
+    return ('a' <= char and char <= 'z') or ('A' <= char and char <= 'Z');
+}
+
+fn isDigit(char: u8) bool {
+    return '0' <= char and char <= '9';
+}
+
+fn isNotQuote(char: u8) bool {
+    return char != '"';
 }
 
 fn reportError(msg: []const u8) TokenData {
