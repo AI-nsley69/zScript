@@ -5,7 +5,7 @@ const Parser = @import("parser.zig");
 const Value = @import("value.zig").Value;
 
 const TokenType = Lexer.TokenType;
-const Token = Lexer.Token;
+const TokenData = Lexer.TokenData;
 const VariableMetaData = Parser.VariableMetaData;
 
 // Expressions
@@ -56,7 +56,7 @@ pub const Unary = struct {
 
 pub const Expression = struct {
     node: ExpressionValue,
-    src: Token,
+    src: TokenData,
 };
 
 // Statements
@@ -118,7 +118,7 @@ pub const Program = struct {
 
 // Expression helpers
 
-pub fn createCallExpression(allocator: std.mem.Allocator, callee: Expression, args: []Expression, src: Token) !Expression {
+pub fn createCallExpression(allocator: std.mem.Allocator, callee: Expression, args: []Expression, src: TokenData) !Expression {
     const call = try allocator.create(Call);
     call.* = .{
         .callee = callee,
@@ -131,7 +131,7 @@ pub fn createCallExpression(allocator: std.mem.Allocator, callee: Expression, ar
     };
 }
 
-pub fn createNativeCallExpression(allocator: std.mem.Allocator, args: []Expression, idx: usize, src: Token) !Expression {
+pub fn createNativeCallExpression(allocator: std.mem.Allocator, args: []Expression, idx: usize, src: TokenData) !Expression {
     const call = try allocator.create(NativeCall);
     call.* = .{
         .args = args,
@@ -144,7 +144,7 @@ pub fn createNativeCallExpression(allocator: std.mem.Allocator, args: []Expressi
     };
 }
 
-pub fn createVariable(allocator: std.mem.Allocator, init: ?Expression, name: []const u8, src: Token) !Expression {
+pub fn createVariable(allocator: std.mem.Allocator, init: ?Expression, name: []const u8, src: TokenData) !Expression {
     const variable = try allocator.create(Variable);
     errdefer allocator.destroy(variable);
     variable.* = .{ .initializer = init, .name = name };
@@ -155,7 +155,7 @@ pub fn createVariable(allocator: std.mem.Allocator, init: ?Expression, name: []c
     };
 }
 
-pub fn createInfix(allocator: std.mem.Allocator, op: TokenType, lhs: Expression, rhs: Expression, src: Token) !Expression {
+pub fn createInfix(allocator: std.mem.Allocator, op: TokenType, lhs: Expression, rhs: Expression, src: TokenData) !Expression {
     const infix = try allocator.create(Infix);
     errdefer allocator.destroy(infix);
     infix.* = .{ .op = op, .lhs = lhs, .rhs = rhs };
@@ -166,7 +166,7 @@ pub fn createInfix(allocator: std.mem.Allocator, op: TokenType, lhs: Expression,
     };
 }
 
-pub fn createUnary(allocator: std.mem.Allocator, op: TokenType, rhs: Expression, src: Token) !Expression {
+pub fn createUnary(allocator: std.mem.Allocator, op: TokenType, rhs: Expression, src: TokenData) !Expression {
     const unary = try allocator.create(Unary);
     errdefer allocator.destroy(unary);
     unary.* = .{ .op = op, .rhs = rhs };
@@ -177,7 +177,7 @@ pub fn createUnary(allocator: std.mem.Allocator, op: TokenType, rhs: Expression,
     };
 }
 
-pub fn createLiteral(value: Value, src: Token) !Expression {
+pub fn createLiteral(value: Value, src: TokenData) !Expression {
     return .{
         .node = .{ .literal = value },
         .src = src,
