@@ -320,6 +320,14 @@ pub fn run(self: *Vm) !void {
             continue :blk try self.nextOp();
         },
         .object_field_id => {
+            const obj = try Value.asObj(try self.nextReg());
+            const field_name = try Value.asString(self.gc, try self.nextReg());
+            var schema = obj.schema;
+            const id = schema.getIndex(field_name);
+            if (id == null) {
+                return Error.InvalidParameter;
+            }
+            self.setRegister(try self.next(), .{ .int = 0 });
             // const obj = self.nextReg();
             // const field_name = self.nextReg();
             // const dst = self.next();
@@ -329,8 +337,8 @@ pub fn run(self: *Vm) !void {
         },
         .object_get => {
             const obj = try Value.asObj(try self.nextReg());
-            const field_id = try self.next();
-            self.setRegister(try self.next(), obj.fields[field_id]);
+            const field_id = try Value.asInt(try self.nextReg());
+            self.setRegister(try self.next(), obj.fields[@intCast(field_id)]);
             continue :blk try self.nextOp();
         },
         .load_param => {

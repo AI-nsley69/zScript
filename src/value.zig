@@ -11,7 +11,7 @@ pub const Object = struct {
     pub const Schema = struct {
         fields: [*:0]const u8,
 
-        pub fn getIndex(self: *Schema, name: []const u8) ?usize {
+        pub fn getIndex(self: *const Schema, name: []const u8) ?usize {
             var ptr: [*:0]const u8 = self.fields;
             var idx: usize = 0;
             while (ptr[0] != 0) {

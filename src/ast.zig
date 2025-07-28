@@ -37,7 +37,7 @@ pub const ExpressionValue = union(ExpressionType) {
 
 pub const PropertyAccess = struct {
     root: Expression,
-    field: []const u8,
+    field: Expression,
     assignment: ?Expression,
 };
 
@@ -145,7 +145,7 @@ pub const Program = struct {
 
 // Expression helpers
 
-pub fn createPropertyAccess(gpa: std.mem.Allocator, root: Expression, field: []const u8, assignment: ?Expression, src: TokenData) !Expression {
+pub fn createPropertyAccess(gpa: std.mem.Allocator, root: Expression, field: Expression, assignment: ?Expression, src: TokenData) !Expression {
     const prop_access = try gpa.create(PropertyAccess);
     prop_access.* = .{ .root = root, .field = field, .assignment = assignment };
 

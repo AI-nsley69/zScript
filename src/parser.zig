@@ -402,9 +402,12 @@ fn dot(self: *Parser) Errors!Expression {
     const root = try self.primary();
 
     if (self.match(.dot)) {
-        const field = try self.consume(.identifier, "Expected expression after '.'");
+        const field_tkn = try self.consume(.identifier, "Expected expression after '.'");
+        const field_str = try self.allocator.alloc(u8, field_tkn.span.len);
+        @memcpy(field_str, field_tkn.span);
+        const field = try Ast.createLiteral(.{ .string = field_str }, self.peek());
         const prop_assignment: ?Expression = if (self.match(.assign)) try self.expression() else null;
-        return try Ast.createPropertyAccess(self.allocator, root, field.span, prop_assignment, self.previous());
+        return try Ast.createPropertyAccess(self.allocator, root, field, prop_assignment, self.previous());
     }
 
     return root;

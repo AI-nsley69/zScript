@@ -389,13 +389,13 @@ fn propertyAccess(self: *Compiler, target: *Ast.PropertyAccess, dst_reg: ?u8) Er
     const op: OpCodes = if (target.assignment == null) .object_get else .object_set;
     log.debug("TODO: Codegen for field id", .{});
     const root = try self.expression(target.root, null);
-    // Load field as string into constants
-    // Get field from constants as string
-    // object_set <idx> <src>
-    // object_get <idx> <dst>
-    // Specified register, else if assignment is active, get from the expression, otherwise just allocate a new register.
+    // Codegen for field id
+    const field = try self.expression(target.field, null);
+    const field_dst = try self.allocateRegister();
+    try out.writeAll(&.{ @intFromEnum(OpCodes.object_field_id), root, field, field_dst });
+    // Set / get for field
     const dst = dst_reg orelse if (target.assignment != null) try self.expression(target.assignment.?, try self.allocateRegister()) else try self.allocateRegister();
-    try out.writeAll(&.{ @intFromEnum(op), root, 0x00, dst });
+    try out.writeAll(&.{ @intFromEnum(op), root, field_dst, dst });
 
     return dst;
 }
