@@ -67,7 +67,7 @@ pub fn parse(gpa: Allocator, out: Writer, lexer: Lexer, tokens: std.MultiArrayLi
 }
 
 pub fn compile(gpa: Allocator, out: Writer, gc: *Gc, parsed: Ast.Program, opt: runOpts) !Compiler.CompilerOutput {
-    var compiler = Compiler{ .allocator = gpa, .gc = gc, .ast = parsed };
+    var compiler = Compiler{ .gpa = gpa, .gc = gc, .ast = parsed };
     const compiled = compiler.compile() catch {
         const stderr = std.io.getStdErr().writer();
         try utils.printCompileErr(stderr, compiler.err_msg.?);
