@@ -53,30 +53,6 @@ pub const Value = union(ValueType) {
     string: []u8,
     object: *Object,
 
-    pub fn deinit(self: *Value, gc: *Gc) usize {
-        return switch (self.*) {
-            // Non-heap values
-            .int, .float, .boolean => 0,
-            .string => {
-                defer gc.gpa.free(self.string);
-                return self.string.len * 8;
-            },
-            .object => {
-                var freed: usize = 0;
-                std.log.debug("TODO: Free field values", .{});
-                // for (self.object.fields) |field| {
-                //     freed += field.deinit(gc);
-                // }
-                // freed += @sizeOf([*]Value);
-                // gc.gpa.free(self.object.fields);
-                freed += @sizeOf([]Bytecode.Function) * self.object.functions.len;
-                gc.gpa.free(self.object.functions);
-                gc.gpa.destroy(self.object);
-                return freed;
-            },
-        };
-    }
-
     // Helper functions
     pub fn asInt(value: Value) !i64 {
         if (value != .int) return Error.InvalidType;
