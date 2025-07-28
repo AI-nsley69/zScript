@@ -96,17 +96,10 @@ pub fn sweep(self: *Gc) !void {
     self.marked.clearRetainingCapacity();
 }
 
-fn free(self: *Gc, value: Value, idx: ?usize) usize {
+fn free(self: *Gc, val: Value, idx: ?usize) usize {
+    var value = val;
     if (idx != null) _ = self.allocated.orderedRemove(idx.?);
-
-    return blk: switch (value) {
-        .boolean, .float, .int => unreachable,
-        .string => {
-            self.gpa.free(value.string);
-            break :blk value.string.len * 8;
-        },
-        .object => unreachable,
-    };
+    return value.deinit(self);
 }
 
 pub fn alloc(self: *Gc, value_type: ValueType, count: usize) !Value {

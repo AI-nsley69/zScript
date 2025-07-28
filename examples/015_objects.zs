@@ -1,5 +1,5 @@
 object MyObj {
-    .name = "Hello World!"
+    .name = "Hello World!",
 }
 
 immut obj = new MyObj();

@@ -11,16 +11,16 @@ pub const Object = struct {
     pub const Schema = struct {
         fields: [*:0]const u8,
 
-        pub fn getIndex(self: *Schema, name: []const u8) !usize {
+        pub fn getIndex(self: *Schema, name: []const u8) ?usize {
             var ptr: [*:0]const u8 = self.fields;
-            var idx = 0;
+            var idx: usize = 0;
             while (ptr[0] != 0) {
                 const field = std.mem.span(ptr);
                 if (std.mem.eql(u8, field, name)) return idx;
                 ptr += field.len + 1; // skip over the field data, as well as its sentinel
                 idx += 1;
             }
-            return Error.UnknownField;
+            return null;
         }
     };
     fields: [*]Value,
@@ -35,6 +35,30 @@ pub const Value = union(ValueType) {
     boolean: bool,
     string: []u8,
     object: *Object,
+
+    pub fn deinit(self: *Value, gc: *Gc) usize {
+        return switch (self.*) {
+            // Non-heap values
+            .int, .float, .boolean => 0,
+            .string => {
+                defer gc.gpa.free(self.string);
+                return self.string.len * 8;
+            },
+            .object => {
+                var freed: usize = 0;
+                std.log.debug("TODO: Free field values", .{});
+                // for (self.object.fields) |field| {
+                //     freed += field.deinit(gc);
+                // }
+                // freed += @sizeOf([*]Value);
+                // gc.gpa.free(self.object.fields);
+                freed += @sizeOf([]Bytecode.Function) * self.object.functions.len;
+                gc.gpa.free(self.object.functions);
+                gc.gpa.destroy(self.object);
+                return freed;
+            },
+        };
+    }
 
     // Helper functions
     pub fn asInt(value: Value) !i64 {
@@ -81,5 +105,10 @@ pub const Value = union(ValueType) {
                 unreachable;
             },
         };
+    }
+
+    pub fn asObj(value: Value) !*Object {
+        if (value != .object) return Error.InvalidType;
+        return value.object;
     }
 };

@@ -46,12 +46,14 @@ pub fn parse(gpa: Allocator, out: Writer, lexer: Lexer, tokens: std.MultiArrayLi
     var parsed = try parser.parse(gpa, tokens);
     errdefer parsed.arena.deinit();
 
-    const parser_errors = parser.errors.items;
-    for (parser_errors) |err| {
+    var had_err: bool = false;
+    var next_error = parser.errors.pop();
+    while (next_error != null) : (next_error = parser.errors.pop()) {
+        had_err = true;
         const err_writer = std.io.getStdErr().writer();
-        try utils.printParseError(gpa, err_writer, lexer, err, opt.file);
+        try utils.printParseError(gpa, err_writer, lexer, next_error.?, opt.file);
     }
-    if (parser_errors.len > 0) return error.ParseError;
+    if (had_err) return error.ParseError;
 
     if (!opt.do_not_optimize) {
         var optimizer = Optimizer{};

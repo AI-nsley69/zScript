@@ -319,6 +319,20 @@ pub fn run(self: *Vm) !void {
             self.setRegister(try self.next(), self.constants[try self.next()]);
             continue :blk try self.nextOp();
         },
+        .object_field_id => {
+            // const obj = self.nextReg();
+            // const field_name = self.nextReg();
+            // const dst = self.next();
+
+            @panic("Not implemented.");
+            // continue :blk try self.nextOp();
+        },
+        .object_get => {
+            const obj = try Value.asObj(try self.nextReg());
+            const field_id = try self.next();
+            self.setRegister(try self.next(), obj.fields[field_id]);
+            continue :blk try self.nextOp();
+        },
         .load_param => {
             const val = self.param_stack.pop();
             if (val == null) {

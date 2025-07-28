@@ -1,5 +1,6 @@
 const std = @import("std");
 const Ast = @import("ast.zig");
+const Compiler = @import("compiler.zig");
 const Vm = @import("vm.zig");
 const Value = @import("value.zig").Value;
 
@@ -11,7 +12,7 @@ pub const Error = error{
     UnsupportedValue,
 };
 
-const Errors = (Error || std.mem.Allocator.Error);
+const Errors = (Error || std.mem.Allocator.Error || Compiler.Error);
 
 const Optimizer = @This();
 
@@ -33,7 +34,7 @@ pub fn optimizeAst(self: *Optimizer, allocator: std.mem.Allocator, program: Prog
     errdefer arena.deinit();
     defer program.arena.deinit();
 
-    return .{ .arena = arena, .statements = stmts, .variables = try program.variables.clone(self.allocator) };
+    return .{ .arena = arena, .statements = stmts, .variables = try program.variables.clone(self.allocator), .objects = try program.objects.clone(self.allocator) };
 }
 
 fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpression: fn (*Optimizer, Expression) Errors!Expression) !Statement {
@@ -106,58 +107,9 @@ fn isFoldable(self: *Optimizer, expr: Expression) bool {
     };
 }
 
-fn eval(self: *Optimizer, expr: Expression) !Value {
-    const node = expr.node;
-    return switch (node) {
-        .infix => {
-            const infix = node.infix.*;
-            const lhs = try self.eval(infix.lhs);
-            const rhs = try self.eval(infix.rhs);
-
-            return switch (infix.op) {
-                .add => {
-                    return switch (lhs) {
-                        .int => .{ .int = lhs.int + rhs.int },
-                        .float => .{ .float = lhs.float + rhs.float },
-                        else => Error.UnsupportedValue,
-                    };
-                },
-                .sub => {
-                    return switch (lhs) {
-                        .int => .{ .int = lhs.int - rhs.int },
-                        .float => .{ .float = lhs.float - rhs.float },
-                        else => Error.UnsupportedValue,
-                    };
-                },
-                .mul => {
-                    return switch (lhs) {
-                        .int => .{ .int = lhs.int * rhs.int },
-                        .float => .{ .float = lhs.float * rhs.float },
-                        else => Error.UnsupportedValue,
-                    };
-                },
-                .div => {
-                    return switch (lhs) {
-                        .int => .{ .int = @divFloor(lhs.int, rhs.int) },
-                        .float => .{ .float = @divFloor(lhs.float, rhs.float) },
-                        else => Error.UnsupportedValue,
-                    };
-                },
-                else => Error.UnsupportedValue,
-            };
-        },
-        .unary => {
-            return try self.eval(expr.node.unary.*.rhs);
-        },
-
-        .literal => return expr.node.literal,
-        else => Error.UnsupportedValue,
-    };
-}
-
 fn constantFold(self: *Optimizer, expr: Expression) !Expression {
     if (self.isFoldable(expr)) {
-        return try Ast.createLiteral(try self.eval(expr), expr.src);
+        return try Ast.createLiteral(try Compiler.eval(expr), expr.src);
     }
     switch (expr.node) {
         .infix => {

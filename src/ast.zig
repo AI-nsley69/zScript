@@ -2,7 +2,10 @@ const std = @import("std");
 const Runtime = @import("vm.zig");
 const Lexer = @import("lexer.zig");
 const Parser = @import("parser.zig");
-const Value = @import("value.zig").Value;
+const val = @import("value.zig");
+
+const Value = val.Value;
+const ObjectValue = val.Object;
 
 const TokenType = Lexer.TokenType;
 const TokenData = Lexer.TokenData;
@@ -98,7 +101,7 @@ pub const StatementValue = union(StatementType) {
 
 pub const Object = struct {
     name: []const u8,
-    properties: std.StringHashMap(?Expression),
+    properties: std.StringArrayHashMapUnmanaged(?Expression),
     functions: []Statement,
 };
 
@@ -136,6 +139,7 @@ pub const Statement = struct {
 pub const Program = struct {
     statements: std.ArrayListUnmanaged(Statement),
     variables: std.StringHashMapUnmanaged(VariableMetaData),
+    objects: std.StringHashMapUnmanaged(ObjectValue.Schema),
     arena: std.heap.ArenaAllocator,
 };
 
@@ -294,7 +298,7 @@ pub fn createReturn(expr: ?Expression) !Statement {
     };
 }
 
-pub fn createObject(gpa: std.mem.Allocator, name: []const u8, properties: std.StringHashMap(?Expression), functions: []Statement) !Statement {
+pub fn createObject(gpa: std.mem.Allocator, name: []const u8, properties: std.StringArrayHashMapUnmanaged(?Expression), functions: []Statement) !Statement {
     const obj = try gpa.create(Object);
     obj.* = .{
         .name = name,

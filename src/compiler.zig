@@ -4,19 +4,22 @@ const Bytecode = @import("bytecode.zig");
 const Gc = @import("gc.zig");
 const Vm = @import("vm.zig");
 const Ast = @import("ast.zig");
-const Value = @import("value.zig").Value;
-
+const Val = @import("value.zig");
 const tracy = @import("tracy");
 
 const log = std.log.scoped(.compiler);
 
+const Value = Val.Value;
+const Object = Val.Object;
+
 const TokenType = Lexer.TokenType;
 const OpCodes = Bytecode.OpCodes;
 
-const Error = error{
+pub const Error = error{
     OutOfRegisters,
     OutOfConstants,
     InvalidJmpTarget,
+    EvaluationFailed,
     Unknown,
 };
 
@@ -33,14 +36,14 @@ pub const CompilerOutput = struct {
     const Self = @This();
     frames: []Bytecode.Function,
     constants: []Value,
-    objects: []Value,
+    objects: std.StringArrayHashMapUnmanaged(Value),
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         for (self.frames) |frame| {
             allocator.free(frame.body);
         }
         allocator.free(self.frames);
-        allocator.free(self.objects);
+        self.objects.deinit(allocator);
     }
 };
 
@@ -57,8 +60,7 @@ variables: std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)) = std.ArrayLis
 functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
 
-objects: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
-object_lookup: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
+objects: std.StringArrayHashMapUnmanaged(Value) = std.StringArrayHashMapUnmanaged(Value){},
 
 err_msg: ?[]u8 = null,
 
@@ -113,7 +115,7 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     return .{
         .frames = try frames.toOwnedSlice(self.allocator),
         .constants = try self.constants.toOwnedSlice(self.allocator),
-        .objects = try self.objects.toOwnedSlice(self.allocator),
+        .objects = self.objects,
     };
 }
 
@@ -125,10 +127,6 @@ pub fn compileFrame(self: *Compiler, target: []Ast.Statement, func: *Ast.Functio
     self.frame_idx = self.comp_frames.items.len - 1;
     // Compile the new frame
     const out = self.getOut();
-    // Load the parameters for the function (if exists)
-    // const reversed = try self.allocator.dupe(*Ast.Variable, func.params);
-    // defer self.allocator.free(reversed);
-    // std.mem.reverse(*Ast.Variable, reversed);
     for (func.params) |param| {
         try out.writeAll(&.{ @intFromEnum(OpCodes.load_param), try self.variable(param) });
     }
@@ -257,11 +255,32 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
     try self.variables.append(self.allocator, .{});
     defer self.destroyScope();
 
-    // Create "init" function for initializing
+    var field_values = std.ArrayListUnmanaged(Value){};
+    var field_it = target.properties.iterator();
+    var next = field_it.next();
+    while (next != null) : (next = field_it.next()) {
+        // const field_name = next.?.key_ptr;
+        const field_expression = next.?.value_ptr;
+        log.debug("TODO: Uninitialized fields as null values.", .{});
+        const value: Value = if (field_expression.* != null) try eval(field_expression.*.?) else .{ .int = 0 };
+        try field_values.append(self.gc.gpa, value);
+    }
 
-    _ = target;
+    var functions = std.ArrayListUnmanaged(Bytecode.Function){};
+    log.debug("TODO: Create functions for objects", .{});
 
-    @panic("Not implemented");
+    const obj = try self.gc.gpa.create(Object);
+    obj.* = .{
+        .fields = (try field_values.toOwnedSlice(self.gc.gpa)).ptr,
+        .functions = try functions.toOwnedSlice(self.gc.gpa),
+        .schema = &self.ast.objects.get(target.name).?,
+    };
+
+    const obj_val: Value = .{ .object = obj };
+    try self.objects.put(self.gc.gpa, target.name, obj_val);
+    try self.gc.allocated.append(self.gc.gpa, obj_val);
+    // @panic("Not implemented");
+    return 0;
 }
 
 fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
@@ -273,7 +292,8 @@ fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
         .variable => try self.variable(node.variable),
         .call => try self.call(node.call, dst_reg),
         .native_call => try self.nativeCall(node.native_call, dst_reg),
-        else => unreachable,
+        .new_object => try self.newObject(node.new_object, dst_reg),
+        .property_access => try self.propertyAccess(node.property_access, dst_reg),
     };
 }
 
@@ -344,6 +364,39 @@ fn nativeCall(self: *Compiler, target: *Ast.NativeCall, dst_reg: ?u8) Errors!u8 
     // Finalize the call instruction
     try out.writeAll(&.{ @intFromEnum(OpCodes.native_call), @truncate(target.idx) });
     try out.writeAll(&.{ @intFromEnum(OpCodes.copy), dst, 0x00 });
+    return dst;
+}
+
+fn newObject(self: *Compiler, target: Ast.NewObject, dst_reg: ?u8) Errors!u8 {
+    const out = self.getOut();
+    const obj = target.name;
+    const val = self.objects.get(obj);
+    if (val == null) {
+        const msg = try std.fmt.allocPrint(self.allocator, "Undefined object '{s}'", .{obj});
+        try self.reportError(msg);
+        return Error.Unknown;
+    }
+
+    try self.constants.append(self.allocator, val.?);
+    const const_idx = self.constants.items.len - 1;
+    const dst = dst_reg orelse try self.allocateRegister();
+    try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
+    return dst;
+}
+
+fn propertyAccess(self: *Compiler, target: *Ast.PropertyAccess, dst_reg: ?u8) Errors!u8 {
+    const out = self.getOut();
+    const op: OpCodes = if (target.assignment == null) .object_get else .object_set;
+    log.debug("TODO: Codegen for field id", .{});
+    const root = try self.expression(target.root, null);
+    // Load field as string into constants
+    // Get field from constants as string
+    // object_set <idx> <src>
+    // object_get <idx> <dst>
+    // Specified register, else if assignment is active, get from the expression, otherwise just allocate a new register.
+    const dst = dst_reg orelse if (target.assignment != null) try self.expression(target.assignment.?, try self.allocateRegister()) else try self.allocateRegister();
+    try out.writeAll(&.{ @intFromEnum(op), root, 0x00, dst });
+
     return dst;
 }
 
@@ -443,4 +496,53 @@ fn opcode(target: TokenType) !u8 {
         else => return Error.Unknown,
     };
     return @intFromEnum(op);
+}
+
+pub fn eval(expr: Ast.Expression) !Value {
+    const node = expr.node;
+    return switch (node) {
+        .infix => {
+            const infix_node = node.infix.*;
+            const lhs = try eval(infix_node.lhs);
+            const rhs = try eval(infix_node.rhs);
+
+            return switch (infix_node.op) {
+                .add => {
+                    return switch (lhs) {
+                        .int => .{ .int = lhs.int + rhs.int },
+                        .float => .{ .float = lhs.float + rhs.float },
+                        else => Error.EvaluationFailed,
+                    };
+                },
+                .sub => {
+                    return switch (lhs) {
+                        .int => .{ .int = lhs.int - rhs.int },
+                        .float => .{ .float = lhs.float - rhs.float },
+                        else => Error.EvaluationFailed,
+                    };
+                },
+                .mul => {
+                    return switch (lhs) {
+                        .int => .{ .int = lhs.int * rhs.int },
+                        .float => .{ .float = lhs.float * rhs.float },
+                        else => Error.EvaluationFailed,
+                    };
+                },
+                .div => {
+                    return switch (lhs) {
+                        .int => .{ .int = @divFloor(lhs.int, rhs.int) },
+                        .float => .{ .float = @divFloor(lhs.float, rhs.float) },
+                        else => Error.EvaluationFailed,
+                    };
+                },
+                else => Error.EvaluationFailed,
+            };
+        },
+        .unary => {
+            return try eval(expr.node.unary.*.rhs);
+        },
+
+        .literal => return expr.node.literal,
+        else => Error.EvaluationFailed,
+    };
 }

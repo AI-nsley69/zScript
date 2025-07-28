@@ -53,6 +53,8 @@ variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnman
 functions: std.StringHashMapUnmanaged(FunctionMetadata) = std.StringHashMapUnmanaged(FunctionMetadata){},
 objects: std.StringHashMapUnmanaged(Object.Schema) = std.StringHashMapUnmanaged(Object.Schema){},
 
+errors: std.MultiArrayList(Token) = std.MultiArrayList(Token){},
+
 current_func: []const u8 = "main",
 
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = TokenData{ .tag = .err, .span = "" } } } };
@@ -66,7 +68,7 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.MultiArrayList
     self.allocator = arena.allocator();
     self.tokens = tokens;
     var statements = std.ArrayListUnmanaged(Statement){};
-    while (!self.isEof() and self.errors.items.len < 1) {
+    while (!self.isEof() and self.errors.items(.data).len < 1) {
         // Proceeds with parsing until then, then prints the errors and goes on
         const stmt = self.declaration() catch dummy_stmt;
         try statements.append(self.allocator, stmt);
@@ -79,6 +81,7 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.MultiArrayList
         .arena = arena,
         .variables = self.variables,
         .statements = statements,
+        .objects = self.objects,
     };
 }
 
@@ -139,13 +142,14 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
     const name = try self.consume(.identifier, "Expected object name.");
     _ = try self.consume(.left_bracket, "Expected '{' after object declaration.");
 
-    var fields = std.StringHashMap(?Expression).init(self.allocator);
+    var fields = std.StringArrayHashMapUnmanaged(?Expression){};
     var functions = std.ArrayListUnmanaged(Statement){};
     while (!self.match(.right_bracket)) {
         if (self.match(.dot)) { // Check for properties
             const field_name = try self.consume(.identifier, "Expected property name");
             const expr = if (self.match(.assign)) try self.expression() else null;
-            try fields.put(field_name.span, expr);
+            try fields.put(self.allocator, field_name.span, expr);
+            _ = try self.consume(.comma, "Expected ',' after object field");
         } else if (self.match(.fn_declaration)) { // Check for functions
             try functions.append(self.allocator, try self.functionDeclaration());
         } else {
@@ -158,9 +162,23 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         try self.reportError("Expected '}' after object declaration.");
     }
 
-    try self.objects.put(self.allocator, .{ .fields = });
+    var field_len: usize = 0;
+    for (fields.keys()) |key| {
+        field_len += key.len + 1;
+    }
 
-    return Ast.createObject(self.allocator, name.span, properties, try functions.toOwnedSlice(self.allocator));
+    const inline_fields = try self.allocator.allocSentinel(u8, field_len, '\x00');
+    var i: usize = 0;
+    for (fields.keys()) |key| {
+        const duped = try self.allocator.dupeZ(u8, key);
+        @memcpy(inline_fields[i .. i + duped.len], duped);
+        @memset(inline_fields[i + duped.len + 1 .. i + duped.len + 2], '\x00');
+        i += duped.len + 1;
+    }
+
+    try self.objects.put(self.allocator, name.span, .{ .fields = inline_fields.ptr });
+
+    return Ast.createObject(self.allocator, name.span, fields, try functions.toOwnedSlice(self.allocator));
 }
 
 fn statement(self: *Parser) Errors!Statement {
