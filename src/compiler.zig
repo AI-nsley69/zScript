@@ -92,8 +92,8 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
         self.comp_frames.deinit(self.allocator);
     }
     // Create a pseudo main function for initial frame
-    const main_body: Ast.Statement = try Ast.createBlockStatement(self.ast.statements.items);
-    const main_func = try Ast.createFunction(self.allocator, "main", main_body, &.{});
+    const main_body: Ast.Statement = try Ast.Block.create(self.ast.statements.items);
+    const main_func = try Ast.Function.create(self.allocator, "main", main_body, &.{});
     defer self.allocator.destroy(main_func.node.function);
 
     try self.functions.put(self.allocator, "main", 0);
@@ -142,7 +142,31 @@ pub fn compileFrame(self: *Compiler, func: *Ast.Function) Errors!u8 {
     return final_dst;
 }
 
-// fn compileObjectFrame(self: *Compiler, func: *Ast.Function, obj: *Ast.Object) Errors!Bytecode.Function {}
+fn compileObjectFrame(self: *Compiler, func: *Ast.Function) Errors!Bytecode.Function {
+    const previous_frame = self.frame_idx;
+    defer self.frame_idx = previous_frame;
+    // Create new scope for the variable
+    try self.variables.append(self.allocator, .{});
+    defer self.destroyScope();
+    // Setup a new frame
+    try self.comp_frames.append(self.allocator, .{ .name = func.name });
+    self.frame_idx = self.comp_frames.items.len - 1;
+    // Compile new frame
+    const out = self.getOut();
+    // Setup self variable in scope
+    const dst = try self.allocateRegister();
+    try self.scope().put(self.allocator, "self", dst);
+    try out.writeAll(&.{ @intFromEnum(OpCodes.load_param), dst });
+
+    var final_dst: u8 = 0;
+    for (func.body.node.block.statements) |stmt| {
+        final_dst = try self.statement(stmt);
+    }
+
+    const comp_frame = self.comp_frames.pop();
+    var instructions = comp_frame.?.instructions;
+    return .{ .name = comp_frame.?.name, .body = try instructions.toOwnedSlice(self.allocator), .reg_size = comp_frame.?.reg_idx };
+}
 
 fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
     const node = target.node;
@@ -272,10 +296,10 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
 
     var functions = std.ArrayListUnmanaged(Bytecode.Function){};
     log.debug("TODO: Create functions for objects", .{});
-    // for (target.functions) |function| {
-    //     const node = function.node.function;
-    //     try self.compileFrame(node.body.node.block.statements, node);
-    // }
+    for (target.functions) |func| {
+        const node = func.node.function;
+        try functions.append(self.allocator, try self.compileObjectFrame(node));
+    }
 
     const obj = try self.gc.gpa.create(Object);
     obj.* = .{
@@ -301,7 +325,8 @@ fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
         .call => try self.call(node.call, dst_reg),
         .native_call => try self.nativeCall(node.native_call, dst_reg),
         .new_object => try self.newObject(node.new_object, dst_reg),
-        .property_access => try self.propertyAccess(node.property_access, dst_reg),
+        .field_access => try self.propertyAccess(node.field_access, dst_reg),
+        .method_call => unreachable,
     };
 }
 
@@ -392,7 +417,7 @@ fn newObject(self: *Compiler, target: Ast.NewObject, dst_reg: ?u8) Errors!u8 {
     return dst;
 }
 
-fn propertyAccess(self: *Compiler, target: *Ast.PropertyAccess, dst_reg: ?u8) Errors!u8 {
+fn propertyAccess(self: *Compiler, target: *Ast.FieldAccess, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
     const op: OpCodes = if (target.assignment == null) .object_get else .object_set;
     log.debug("TODO: Cache field id if register still available in scope", .{});

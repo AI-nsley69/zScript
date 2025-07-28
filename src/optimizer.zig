@@ -49,7 +49,7 @@ fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpress
             const expr = try optimizeExpression(self, conditional.expression);
             const body = try self.optimizeStatement(conditional.body, optimizeExpression);
             const otherwise = if (conditional.otherwise != null) try self.optimizeStatement(conditional.otherwise.?, optimizeExpression) else null;
-            return try Ast.createConditional(self.allocator, expr, body, otherwise);
+            return try Ast.Conditional.create(self.allocator, expr, body, otherwise);
         },
         .block => {
             const block = node.block;
@@ -58,7 +58,7 @@ fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpress
                 try new_stmts.append(self.allocator, try self.optimizeStatement(block_stmt, optimizeExpression));
             }
 
-            return try Ast.createBlockStatement(try new_stmts.toOwnedSlice(self.allocator));
+            return try Ast.Block.create(try new_stmts.toOwnedSlice(self.allocator));
         },
         .loop => {
             const loop = node.loop.*;
@@ -72,18 +72,18 @@ fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpress
                 post = try optimizeExpression(self, loop.post.?);
             }
             const body = try self.optimizeStatement(loop.body, optimizeExpression);
-            return try Ast.createLoop(self.allocator, init, cond, post, body);
+            return try Ast.Loop.create(self.allocator, init, cond, post, body);
         },
         .function => {
             const func = node.function.*;
             const body = try self.optimizeStatement(func.body, optimizeExpression);
 
-            return try Ast.createFunction(self.allocator, try self.allocator.dupe(u8, func.name), body, try self.allocator.dupe(*Ast.Variable, func.params));
+            return try Ast.Function.create(self.allocator, try self.allocator.dupe(u8, func.name), body, try self.allocator.dupe(*Ast.Variable, func.params));
         },
         .@"return" => {
             const ret = node.@"return";
-            if (ret.value == null) return try Ast.createReturn(null);
-            return try Ast.createReturn(try optimizeExpression(self, ret.value.?));
+            if (ret.value == null) return try Ast.Return.create(null);
+            return try Ast.Return.create(try optimizeExpression(self, ret.value.?));
         },
         else => unreachable,
     }
@@ -109,27 +109,27 @@ fn isFoldable(self: *Optimizer, expr: Expression) bool {
 
 fn constantFold(self: *Optimizer, expr: Expression) !Expression {
     if (self.isFoldable(expr)) {
-        return try Ast.createLiteral(try Compiler.eval(expr), expr.src);
+        return try Ast.Literal.create(try Compiler.eval(expr), expr.src);
     }
     switch (expr.node) {
         .infix => {
             const infix = expr.node.infix.*;
             const lhs = try self.constantFold(infix.lhs);
             const rhs = try self.constantFold(infix.rhs);
-            return try Ast.createInfix(self.allocator, infix.op, lhs, rhs, expr.src);
+            return try Ast.Infix.create(self.allocator, infix.op, lhs, rhs, expr.src);
         },
 
         .unary => {
             const unary = expr.node.unary.*;
             const rhs = try self.constantFold(unary.rhs);
-            return try Ast.createUnary(self.allocator, unary.op, rhs, expr.src);
+            return try Ast.Unary.create(self.allocator, unary.op, rhs, expr.src);
         },
         .literal => return expr,
         .variable => {
             const variable = expr.node.variable.*;
             if (variable.initializer == null) return expr;
             const init = try self.constantFold(variable.initializer.?);
-            return try Ast.createVariable(self.allocator, init, variable.name, expr.src);
+            return try Ast.Variable.create(self.allocator, init, variable.name, expr.src);
         },
         .call => {
             const call = expr.node.call.*;
@@ -139,8 +139,8 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
             }
             // Duplicate the callee node
             const old_callee = call.callee.node.variable.*;
-            const callee = try Ast.createVariable(self.allocator, old_callee.initializer, old_callee.name, call.callee.src);
-            return Ast.createCallExpression(self.allocator, callee, try params.toOwnedSlice(self.allocator), expr.src);
+            const callee = try Ast.Variable.create(self.allocator, old_callee.initializer, old_callee.name, call.callee.src);
+            return Ast.Call.create(self.allocator, callee, try params.toOwnedSlice(self.allocator), expr.src);
         },
         .native_call => {
             const call = expr.node.native_call.*;
@@ -149,7 +149,7 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
                 try params.append(self.allocator, try self.constantFold(arg));
             }
             // Duplicate the callee node
-            return Ast.createNativeCallExpression(self.allocator, try params.toOwnedSlice(self.allocator), call.idx, expr.src);
+            return Ast.NativeCall.create(self.allocator, try params.toOwnedSlice(self.allocator), call.idx, expr.src);
         },
         else => unreachable,
     }

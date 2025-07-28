@@ -1,8 +1,11 @@
 object Person {
     .name = "Bob",
     .surname = "Aliceson",
+
+    fn sayName() {
+        print(self.name + self.surname);
+    }
 }
 
 mut obj = new Person();
-print(obj.name);
-print(obj.surname);
+obj.sayName();
