@@ -55,6 +55,8 @@ objects: std.StringHashMapUnmanaged(*const Object.Schema) = std.StringHashMapUnm
 
 errors: std.MultiArrayList(Token) = std.MultiArrayList(Token){},
 
+errors: std.MultiArrayList(Token) = std.MultiArrayList(Token){},
+
 current_func: []const u8 = "main",
 
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = TokenData{ .tag = .err, .span = "" } } } };
@@ -204,7 +206,8 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         if (self.match(.dot)) { // Check for properties
             const field_name = try self.consume(.identifier, "Expected property name");
             const expr = if (self.match(.assign)) try self.expression() else null;
-            try fields.put(field_name.span, expr);
+            try fields.put(self.allocator, field_name.span, expr);
+            _ = try self.consume(.comma, "Expected ',' after object field");
         } else if (self.match(.fn_declaration)) { // Check for functions
             try functions.append(self.gpa, try self.functionDeclaration());
         } else {
