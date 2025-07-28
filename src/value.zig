@@ -17,7 +17,6 @@ pub const Object = struct {
             while (ptr[0] != 0) {
                 const field = std.mem.span(ptr);
                 if (std.mem.eql(u8, field, name)) {
-                    std.log.debug("Return idx: {d}", .{idx});
                     return idx;
                 }
                 ptr += field.len + 1; // skip over the field data, as well as its sentinel

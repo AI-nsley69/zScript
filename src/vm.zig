@@ -327,7 +327,7 @@ pub fn run(self: *Vm) !void {
             if (id == null) {
                 return Error.InvalidParameter;
             }
-            self.setRegister(try self.next(), .{ .int = 0 });
+            self.setRegister(try self.next(), .{ .int = @intCast(id.?) });
             continue :blk try self.nextOp();
         },
         .object_get => {
