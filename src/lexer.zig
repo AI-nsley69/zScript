@@ -68,13 +68,33 @@ fn isNotQuote(char: u8) bool {
 
 const Lexer = @This();
 
-source: []const u8,
+buf: [:0]const u8,
 current: usize = 0,
+
 line: usize = 1,
 line_pos: usize = 0,
+
 tokens: Tokens = Tokens{},
 tokenInfo: std.ArrayListUnmanaged(TokenInfo) = std.ArrayListUnmanaged(TokenInfo){},
-arena: std.heap.ArenaAllocator,
+
+gpa: std.mem.Allocator,
+
+pub fn init(buffer: [:0]const u8, gpa: std.mem.Allocator) Lexer {
+    // Skip the UTF-8 BOM if present.
+    return .{
+        .buf = buffer,
+        .current = if (std.mem.startsWith(u8, buffer, "\xEF\xBB\xBF")) 3 else 0,
+        .gpa = gpa,
+    };
+}
+
+pub fn deinit(self: *Lexer) void {
+    for (self.tokens.items) |token| {
+        if (token.tag != .err) continue;
+        self.gpa.free(token.span);
+    }
+    self.tokens.deinit(self.gpa);
+}
 
 pub fn scan(self: *Lexer) !Tokens {
     const tr = tracy.trace(@src());
@@ -84,51 +104,46 @@ pub fn scan(self: *Lexer) !Tokens {
 
     var token: Token = self.scanToken();
     while (token.tag != .eof and token.tag != .err) : (token = self.scanToken()) {
-        try self.tokenInfo.append(self.arena.allocator(), self.makeTokenInfo(token));
+        try self.tokenInfo.append(self.gpa, self.makeTokenInfo(token));
         token.idx = self.tokenInfo.items.len - 1;
-        try self.tokens.append(self.arena.allocator(), token);
+        try self.tokens.append(self.gpa, token);
     }
 
-    try self.tokenInfo.append(self.arena.allocator(), self.makeTokenInfo(token));
+    try self.tokenInfo.append(self.gpa, self.makeTokenInfo(token));
     token.idx = self.tokenInfo.items.len - 1;
-    try self.tokens.append(self.arena.allocator(), token);
+    try self.tokens.append(self.gpa, token);
 
     log.debug("Tokenized src with {d} tokens", .{self.tokens.items.len});
 
     return self.tokens;
 }
 
-pub fn deinit(self: *Lexer) void {
-    self.tokens.deinit(self.arena.allocator());
-    self.arena.deinit();
-}
-
 fn isAtEnd(self: *Lexer) bool {
-    return self.current >= self.source.len;
+    return self.current >= self.buf.len;
 }
 
 fn advance(self: *Lexer) u8 {
     self.current += 1;
-    return self.source[self.current - 1];
+    return self.buf[self.current - 1];
 }
 
 fn peek(self: *Lexer) u8 {
     if (self.isAtEnd()) {
         return 0;
     }
-    return self.source[self.current];
+    return self.buf[self.current];
 }
 
 fn peekNext(self: *Lexer) u8 {
     if (self.isAtEnd()) {
         return 0;
     }
-    return self.source[self.current + 1];
+    return self.buf[self.current + 1];
 }
 
 fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
     const start = self.current;
-    if (self.source[self.current - 1] != expected[0]) return false;
+    if (self.buf[self.current - 1] != expected[0]) return false;
 
     inline for (expected[1..]) |c| {
         if (!self.match(c)) {
@@ -142,7 +157,7 @@ fn matchFull(self: *Lexer, comptime expected: []const u8) bool {
 }
 
 fn match(self: *Lexer, comptime expected: u8) bool {
-    const condition = !self.isAtEnd() and self.source[self.current] == expected;
+    const condition = !self.isAtEnd() and self.buf[self.current] == expected;
     self.current += 1 * @intFromBool(condition);
     return condition;
 }
@@ -175,7 +190,7 @@ fn scanToken(self: *Lexer) Token {
                 return self.makeToken(.neq, start);
             }
 
-            const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
+            const msg = std.fmt.allocPrint(self.gpa, "Unknown token '{s}'", .{[1]u8{c}}) catch "Unable to create msg";
             return reportError(msg);
         },
         '<' => {
@@ -188,7 +203,7 @@ fn scanToken(self: *Lexer) Token {
         },
         '|' => {
             if (!self.match('|')) {
-                const msg = std.fmt.allocPrint(self.arena.allocator(), "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
+                const msg = std.fmt.allocPrint(self.gpa, "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
                 return reportError(msg);
             }
 
@@ -196,7 +211,7 @@ fn scanToken(self: *Lexer) Token {
         },
         '&' => {
             if (!self.match('&')) {
-                const msg = std.fmt.allocPrint(self.arena.allocator(), "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
+                const msg = std.fmt.allocPrint(self.gpa, "Expected token '{s}', found: '{s}'", .{ [_]u8{c}, [_]u8{self.peek()} }) catch "Unable to create msg";
                 return reportError(msg);
             }
 
@@ -210,7 +225,7 @@ fn scanToken(self: *Lexer) Token {
         },
         'a'...'z', 'A'...'Z' => return self.alpha(start),
         else => {
-            const msg = std.fmt.allocPrint(self.arena.allocator(), "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
+            const msg = std.fmt.allocPrint(self.gpa, "Unknown token '{s}'", .{[_]u8{c}}) catch "Unable to create msg";
             return reportError(msg);
         },
     }
@@ -269,7 +284,7 @@ const keywords = std.StaticStringMap(TokenType).initComptime(&.{
 });
 
 fn alpha(self: *Lexer, start: usize) Token {
-    const name = self.source[self.takeWhile(isAlpha)..self.current];
+    const name = self.buf[self.takeWhile(isAlpha)..self.current];
     const op: TokenType = keywords.get(name) orelse .identifier;
 
     return self.makeToken(op, start);
@@ -284,19 +299,19 @@ fn makeTokenInfo(self: *Lexer, token: Token) TokenInfo {
 }
 
 fn makeToken(self: *Lexer, tokenType: TokenType, start: usize) Token {
-    return .{ .tag = tokenType, .span = self.source[start..self.current] };
+    return .{ .tag = tokenType, .span = self.buf[start..self.current] };
 }
 
 fn getLineSource(self: *Lexer) []const u8 {
     var current = self.line_pos;
     // If next line is just an empty line, return empty string
-    if (current >= self.source.len) return "";
-    var c = self.source[current];
+    if (current >= self.buf.len) return "";
+    var c = self.buf[current];
     const endPos = while (true) {
         current += 1;
-        if (c == '\n' or current == self.source.len) break current;
-        c = self.source[current];
+        if (c == '\n' or current == self.buf.len) break current;
+        c = self.buf[current];
     };
 
-    return self.source[self.line_pos..endPos];
+    return self.buf[self.line_pos..endPos];
 }
