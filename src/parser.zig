@@ -162,22 +162,20 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         try self.reportError("Expected '}' after object declaration.");
     }
 
-    var field_len: usize = 0;
+    var packed_len: usize = 0;
     for (fields.keys()) |key| {
-        field_len += key.len + 1;
+        packed_len += key.len + 1;
     }
 
-    const inline_fields = try self.allocator.allocSentinel(u8, field_len, '\x00');
-    var i: usize = 0;
+    var packed_fields: std.ArrayListUnmanaged(u8) = try .initCapacity(self.allocator, packed_len + 1);
+    errdefer packed_fields.deinit(self.allocator);
     for (fields.keys()) |key| {
-        const duped = try self.allocator.dupeZ(u8, key);
-        @memcpy(inline_fields[i .. i + duped.len], duped);
-        @memset(inline_fields[i + duped.len + 1 .. i + duped.len + 2], '\x00');
-        i += duped.len + 1;
+        packed_fields.appendSliceAssumeCapacity(key);
+        packed_fields.appendAssumeCapacity(0);
     }
 
     const schema = try self.allocator.create(Object.Schema);
-    schema.* = .{ .fields = inline_fields.ptr };
+    schema.* = .{ .fields = try packed_fields.toOwnedSliceSentinel(self.allocator, 0) };
     try self.objects.put(self.allocator, name.span, schema);
 
     return Ast.createObject(self.allocator, name.span, fields, try functions.toOwnedSlice(self.allocator));

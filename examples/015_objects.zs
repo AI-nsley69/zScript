@@ -1,7 +1,8 @@
-object MyObj {
-    .name = "Hello World!",
+object Person {
+    .name = "Bob",
+    .surname = "Aliceson",
 }
 
-mut obj = new MyObj();
-obj.name = "test";
+mut obj = new Person();
 print(obj.name);
+print(obj.surname);
