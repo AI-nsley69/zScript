@@ -387,7 +387,7 @@ fn newObject(self: *Compiler, target: Ast.NewObject, dst_reg: ?u8) Errors!u8 {
 fn propertyAccess(self: *Compiler, target: *Ast.PropertyAccess, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
     const op: OpCodes = if (target.assignment == null) .object_get else .object_set;
-    log.debug("TODO: Codegen for field id", .{});
+    log.debug("TODO: Cache field id if register still available in scope", .{});
     const root = try self.expression(target.root, null);
     // Codegen for field id
     const field = try self.expression(target.field, null);
