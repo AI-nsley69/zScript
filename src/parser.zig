@@ -361,7 +361,7 @@ fn new(self: *Parser) Errors!Expression {
         _ = try self.consume(.right_paren, "Expected ')§' after new object creation.");
 
         const dummy_arr: []Expression = &[0]Expression{};
-        return Ast.createNewObject(name.span, dummy_arr, src);
+        return Ast.NewObject.create(name.span, dummy_arr, src);
     }
 
     return self.nativeCall();
@@ -519,7 +519,7 @@ fn primary(self: *Parser) Errors!Expression {
             self.gpa.free(name);
             name = new_name;
         }
-        return Ast.createVariable(self.gpa, null, name, self.previous());
+        return Ast.Variable.create(self.gpa, null, name, self.previous());
     }
 
     if (self.match(.identifier)) {
