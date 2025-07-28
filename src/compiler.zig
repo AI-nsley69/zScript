@@ -92,15 +92,16 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
         self.comp_frames.deinit(self.allocator);
     }
     // Create a pseudo main function for initial frame
-    const no_body: Ast.Statement = .{ .node = .{ .block = .{ .statements = &.{} } } };
-    var main_func: Ast.Function = .{ .name = "main", .params = &.{}, .body = no_body };
+    const main_body: Ast.Statement = try Ast.createBlockStatement(self.ast.statements.items);
+    const main_func = try Ast.createFunction(self.allocator, "main", main_body, &.{});
+    defer self.allocator.destroy(main_func.node.function);
 
     try self.functions.put(self.allocator, "main", 0);
 
     try self.variables.append(self.allocator, .{});
     defer self.destroyScope();
     // Compile the actual frame
-    const final_dst = try self.compileFrame(self.ast.statements.items, &main_func);
+    const final_dst = try self.compileFrame(main_func.node.function);
     // Emit return instruction at the end
     try self.getOut().writeAll(&.{ @intFromEnum(OpCodes.@"return"), final_dst });
     // Convert all comp frames to vm frames
@@ -119,7 +120,7 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     };
 }
 
-pub fn compileFrame(self: *Compiler, target: []Ast.Statement, func: *Ast.Function) Errors!u8 {
+pub fn compileFrame(self: *Compiler, func: *Ast.Function) Errors!u8 {
     const previous_frame = self.frame_idx;
     defer self.frame_idx = previous_frame;
     // Setup a new frame
@@ -130,14 +131,18 @@ pub fn compileFrame(self: *Compiler, target: []Ast.Statement, func: *Ast.Functio
     for (func.params) |param| {
         try out.writeAll(&.{ @intFromEnum(OpCodes.load_param), try self.variable(param) });
     }
+
+    const stmts = func.body.node.block.statements;
     // Compile the statements
     var final_dst: u8 = 0;
-    for (target) |elem| {
+    for (stmts) |elem| {
         final_dst = try self.statement(elem);
     }
 
     return final_dst;
 }
+
+// fn compileObjectFrame(self: *Compiler, func: *Ast.Function, obj: *Ast.Object) Errors!Bytecode.Function {}
 
 fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
     const node = target.node;
@@ -240,8 +245,7 @@ fn function(self: *Compiler, target: *Ast.Function) Errors!u8 {
     try self.variables.append(self.allocator, .{});
     defer self.destroyScope();
     // Ast.Function always parses a body after it
-    const func_body = target.body.node.block.statements;
-    _ = try self.compileFrame(func_body, target);
+    _ = try self.compileFrame(target);
     return dst;
 }
 
@@ -268,6 +272,10 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
 
     var functions = std.ArrayListUnmanaged(Bytecode.Function){};
     log.debug("TODO: Create functions for objects", .{});
+    // for (target.functions) |function| {
+    //     const node = function.node.function;
+    //     try self.compileFrame(node.body.node.block.statements, node);
+    // }
 
     const obj = try self.gc.gpa.create(Object);
     obj.* = .{
