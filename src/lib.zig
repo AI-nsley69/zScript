@@ -22,8 +22,7 @@ pub const runOpts = struct {
 };
 
 const TokenizerOutput = struct {
-    std.ArrayListUnmanaged(Lexer.Token),
-    std.ArrayListUnmanaged(Lexer.TokenInfo),
+    std.MultiArrayList(Lexer.Token),
     Lexer,
 };
 
@@ -33,16 +32,16 @@ pub fn tokenize(gpa: Allocator, out: Writer, src: []const u8, opt: runOpts) !Tok
     const tokens = try lexer.scan();
 
     if (opt.print_tokens) {
-        for (tokens.items) |token| {
+        for (tokens.items(.data)) |token| {
             try out.print("{s}, ", .{@tagName(token.tag)});
         }
 
         try out.writeAll("\n");
     }
-    return .{ tokens, lexer.tokenInfo, lexer };
+    return .{ tokens, lexer };
 }
 
-pub fn parse(gpa: Allocator, out: Writer, tokens: std.ArrayListUnmanaged(Lexer.Token), token_info: std.ArrayListUnmanaged(Lexer.TokenInfo), opt: runOpts) !Ast.Program {
+pub fn parse(gpa: Allocator, out: Writer, lexer: Lexer, tokens: std.MultiArrayList(Lexer.Token), opt: runOpts) !Ast.Program {
     var parser = Parser{};
     var parsed = try parser.parse(gpa, tokens);
     errdefer parsed.arena.deinit();
@@ -50,8 +49,7 @@ pub fn parse(gpa: Allocator, out: Writer, tokens: std.ArrayListUnmanaged(Lexer.T
     const parser_errors = parser.errors.items;
     for (parser_errors) |err| {
         const err_writer = std.io.getStdErr().writer();
-        const info = token_info.items[err.idx];
-        try utils.printParseError(gpa, err_writer, err, info, opt.file, err.span);
+        try utils.printParseError(gpa, err_writer, lexer, err, opt.file);
     }
     if (parser_errors.len > 0) return error.ParseError;
 
@@ -87,11 +85,11 @@ pub fn compile(gpa: Allocator, out: Writer, gc: *Gc, parsed: Ast.Program, opt: r
 pub fn run(gpa: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
     const out = std.io.getStdOut().writer();
     // Source -> Tokens
-    const tokens, const token_info, var lexer = try tokenize(gpa, out, src, opt);
+    const tokens, var lexer = try tokenize(gpa, out, src, opt);
     defer lexer.deinit();
 
     // Tokens -> Ast
-    const parsed = try parse(gpa, out, tokens, token_info, opt);
+    const parsed = try parse(gpa, out, lexer, tokens, opt);
     defer parsed.arena.deinit();
 
     var gc = try Gc.init(gpa);

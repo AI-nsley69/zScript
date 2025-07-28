@@ -17,6 +17,7 @@ const Infix = Ast.Infix;
 const Statement = Ast.Statement;
 const Program = Ast.Program;
 const Token = Lexer.Token;
+const TokenData = Lexer.TokenData;
 const TokenType = Lexer.TokenType;
 
 const log = std.log.scoped(.parser);
@@ -45,10 +46,7 @@ const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std
 const Parser = @This();
 
 allocator: std.mem.Allocator = undefined,
-
-errors: std.ArrayListUnmanaged(Token) = std.ArrayListUnmanaged(Token){},
-
-tokens: std.ArrayListUnmanaged(Token) = undefined,
+tokens: std.MultiArrayList(Token) = undefined,
 current: usize = 0,
 
 variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnmanaged(VariableMetaData){},
@@ -57,9 +55,9 @@ objects: std.StringHashMapUnmanaged(Object.Schema) = std.StringHashMapUnmanaged(
 
 current_func: []const u8 = "main",
 
-const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = Token{ .tag = .err, .span = "" } } } };
+const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = TokenData{ .tag = .err, .span = "" } } } };
 
-pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.ArrayListUnmanaged(Token)) Errors!Program {
+pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.MultiArrayList(Token)) Errors!Program {
     const tr = tracy.trace(@src());
     defer tr.end();
 
@@ -491,7 +489,7 @@ fn match(self: *Parser, token: TokenType) bool {
     return true;
 }
 
-fn consume(self: *Parser, token: TokenType, err_msg: []const u8) !Token {
+fn consume(self: *Parser, token: TokenType, err_msg: []const u8) !TokenData {
     if (self.check(token)) {
         return self.advance();
     }
@@ -501,8 +499,9 @@ fn consume(self: *Parser, token: TokenType, err_msg: []const u8) !Token {
 }
 
 fn reportError(self: *Parser, err_msg: []const u8) !void {
-    const tkn = self.peek();
-    try self.errors.append(self.allocator, .{ .tag = .err, .span = err_msg, .idx = tkn.idx });
+    const tkn = self.tokens.get(self.current);
+    const err_tkn: Token = .{ .data = .{ .span = err_msg, .tag = tkn.data.tag }, .info = .{ .line = tkn.info.line, .pos = tkn.info.pos } };
+    try self.errors.append(self.allocator, err_tkn);
 }
 
 fn check(self: *Parser, token: TokenType) bool {
@@ -512,7 +511,7 @@ fn check(self: *Parser, token: TokenType) bool {
     return self.peek().tag == token;
 }
 
-fn advance(self: *Parser) Token {
+fn advance(self: *Parser) TokenData {
     if (!self.isEof()) {
         self.current += 1;
     }
@@ -524,10 +523,10 @@ fn isEof(self: *Parser) bool {
     return self.peek().tag == .eof;
 }
 
-fn peek(self: *Parser) Token {
-    return self.tokens.items[self.current];
+fn peek(self: *Parser) TokenData {
+    return self.tokens.items(.data)[self.current];
 }
 
-fn previous(self: *Parser) Token {
-    return self.tokens.items[self.current - 1];
+fn previous(self: *Parser) TokenData {
+    return self.tokens.items(.data)[self.current - 1];
 }

@@ -43,20 +43,20 @@ pub const TokenType = enum {
     err,
 };
 
-pub const Token = struct {
+pub const TokenData = struct {
     tag: TokenType,
     span: []const u8,
-    idx: usize = 0, // Consider a better way to look up token info
 };
 
 pub const TokenInfo = struct {
     line: usize,
     pos: usize,
-    len: usize,
-    line_source: []const u8,
 };
 
-const Tokens = std.ArrayListUnmanaged(Token);
+pub const Token = struct {
+    data: TokenData,
+    info: TokenInfo,
+};
 
 fn isAlpha(char: u8) bool {
     return ('a' <= char and char <= 'z') or ('A' <= char and char <= 'Z');
@@ -78,8 +78,7 @@ current: usize = 0,
 line: usize = 1,
 line_pos: usize = 0,
 
-tokens: Tokens = Tokens{},
-tokenInfo: std.ArrayListUnmanaged(TokenInfo) = std.ArrayListUnmanaged(TokenInfo){},
+tokens: std.MultiArrayList(Token) = std.MultiArrayList(Token){},
 
 gpa: std.mem.Allocator,
 
@@ -93,32 +92,27 @@ pub fn init(buffer: []const u8, gpa: std.mem.Allocator) Lexer {
 }
 
 pub fn deinit(self: *Lexer) void {
-    for (self.tokens.items) |token| {
+    for (self.tokens.items(.data)) |token| {
         if (token.tag != .err) continue;
         self.gpa.free(token.span);
     }
     self.tokens.deinit(self.gpa);
-    self.tokenInfo.deinit(self.gpa);
 }
 
-pub fn scan(self: *Lexer) !Tokens {
+pub fn scan(self: *Lexer) !std.MultiArrayList(Token) {
     const tr = tracy.trace(@src());
     defer tr.end();
 
     log.debug("Tokenizing source..", .{});
 
-    var token: Token = self.scanToken();
+    var token = self.scanToken();
     while (token.tag != .eof and token.tag != .err) : (token = self.scanToken()) {
-        try self.tokenInfo.append(self.gpa, self.makeTokenInfo(token));
-        token.idx = self.tokenInfo.items.len - 1;
-        try self.tokens.append(self.gpa, token);
+        try self.tokens.append(self.gpa, .{ .data = token, .info = self.makeTokenInfo() });
     }
 
-    try self.tokenInfo.append(self.gpa, self.makeTokenInfo(token));
-    token.idx = self.tokenInfo.items.len - 1;
-    try self.tokens.append(self.gpa, token);
+    try self.tokens.append(self.gpa, .{ .data = token, .info = self.makeTokenInfo() });
 
-    log.debug("Tokenized src with {d} tokens", .{self.tokens.items.len});
+    log.debug("Tokenized src with {d} tokens", .{self.tokens.items(.data).len});
 
     return self.tokens;
 }
@@ -167,7 +161,7 @@ fn match(self: *Lexer, comptime expected: u8) bool {
     return condition;
 }
 
-fn scanToken(self: *Lexer) Token {
+fn scanToken(self: *Lexer) TokenData {
     self.trimWhitespace();
     if (self.isAtEnd()) return self.makeToken(.eof, self.current);
 
@@ -264,7 +258,7 @@ fn trimWhitespace(self: *Lexer) void {
     }
 }
 
-fn number(self: *Lexer, start: usize) Token {
+fn number(self: *Lexer, start: usize) TokenData {
     _ = self.takeWhile(isDigit);
 
     if (self.peek() == '.' and isDigit(self.peekNext())) {
@@ -292,27 +286,27 @@ const keywords = std.StaticStringMap(TokenType).initComptime(&.{
     &.{ "print", .native_fn },
 });
 
-fn alpha(self: *Lexer, start: usize) Token {
+fn alpha(self: *Lexer, start: usize) TokenData {
     const name = self.buf[self.takeWhile(isAlpha)..self.current];
     const op: TokenType = keywords.get(name) orelse .identifier;
 
     return self.makeToken(op, start);
 }
 
-fn reportError(msg: []const u8) Token {
+fn reportError(msg: []const u8) TokenData {
     return .{ .tag = .err, .span = msg };
 }
 
-fn makeTokenInfo(self: *Lexer, token: Token) TokenInfo {
-    return .{ .line = self.line, .pos = self.current - self.line_pos, .len = token.span.len, .line_source = self.getLineSource() };
+fn makeTokenInfo(self: *Lexer) TokenInfo {
+    return .{ .line = self.line, .pos = self.current - self.line_pos };
 }
 
-fn makeToken(self: *Lexer, tokenType: TokenType, start: usize) Token {
+fn makeToken(self: *Lexer, tokenType: TokenType, start: usize) TokenData {
     return .{ .tag = tokenType, .span = self.buf[start..self.current] };
 }
 
-fn getLineSource(self: *Lexer) []const u8 {
-    var current = self.line_pos;
+pub fn getLineSource(self: *Lexer, info: TokenInfo) []const u8 {
+    var current = info.line;
     // If next line is just an empty line, return empty string
     if (current >= self.buf.len) return "";
     var c = self.buf[current];
@@ -322,5 +316,5 @@ fn getLineSource(self: *Lexer) []const u8 {
         c = self.buf[current];
     };
 
-    return self.buf[self.line_pos..endPos];
+    return self.buf[info.line..endPos];
 }
