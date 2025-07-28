@@ -2,5 +2,6 @@ object MyObj {
     .name = "Hello World!",
 }
 
-immut obj = new MyObj();
+mut obj = new MyObj();
+obj.name = "test";
 print(obj.name);

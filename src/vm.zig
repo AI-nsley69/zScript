@@ -336,6 +336,12 @@ pub fn run(self: *Vm) !void {
             self.setRegister(try self.next(), obj.fields[@intCast(field_id)]);
             continue :blk try self.nextOp();
         },
+        .object_set => {
+            const obj = try Value.asObj(try self.nextReg());
+            const field_id = try Value.asInt(try self.nextReg());
+            obj.fields[@intCast(field_id)] = try self.nextReg();
+            continue :blk try self.nextOp();
+        },
         .load_param => {
             const val = self.param_stack.pop();
             if (val == null) {
