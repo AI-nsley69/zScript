@@ -328,12 +328,7 @@ pub fn run(self: *Vm) !void {
                 return Error.InvalidParameter;
             }
             self.setRegister(try self.next(), .{ .int = 0 });
-            // const obj = self.nextReg();
-            // const field_name = self.nextReg();
-            // const dst = self.next();
-
-            @panic("Not implemented.");
-            // continue :blk try self.nextOp();
+            continue :blk try self.nextOp();
         },
         .object_get => {
             const obj = try Value.asObj(try self.nextReg());

@@ -139,7 +139,7 @@ pub const Statement = struct {
 pub const Program = struct {
     statements: std.ArrayListUnmanaged(Statement),
     variables: std.StringHashMapUnmanaged(VariableMetaData),
-    objects: std.StringHashMapUnmanaged(ObjectValue.Schema),
+    objects: std.StringHashMapUnmanaged(*const ObjectValue.Schema),
     arena: std.heap.ArenaAllocator,
 };
 

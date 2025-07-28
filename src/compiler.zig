@@ -273,7 +273,7 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
     obj.* = .{
         .fields = (try field_values.toOwnedSlice(self.gc.gpa)).ptr,
         .functions = try functions.toOwnedSlice(self.gc.gpa),
-        .schema = &self.ast.objects.get(target.name).?,
+        .schema = self.ast.objects.get(target.name).?,
     };
 
     const obj_val: Value = .{ .object = obj };

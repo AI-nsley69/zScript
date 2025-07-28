@@ -51,7 +51,7 @@ current: usize = 0,
 
 variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnmanaged(VariableMetaData){},
 functions: std.StringHashMapUnmanaged(FunctionMetadata) = std.StringHashMapUnmanaged(FunctionMetadata){},
-objects: std.StringHashMapUnmanaged(Object.Schema) = std.StringHashMapUnmanaged(Object.Schema){},
+objects: std.StringHashMapUnmanaged(*const Object.Schema) = std.StringHashMapUnmanaged(*const Object.Schema){},
 
 errors: std.MultiArrayList(Token) = std.MultiArrayList(Token){},
 
@@ -176,7 +176,9 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         i += duped.len + 1;
     }
 
-    try self.objects.put(self.allocator, name.span, .{ .fields = inline_fields.ptr });
+    const schema = try self.allocator.create(Object.Schema);
+    schema.* = .{ .fields = inline_fields.ptr };
+    try self.objects.put(self.allocator, name.span, schema);
 
     return Ast.createObject(self.allocator, name.span, fields, try functions.toOwnedSlice(self.allocator));
 }
