@@ -122,6 +122,10 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
             }
         };
     }
+
+    if (self.previous().tag != .right_paren) {
+        _ = try self.consume(.right_paren, "Expected ')' after function parameters");
+    }
     // Add function metadata
     try self.functions.put(self.allocator, name.span, .{ .params = params.items.len });
     // Parse function body
