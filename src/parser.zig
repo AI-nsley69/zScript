@@ -55,8 +55,6 @@ objects: std.StringHashMapUnmanaged(*const Object.Schema) = std.StringHashMapUnm
 
 errors: std.MultiArrayList(Token) = std.MultiArrayList(Token){},
 
-errors: std.MultiArrayList(Token) = std.MultiArrayList(Token){},
-
 current_func: []const u8 = "main",
 
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = TokenData{ .tag = .err, .span = "" } } } };
@@ -194,35 +192,6 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
     try self.objects.put(self.gpa, name.span, schema);
 
     return Ast.Object.create(self.gpa, name.span, fields, try methods.toOwnedSlice(self.gpa));
-}
-
-fn objectDeclaration(self: *Parser) Errors!Statement {
-    const name = try self.consume(.identifier, "Expected object name.");
-    _ = try self.consume(.left_bracket, "Expected '{' after object declaration.");
-
-    var fields = std.StringHashMap(?Expression).init(self.gpa);
-    var functions = std.ArrayListUnmanaged(Statement){};
-    while (!self.match(.right_bracket)) {
-        if (self.match(.dot)) { // Check for properties
-            const field_name = try self.consume(.identifier, "Expected property name");
-            const expr = if (self.match(.assign)) try self.expression() else null;
-            try fields.put(self.allocator, field_name.span, expr);
-            _ = try self.consume(.comma, "Expected ',' after object field");
-        } else if (self.match(.fn_declaration)) { // Check for functions
-            try functions.append(self.gpa, try self.functionDeclaration());
-        } else {
-            // Break if no functions or properties are defined
-            break;
-        }
-    }
-
-    if (self.previous().tag != .right_bracket) {
-        try self.reportError("Expected '}' after object declaration.");
-    }
-
-    try self.objects.put(self.gpa, .{ .fields = });
-
-    return Ast.createObject(self.gpa, name.span, properties, try functions.toOwnedSlice(self.gpa));
 }
 
 fn statement(self: *Parser) Errors!Statement {
@@ -378,21 +347,6 @@ fn unary(self: *Parser) Errors!Expression {
         const rhs = try self.unary();
 
         return Ast.Unary.create(self.gpa, op, rhs, self.previous());
-    }
-
-    return self.new();
-}
-
-fn new(self: *Parser) Errors!Expression {
-    if (self.match(.new_obj)) {
-        const src = self.previous();
-        const name = try self.consume(.identifier, "Expected object name after 'new'");
-        _ = try self.consume(.left_paren, "Expected '(' after new object creation.");
-        log.debug("TODO: Implement new object params.", .{});
-        _ = try self.consume(.right_paren, "Expected ')§' after new object creation.");
-
-        const dummy_arr: []Expression = &[0]Expression{};
-        return Ast.NewObject.create(name.span, dummy_arr, src);
     }
 
     return self.new();
