@@ -44,4 +44,5 @@ pub const Function = struct {
     name: []const u8,
     body: []u8,
     reg_size: RegisterSize,
+    is_obj: bool = false,
 };
