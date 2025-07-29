@@ -2,12 +2,12 @@ const std = @import("std");
 const lib = @import("./lib.zig");
 
 const expect = std.testing.expect;
-var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
 
 test "Integer Arithmetic" {
+    var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
 
-    const file = "tests/int_arithmetic.zs";
+    const file = "./tests/int_arithmetic.zs";
     const val = try lib.run(gpa, @embedFile(file), .{ .file = file });
     try expect(val != null);
     try expect(val.? == .int);
@@ -18,9 +18,10 @@ test "Integer Arithmetic" {
 }
 
 test "Float Arithmetic" {
+    var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
 
-    const file = "tests/float_arithmetic.zs";
+    const file = "./tests/float_arithmetic.zs";
     const val = try lib.run(gpa, @embedFile(file), .{ .file = file });
     try expect(val != null);
     try expect(val.? == .float);

@@ -13,6 +13,8 @@ const Value = @import("value.zig").Value;
 const Allocator = std.mem.Allocator;
 const Writer = std.fs.File.Writer;
 
+const log = std.log.scoped(.lib);
+
 pub const runOpts = struct {
     file: []const u8 = "",
     print_asm: bool = false,
@@ -107,6 +109,8 @@ pub fn run(gpa: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
         error.EndOfStream => {},
         else => |e| return e,
     };
+
+    log.debug("VM result: {any}", .{vm.result});
 
     return vm.result;
 }
