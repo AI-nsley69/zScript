@@ -25,7 +25,7 @@ pub const Error = error{
 
 pub const Frame = struct {
     ip: usize = 0,
-    metadata: usize, // Metadata
+    metadata: *const Bytecode.Function,
 };
 
 const max_call_depth = std.math.maxInt(u16);
@@ -54,7 +54,7 @@ pub fn init(gc: *Gc, compiled: CompilerOutput) !Vm {
         .constants = compiled.constants,
     };
 
-    const main: Frame = .{ .metadata = 0 };
+    const main: Frame = .{ .metadata = &compiled.frames[0] };
     try vm.call_stack.append(gc.gpa, main);
 
     try vm.registers.ensureUnusedCapacity(gc.gpa, 256);
@@ -74,8 +74,8 @@ pub fn deinit(self: *Vm) void {
     self.gc.gpa.free(self.constants);
 }
 
-pub fn metadata(self: *Vm) *Function {
-    return &self.functions[self.current().metadata];
+pub fn metadata(self: *Vm) *const Function {
+    return self.current().metadata;
 }
 
 pub fn current(self: *Vm) *Frame {
@@ -103,9 +103,7 @@ fn nextOp(self: *Vm) !OpCodes {
         try self.gc.sweep();
     }
     const op: OpCodes = @enumFromInt(try self.next());
-    std.debug.print("Next op: {s}\n", .{@tagName(op)});
-    std.debug.print("IP: {d}\n", .{self.current().ip});
-
+    // std.debug.print("Next op: {s}\n", .{@tagName(op)});
     return op;
 }
 
@@ -391,13 +389,6 @@ pub fn run(self: *Vm) !void {
 fn ret(self: *Vm) !void {
     const dst = try self.next();
     const res = self.getRegister(dst);
-    // Teardown temporary obj function call
-    const is_obj_call = self.metadata().is_obj;
-    if (is_obj_call) {
-        self.gc.gpa.destroy(&self.functions[self.functions.len - 1]);
-        self.functions.len -= 1;
-    }
-
     _ = self.call_stack.pop();
     // Set the final result if there is no more caller
     if (self.call_stack.items.len < 1) {
@@ -424,7 +415,7 @@ fn call(self: *Vm) !void {
     // Push registers to the stack
     try self.reg_stack.appendSlice(self.gc.gpa, self.registers.items[1..self.metadata().reg_size]);
     // Construct a new call_frame and push it to the stack
-    const new_call: Frame = .{ .metadata = frame_idx };
+    const new_call: Frame = .{ .metadata = &self.functions[frame_idx] };
     try self.call_stack.append(self.gc.gpa, new_call);
 }
 
@@ -436,16 +427,8 @@ fn methodCall(self: *Vm) !void {
         @panic("Stack Overflow");
     }
 
-    const frame = obj.functions[try self.next()];
-
     // Push registers to the stack
     try self.reg_stack.appendSlice(self.gc.gpa, self.registers.items[1..self.metadata().reg_size]);
-    // Add the objs function metadata
-    var new_buf: std.ArrayListUnmanaged(Bytecode.Function) = try .initCapacity(self.gc.gpa, self.functions.len + 1);
-    new_buf.appendSliceAssumeCapacity(self.functions);
-    new_buf.appendAssumeCapacity(frame);
-    self.functions = try new_buf.toOwnedSlice(self.gc.gpa);
-    // Construct a new call_frame and push it to the stack
-    const new_call: Frame = .{ .metadata = self.functions.len - 1 };
+    const new_call: Frame = .{ .metadata = &obj.functions[try self.next()] };
     try self.call_stack.append(self.gc.gpa, new_call);
 }

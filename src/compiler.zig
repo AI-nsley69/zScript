@@ -175,12 +175,7 @@ fn compileObjectFrame(self: *Compiler, func: *Ast.Function) Errors!Bytecode.Func
 
     const comp_frame = self.comp_frames.pop();
     var instructions = comp_frame.?.instructions;
-    return .{
-        .name = comp_frame.?.name,
-        .body = try instructions.toOwnedSlice(self.allocator),
-        .reg_size = comp_frame.?.reg_idx,
-        .is_obj = true,
-    };
+    return .{ .name = comp_frame.?.name, .body = try instructions.toOwnedSlice(self.allocator), .reg_size = comp_frame.?.reg_idx };
 }
 
 fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
