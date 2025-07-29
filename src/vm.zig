@@ -187,7 +187,7 @@ pub fn run(self: *Vm) !void {
             const snd = try self.nextReg();
             const res: Value = switch (fst) {
                 .int => .{ .int = @divFloor(try Value.asInt(fst), try Value.asInt(snd)) },
-                .float => .{ .float = @divFloor(try Value.asFloat(fst), try Value.asFloat(snd)) },
+                .float => .{ .float = try Value.asFloat(fst) / try Value.asFloat(snd) },
                 .boolean, .string, .object => return Error.UnsupportedOperation,
             };
             self.setRegister(dst, res);
