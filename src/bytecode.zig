@@ -16,6 +16,7 @@ pub const OpCodes = enum(u8) {
     load_param,
     store_param,
     call,
+    method_call,
     native_call,
     add,
     sub,
@@ -42,4 +43,5 @@ pub const Function = struct {
     name: []const u8,
     body: []u8,
     reg_size: RegisterSize,
+    is_obj: bool = false,
 };

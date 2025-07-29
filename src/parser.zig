@@ -401,6 +401,13 @@ fn call(self: *Parser) Errors!Expression {
 fn dot(self: *Parser) Errors!Expression {
     const root = try self.primary();
 
+    if (root.node == .variable) {
+        const node = root.node.variable.*;
+        if (std.mem.startsWith(u8, node.name, "self")) {
+            std.debug.print("node.name: {s}\n", .{node.name});
+        }
+    }
+
     if (self.match(.dot)) {
         const field_tkn = try self.consume(.identifier, "Expected expression after '.'");
         if (self.match(.left_paren)) {
@@ -490,16 +497,7 @@ fn primary(self: *Parser) Errors!Expression {
 
     if (self.match(.obj_self)) {
         const root = self.previous();
-        var name = root.span;
-        while (self.match(.dot)) {
-            _ = try self.consume(.identifier, "Expected identifier");
-            const nested_name = self.previous().span;
-            var new_name = try self.allocator.alloc(u8, name.len + nested_name.len);
-            @memcpy(new_name[0..name.len], name);
-            @memcpy(new_name[name.len..], nested_name);
-            self.allocator.free(name);
-            name = new_name;
-        }
+        const name = root.span;
         return Ast.Variable.create(self.allocator, null, name, self.previous());
     }
 

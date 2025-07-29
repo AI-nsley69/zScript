@@ -34,6 +34,7 @@ fn codeToString(opcode: Bytecode.OpCodes) []const u8 {
         .load_param => "LOAD_PARAM",
         .store_param => "STORE_PARAM",
         .call => "CALL",
+        .method_call => "METHOD_CALL",
         .native_call => "NATIVE_CALL",
         .add => "ADD",
         .sub => "SUBTRACT",
@@ -107,7 +108,7 @@ pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std
             try writer.print("  [{x:0>6}] {s} ${d} ${d}\n", .{ pos, name, try in.readByte(), try in.readByte() });
         },
         // 3x reg arg
-        .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq, .less_than, .lte, .greater_than, .gte, .object_get, .object_set, .object_field_id => {
+        .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq, .less_than, .lte, .greater_than, .gte, .object_get, .object_set, .object_field_id, .method_call => {
             try writer.print("  [{x:0>6}] {s} ${d} ${d} ${d}\n", .{ pos, name, try in.readByte(), try in.readByte(), try in.readByte() });
         },
     }

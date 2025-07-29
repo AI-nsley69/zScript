@@ -103,7 +103,7 @@ fn nextOp(self: *Vm) !OpCodes {
         try self.gc.sweep();
     }
     const op: OpCodes = @enumFromInt(try self.next());
-    // std.debug.print("Next op: {s}\n", .{@tagName(op)});
+    // std.debug.sprint("Next op: {s}\n", .{@tagName(op)});
     return op;
 }
 
@@ -364,6 +364,10 @@ pub fn run(self: *Vm) !void {
             try self.call();
             continue :blk try self.nextOp();
         },
+        .method_call => {
+            try self.methodCall();
+            continue :blk try self.nextOp();
+        },
         .native_call => {
             const fn_idx = try self.next();
 
@@ -385,6 +389,12 @@ pub fn run(self: *Vm) !void {
 fn ret(self: *Vm) !void {
     const dst = try self.next();
     const res = self.getRegister(dst);
+    // Teardown temporary obj function call
+    const is_obj_call = self.metadata().is_obj;
+    if (is_obj_call) {
+        self.gc.gpa.destroy(&self.functions[self.functions.len - 1]);
+        self.functions.len -= 1;
+    }
 
     _ = self.call_stack.pop();
     // Set the final result if there is no more caller
@@ -413,5 +423,28 @@ fn call(self: *Vm) !void {
     try self.reg_stack.appendSlice(self.gc.gpa, self.registers.items[1..self.metadata().reg_size]);
     // Construct a new call_frame and push it to the stack
     const new_call: Frame = .{ .metadata = frame_idx };
+    try self.call_stack.append(self.gc.gpa, new_call);
+}
+
+fn methodCall(self: *Vm) !void {
+    const obj = try Value.asObj(try self.nextReg());
+
+    if (self.call_stack.items.len >= max_call_depth) {
+        @branchHint(.cold);
+        @panic("Stack Overflow");
+    }
+
+    const frame = obj.functions[try self.next()];
+
+    // Push registers to the stack
+    try self.reg_stack.appendSlice(self.gc.gpa, self.registers.items[1..self.metadata().reg_size]);
+    // Add the objs function metadata
+    var new_buf = std.ArrayListUnmanaged(Bytecode.Function){};
+    try new_buf.appendSlice(self.gc.gpa, self.functions);
+
+    try new_buf.append(self.gc.gpa, frame);
+    self.functions = try new_buf.toOwnedSlice(self.gc.gpa);
+    // Construct a new call_frame and push it to the stack
+    const new_call: Frame = .{ .metadata = self.functions.len - 1 };
     try self.call_stack.append(self.gc.gpa, new_call);
 }

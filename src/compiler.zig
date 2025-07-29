@@ -78,6 +78,16 @@ inline fn destroyScope(self: *Compiler) void {
     popped.?.deinit(self.allocator);
 }
 
+fn getVariableDst(self: *Compiler, name: []const u8) ?u8 {
+    // Find the variable in the scope, starting from the back.
+    for (self.variables.items) |var_scope| {
+        if (!var_scope.contains(name)) continue;
+        return var_scope.get(name).?;
+    }
+
+    return null;
+}
+
 inline fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
     return self.current().instructions.writer(self.allocator);
 }
@@ -165,7 +175,12 @@ fn compileObjectFrame(self: *Compiler, func: *Ast.Function) Errors!Bytecode.Func
 
     const comp_frame = self.comp_frames.pop();
     var instructions = comp_frame.?.instructions;
-    return .{ .name = comp_frame.?.name, .body = try instructions.toOwnedSlice(self.allocator), .reg_size = comp_frame.?.reg_idx };
+    return .{
+        .name = comp_frame.?.name,
+        .body = try instructions.toOwnedSlice(self.allocator),
+        .reg_size = comp_frame.?.reg_idx,
+        .is_obj = true,
+    };
 }
 
 fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
@@ -326,11 +341,21 @@ fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
         .native_call => try self.nativeCall(node.native_call, dst_reg),
         .new_object => try self.newObject(node.new_object, dst_reg),
         .field_access => try self.propertyAccess(node.field_access, dst_reg),
-        .method_call => unreachable,
+        .method_call => try self.methodCall(node.method_call, dst_reg),
     };
 }
 
 fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
+    // Special case for handling `self` on objects.
+    if (std.mem.eql(u8, target.name, "self")) {
+        const initialized_dst = self.getVariableDst(target.name);
+        if (initialized_dst != null) {
+            return initialized_dst.?;
+        }
+        try self.reportError("Invalid usage of 'self'");
+        return Error.Unknown;
+    }
+
     const maybe_metadata = self.ast.variables.get(target.name);
     if (maybe_metadata == null) {
         log.debug("No available metadata", .{});
@@ -340,9 +365,9 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     }
     const metadata = maybe_metadata.?;
     // Find the variable in the scope
-    for (self.variables.items) |var_scope| {
-        if (!var_scope.contains(target.name)) continue;
-        return var_scope.get(target.name).?;
+    const initialized_dst = self.getVariableDst(target.name);
+    if (initialized_dst != null) {
+        return initialized_dst.?;
     }
     const dst = try self.allocateRegister();
 
@@ -429,6 +454,19 @@ fn propertyAccess(self: *Compiler, target: *Ast.FieldAccess, dst_reg: ?u8) Error
     // Set / get for field
     const dst = dst_reg orelse if (target.assignment != null) try self.expression(target.assignment.?, try self.allocateRegister()) else try self.allocateRegister();
     try out.writeAll(&.{ @intFromEnum(op), root, field_dst, dst });
+
+    return dst;
+}
+
+fn methodCall(self: *Compiler, target: *Ast.MethodCall, dst_reg: ?u8) Errors!u8 {
+    const out = self.getOut();
+
+    const root = try self.expression(target.root, null);
+    try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), root });
+    // TODO: Get method idx
+    const method_idx = 0;
+    const dst = dst_reg orelse try self.allocateRegister();
+    try out.writeAll(&.{ @intFromEnum(OpCodes.method_call), root, method_idx, dst });
 
     return dst;
 }
