@@ -1,5 +1,6 @@
 const std = @import("std");
 const Ast = @import("ast.zig");
+const Compiler = @import("compiler.zig");
 const Vm = @import("vm.zig");
 const Value = @import("value.zig").Value;
 
@@ -11,7 +12,7 @@ pub const Error = error{
     UnsupportedValue,
 };
 
-const Errors = (Error || std.mem.Allocator.Error);
+const Errors = (Error || std.mem.Allocator.Error || Compiler.Error);
 
 const Optimizer = @This();
 
@@ -33,7 +34,7 @@ pub fn optimizeAst(self: *Optimizer, gpa: std.mem.Allocator, program: Program) !
     errdefer arena.deinit();
     defer program.arena.deinit();
 
-    return .{ .arena = arena, .statements = stmts, .variables = try program.variables.clone(self.gpa) };
+    return .{ .arena = arena, .statements = stmts, .variables = try program.variables.clone(self.gpa), .objects = try program.objects.clone(self.gpa) };
 }
 
 fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpression: fn (*Optimizer, Expression) Errors!Expression) !Statement {
@@ -48,7 +49,7 @@ fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpress
             const expr = try optimizeExpression(self, conditional.expression);
             const body = try self.optimizeStatement(conditional.body, optimizeExpression);
             const otherwise = if (conditional.otherwise != null) try self.optimizeStatement(conditional.otherwise.?, optimizeExpression) else null;
-            return try Ast.createConditional(self.gpa, expr, body, otherwise);
+            return try Ast.Conditional.create(self.gpa, expr, body, otherwise);
         },
         .block => {
             const block = node.block;
@@ -57,7 +58,7 @@ fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpress
                 try new_stmts.append(self.gpa, try self.optimizeStatement(block_stmt, optimizeExpression));
             }
 
-            return try Ast.createBlockStatement(try new_stmts.toOwnedSlice(self.gpa));
+            return try Ast.Block.create(try new_stmts.toOwnedSlice(self.gpa));
         },
         .loop => {
             const loop = node.loop.*;
@@ -71,19 +72,20 @@ fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpress
                 post = try optimizeExpression(self, loop.post.?);
             }
             const body = try self.optimizeStatement(loop.body, optimizeExpression);
-            return try Ast.createLoop(self.gpa, init, cond, post, body);
+            return try Ast.Loop.create(self.gpa, init, cond, post, body);
         },
         .function => {
             const func = node.function.*;
             const body = try self.optimizeStatement(func.body, optimizeExpression);
 
-            return try Ast.createFunction(self.gpa, try self.gpa.dupe(u8, func.name), body, try self.gpa.dupe(*Ast.Variable, func.params));
+            return try Ast.Function.create(self.gpa, try self.gpa.dupe(u8, func.name), body, try self.gpa.dupe(*Ast.Variable, func.params));
         },
         .@"return" => {
             const ret = node.@"return";
-            if (ret.value == null) return try Ast.createReturn(null);
-            return try Ast.createReturn(try optimizeExpression(self, ret.value.?));
+            if (ret.value == null) return try Ast.Return.create(null);
+            return try Ast.Return.create(try optimizeExpression(self, ret.value.?));
         },
+        else => unreachable,
     }
 }
 
@@ -98,84 +100,39 @@ fn isFoldable(self: *Optimizer, expr: Expression) bool {
                 .float => true,
                 .int => true,
                 .string => false,
+                .object => false,
             };
         },
         else => false,
     };
 }
 
-fn eval(self: *Optimizer, expr: Expression) !Value {
-    const node = expr.node;
-    return switch (node) {
-        .infix => {
-            const infix = node.infix.*;
-            const lhs = try self.eval(infix.lhs);
-            const rhs = try self.eval(infix.rhs);
-
-            return switch (infix.op) {
-                .add => {
-                    return switch (lhs) {
-                        .int => .{ .int = lhs.int + rhs.int },
-                        .float => .{ .float = lhs.float + rhs.float },
-                        else => Error.UnsupportedValue,
-                    };
-                },
-                .sub => {
-                    return switch (lhs) {
-                        .int => .{ .int = lhs.int - rhs.int },
-                        .float => .{ .float = lhs.float - rhs.float },
-                        else => Error.UnsupportedValue,
-                    };
-                },
-                .mul => {
-                    return switch (lhs) {
-                        .int => .{ .int = lhs.int * rhs.int },
-                        .float => .{ .float = lhs.float * rhs.float },
-                        else => Error.UnsupportedValue,
-                    };
-                },
-                .div => {
-                    return switch (lhs) {
-                        .int => .{ .int = @divFloor(lhs.int, rhs.int) },
-                        .float => .{ .float = @divFloor(lhs.float, rhs.float) },
-                        else => Error.UnsupportedValue,
-                    };
-                },
-                else => Error.UnsupportedValue,
-            };
-        },
-        .unary => {
-            return try self.eval(expr.node.unary.*.rhs);
-        },
-
-        .literal => return expr.node.literal,
-        else => Error.UnsupportedValue,
-    };
-}
-
 fn constantFold(self: *Optimizer, expr: Expression) !Expression {
     if (self.isFoldable(expr)) {
-        return try Ast.createLiteral(try self.eval(expr), expr.src);
+        return try Ast.Literal.create(try Compiler.eval(expr), expr.src);
     }
     switch (expr.node) {
         .infix => {
             const infix = expr.node.infix.*;
             const lhs = try self.constantFold(infix.lhs);
             const rhs = try self.constantFold(infix.rhs);
-            return try Ast.createInfix(self.gpa, infix.op, lhs, rhs, expr.src);
+            
+            return try Ast.Infix.create(self.gpa, infix.op, lhs, rhs, expr.src);
         },
 
         .unary => {
             const unary = expr.node.unary.*;
             const rhs = try self.constantFold(unary.rhs);
-            return try Ast.createUnary(self.gpa, unary.op, rhs, expr.src);
+
+            return try Ast.Unary.create(self.gpa, unary.op, rhs, expr.src);
         },
         .literal => return expr,
         .variable => {
             const variable = expr.node.variable.*;
             if (variable.initializer == null) return expr;
             const init = try self.constantFold(variable.initializer.?);
-            return try Ast.createVariable(self.gpa, init, variable.name, expr.src);
+
+            return try Ast.Variable.create(self.gpa, init, variable.name, expr.src);
         },
         .call => {
             const call = expr.node.call.*;
@@ -185,8 +142,8 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
             }
             // Duplicate the callee node
             const old_callee = call.callee.node.variable.*;
-            const callee = try Ast.createVariable(self.gpa, old_callee.initializer, old_callee.name, call.callee.src);
-            return Ast.createCallExpression(self.gpa, callee, try params.toOwnedSlice(self.gpa), expr.src);
+            const callee = try Ast.Variable.create(self.gpa, old_callee.initializer, old_callee.name, call.callee.src);
+            return Ast.Call.create(self.gpa, callee, try params.toOwnedSlice(self.gpa), expr.src);
         },
         .native_call => {
             const call = expr.node.native_call.*;
@@ -195,7 +152,8 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
                 try params.append(self.gpa, try self.constantFold(arg));
             }
             // Duplicate the callee node
-            return Ast.createNativeCallExpression(self.gpa, try params.toOwnedSlice(self.gpa), call.idx, expr.src);
+            return Ast.NativeCall.create(self.gpa, try params.toOwnedSlice(self.gpa), call.idx, expr.src);
         },
+        else => unreachable,
     }
 }
