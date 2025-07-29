@@ -100,7 +100,6 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
     _ = try self.consume(.semi_colon, "Expected ';' after expression.");
     // Add metadata for variable
     _ = try self.variables.fetchPut(self.gpa, name.span, .{ .scope = self.current_func, .mutable = std.mem.eql(u8, var_decl.span, "mut"), .type = null });
-
     return try Ast.Variable.create(self.gpa, init, name.span, var_decl);
 }
 
@@ -116,7 +115,6 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
     while (self.match(.identifier)) {
         const metadata: VariableMetaData = .{ .scope = name.span, .mutable = false, .is_param = true, .type = null };
         try self.variables.put(self.gpa, self.previous().span, metadata);
-
         const param = try Ast.Variable.create(self.gpa, null, self.previous().span, self.previous());
 
         try params.append(self.gpa, param.node.variable);
@@ -128,7 +126,10 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
             }
         };
     }
-    _ = try self.consume(.right_paren, "Expected ')' after function parameters");
+
+    if (self.previous().tag != .right_paren) {
+        _ = try self.consume(.right_paren, "Expected ')' after function parameters");
+    }
     // Add function metadata
     try self.functions.put(self.gpa, name.span, .{ .params = params.items.len });
     // Parse function body
@@ -215,7 +216,6 @@ fn ifStatement(self: *Parser) Errors!Statement {
     if (self.match(.else_stmt)) {
         otherwise = try self.statement();
     }
-
     return try Ast.Conditional.create(self.gpa, condition, body, otherwise);
 }
 
@@ -279,7 +279,7 @@ fn logicalOr(self: *Parser) Errors!Expression {
     if (self.match(.logical_or)) {
         const op = self.previous().tag;
         const rhs = try self.logicalAnd();
-
+        
         expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
     }
     return expr;
@@ -323,7 +323,7 @@ fn term(self: *Parser) Errors!Expression {
     while (self.match(.add) or self.match(.sub)) {
         const op = self.previous().tag;
         const rhs = try self.factor();
-
+        
         expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
     }
     return expr;
@@ -541,7 +541,6 @@ fn primary(self: *Parser) Errors!Expression {
 
     const token = self.peek();
     const err_msg = try std.fmt.allocPrint(self.gpa, "Expected expression, found: {s}", .{token.span});
-    // errdefer self.gpa.free(err_msg);
     try self.reportError(err_msg);
     return Error.ExpressionExpected;
 }

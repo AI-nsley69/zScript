@@ -287,7 +287,3 @@ pub const Program = struct {
     objects: std.StringHashMapUnmanaged(*const ObjectValue.Schema),
     arena: std.heap.ArenaAllocator,
 };
-
-// Expression helpers
-
-// Statement helpers

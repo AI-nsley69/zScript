@@ -116,12 +116,14 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
             const infix = expr.node.infix.*;
             const lhs = try self.constantFold(infix.lhs);
             const rhs = try self.constantFold(infix.rhs);
+            
             return try Ast.Infix.create(self.gpa, infix.op, lhs, rhs, expr.src);
         },
 
         .unary => {
             const unary = expr.node.unary.*;
             const rhs = try self.constantFold(unary.rhs);
+
             return try Ast.Unary.create(self.gpa, unary.op, rhs, expr.src);
         },
         .literal => return expr,
@@ -129,6 +131,7 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
             const variable = expr.node.variable.*;
             if (variable.initializer == null) return expr;
             const init = try self.constantFold(variable.initializer.?);
+
             return try Ast.Variable.create(self.gpa, init, variable.name, expr.src);
         },
         .call => {
