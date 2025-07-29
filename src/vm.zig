@@ -103,7 +103,7 @@ fn nextOp(self: *Vm) !OpCodes {
         try self.gc.sweep();
     }
     const op: OpCodes = @enumFromInt(try self.next());
-    // std.debug.sprint("Next op: {s}\n", .{@tagName(op)});
+    // std.debug.print("Next op: {s}\n", .{@tagName(op)});
     return op;
 }
 
@@ -439,10 +439,9 @@ fn methodCall(self: *Vm) !void {
     // Push registers to the stack
     try self.reg_stack.appendSlice(self.gc.gpa, self.registers.items[1..self.metadata().reg_size]);
     // Add the objs function metadata
-    var new_buf = std.ArrayListUnmanaged(Bytecode.Function){};
-    try new_buf.appendSlice(self.gc.gpa, self.functions);
-
-    try new_buf.append(self.gc.gpa, frame);
+    var new_buf: std.ArrayListUnmanaged(Bytecode.Function) = .initCapacity(self.gc.gpa, self.functions.len + 1);
+    try new_buf.appendSliceAssumeCapacity(self.functions);
+    try new_buf.appendAssumeCapacity(frame);
     self.functions = try new_buf.toOwnedSlice(self.gc.gpa);
     // Construct a new call_frame and push it to the stack
     const new_call: Frame = .{ .metadata = self.functions.len - 1 };
