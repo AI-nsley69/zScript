@@ -20,6 +20,7 @@ pub const Error = error{
     MismatchedTypes,
     InvalidParameter,
     UnsupportedOperation,
+    StackOverflow,
     Unknown,
 };
 
@@ -434,7 +435,7 @@ fn call(self: *Vm) !void {
 
     if (self.call_stack.items.len >= max_call_depth) {
         @branchHint(.cold);
-        @panic("Stack Overflow");
+        return Error.StackOverflow;
     }
 
     // Push registers to the stack
@@ -450,7 +451,7 @@ fn methodCall(self: *Vm) !void {
 
     if (self.call_stack.items.len >= max_call_depth) {
         @branchHint(.cold);
-        @panic("Stack Overflow");
+        return Error.StackOverflow;
     }
 
     // Push registers to the stack
