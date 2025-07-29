@@ -488,7 +488,6 @@ fn primary(self: *Parser) Errors!Expression {
         const str_val = self.previous().span;
         if (std.mem.containsAtLeast(u8, str_val, 1, ".")) {
             const value = try std.fmt.parseFloat(f64, str_val);
-            log.debug("Str value: {s}, float val: {d}", .{ str_val, value });
             return Ast.Literal.create(.{ .float = value }, self.previous());
         }
         const value = try std.fmt.parseInt(i64, str_val, 0);
