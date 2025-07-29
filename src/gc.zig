@@ -48,6 +48,8 @@ pub fn markRoots(self: *Gc, vm: *Vm) !void {
         try self.markValue(value);
     }
 
+    log.debug("TODO: Mark registers & params in stack.");
+
     for (vm.constants) |constant| {
         try self.markValue(constant);
     }
@@ -59,7 +61,21 @@ fn markValue(self: *Gc, value: Value) !void {
         // No heap allocations done for these values
         .int, .float, .boolean => {},
         .string => try self.marked.put(@intFromPtr(value.string.ptr), undefined),
-        .object => unreachable,
+        .object => {
+            // Mark the fields and their values
+            var field_ptr: [*:0]const u8 = value.object.schema.fields;
+            var field_len: usize = 0;
+            while (field_ptr[0] != 0) {
+                const field = std.mem.span(field_ptr);
+                field_ptr += field.len + 1;
+                field_len += 1;
+            }
+            for (value.object.fields[0..field_len]) |field| {
+                try self.markValue(field);
+            }
+            // Mark self as used
+            try self.marked.put(@intFromPtr(value.object), undefined);
+        },
     }
 }
 
@@ -78,7 +94,7 @@ pub fn sweep(self: *Gc) !void {
         const ptr = switch (elem) {
             .boolean, .float, .int => unreachable,
             .string => @intFromPtr(elem.string.ptr),
-            .object => unreachable,
+            .object => @intFromPtr(elem.object),
         };
         if (self.marked.contains(ptr)) continue;
         try idx_to_remove.append(self.gpa, i);
