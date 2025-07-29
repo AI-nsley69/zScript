@@ -7,12 +7,12 @@ var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
 
 // Function to strip unnecessary overhead when looking at performance of certain parts of the runtime.
 fn benchmark() !void {
-    _ = try lib.run(std.heap.smp_gpa, @embedFile("./bench.zs"), .{});
+    _ = try lib.run(std.heap.smp_allocator, @embedFile("./bench.zs"), .{});
 }
 
 pub fn main() !void {
     // try benchmark();
-    const gpa = std.heap.smp_gpa;
+    const gpa = std.heap.smp_allocator;
     var root = try cli.build(gpa);
     defer root.deinit();
 
@@ -23,8 +23,8 @@ pub fn main() !void {
 
 const expect = std.testing.expect;
 test "Addition" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = gpa.gpa();
+    var alloc = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa = alloc.allocator();
     defer {
         const deinit_status = gpa.deinit();
         //fail test; can't try in defer as defer is executed after we return
@@ -38,8 +38,8 @@ test "Addition" {
 }
 
 test "Arithmetic" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = gpa.gpa();
+    var alloc = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa = alloc.allocator();
     defer {
         const deinit_status = gpa.deinit();
         //fail test; can't try in defer as defer is executed after we return
@@ -52,8 +52,8 @@ test "Arithmetic" {
 }
 
 test "Float" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = gpa.gpa();
+    var alloc = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa = alloc.allocator();
     defer {
         const deinit_status = gpa.deinit();
         //fail test; can't try in defer as defer is executed after we return

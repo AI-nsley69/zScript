@@ -24,8 +24,8 @@ var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
 fn check(ctx: zli.CommandContext) !void {
     const gpa, const is_debug = comptime gpa: {
         break :gpa switch (builtin.mode) {
-            .Debug => .{ debug_gpa.gpa(), true },
-            else => .{ std.heap.smp_gpa, false },
+            .Debug => .{ debug_gpa.allocator(), true },
+            else => .{ std.heap.smp_allocator, false },
         };
     };
     defer if (is_debug) {

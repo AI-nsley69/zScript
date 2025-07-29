@@ -445,26 +445,3 @@ fn methodCall(self: *Vm) !void {
     const new_call: Frame = .{ .metadata = &obj.functions[@intCast(method_id)] };
     try self.call_stack.append(self.gc.gpa, new_call);
 }
-
-fn methodCall(self: *Vm) !void {
-    const obj = try Value.asObj(try self.nextReg());
-
-    if (self.call_stack.items.len >= max_call_depth) {
-        @branchHint(.cold);
-        @panic("Stack Overflow");
-    }
-
-    const frame = obj.functions[try self.next()];
-
-    // Push registers to the stack
-    try self.reg_stack.appendSlice(self.gc.gpa, self.registers.items[1..self.metadata().reg_size]);
-    // Add the objs function metadata
-    var new_buf = std.ArrayListUnmanaged(Bytecode.Function){};
-    try new_buf.appendSlice(self.gc.gpa, self.functions);
-
-    try new_buf.append(self.gc.gpa, frame);
-    self.functions = try new_buf.toOwnedSlice(self.gc.gpa);
-    // Construct a new call_frame and push it to the stack
-    const new_call: Frame = .{ .metadata = self.functions.len - 1 };
-    try self.call_stack.append(self.gc.gpa, new_call);
-}

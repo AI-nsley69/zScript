@@ -48,7 +48,7 @@ pub fn markRoots(self: *Gc, vm: *Vm) !void {
         try self.markValue(value);
     }
 
-    log.debug("TODO: Mark registers & params in stack.");
+    log.debug("TODO: Mark registers & params in stack.", .{});
 
     for (vm.constants) |constant| {
         try self.markValue(constant);

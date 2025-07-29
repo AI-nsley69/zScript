@@ -65,7 +65,7 @@ pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.MultiArrayList
 
     log.debug("Parsing tokens..", .{});
     var arena = std.heap.ArenaAllocator.init(alloc);
-    self.gpa = arena.gpa();
+    self.gpa = arena.allocator();
     self.tokens = tokens;
     var statements = std.ArrayListUnmanaged(Statement){};
     while (!self.isEof() and self.errors.items(.data).len < 1) {

@@ -20,7 +20,7 @@ gpa: std.mem.Allocator = undefined,
 
 pub fn optimizeAst(self: *Optimizer, gpa: std.mem.Allocator, program: Program) !Program {
     var arena = std.heap.ArenaAllocator.init(gpa);
-    self.gpa = arena.gpa();
+    self.gpa = arena.allocator();
 
     var stmts = std.ArrayListUnmanaged(Statement){};
     for (program.statements.items) |stmt| {

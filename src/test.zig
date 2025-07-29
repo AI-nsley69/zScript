@@ -5,7 +5,7 @@ const expect = std.testing.expect;
 var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
 
 test "Integer Arithmetic" {
-    const gpa = debug_gpa.gpa();
+    const gpa = debug_gpa.allocator();
 
     const file = "tests/int_arithmetic.zs";
     const val = try lib.run(gpa, @embedFile(file), .{ .file = file });
