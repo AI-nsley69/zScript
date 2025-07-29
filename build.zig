@@ -53,18 +53,8 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const test_mod = b.createModule(.{
-        .root_source_file = b.path("src/test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    test_mod.addImport("tracy", tracy_dep.module("tracy"));
-    test_mod.addImport("ansi_term", ansi_term_dep.module("ansi_term"));
-    test_mod.addImport("zli", zli_dep.module("zli"));
-
     const unit_tests = b.addTest(.{
-        .root_module = test_mod,
+        .root_module = exe_mod,
     });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);

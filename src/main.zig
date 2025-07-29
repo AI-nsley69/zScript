@@ -22,45 +22,8 @@ pub fn main() !void {
 }
 
 const expect = std.testing.expect;
-test "Addition" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer {
-        const deinit_status = gpa.deinit();
-        //fail test; can't try in defer as defer is executed after we return
-        if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
-    }
 
-    const src = "1 + 1 + 1;";
-    const res = try lib.run(allocator, src, .{});
-    try expect(res != null);
-    try expect(res.?.int == 3);
-}
-
-test "Arithmetic" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer {
-        const deinit_status = gpa.deinit();
-        //fail test; can't try in defer as defer is executed after we return
-        if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
-    }
-    const src = "1 * 2 - 4 / 2 + 1;";
-    const res = try lib.run(allocator, src, .{});
-    try expect(res != null);
-    try expect(res.?.int == 1);
-}
-
-test "Float" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer {
-        const deinit_status = gpa.deinit();
-        //fail test; can't try in defer as defer is executed after we return
-        if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
-    }
-    const src = "1.5 + 1.5;";
-    const res = try lib.run(allocator, src, .{});
-    try expect(res != null);
-    try expect(res.?.float == 3.0);
+// Import the tests from test-file
+test {
+    _ = @import("test.zig");
 }
