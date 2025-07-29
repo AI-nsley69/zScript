@@ -316,7 +316,7 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
     const obj = try self.gc.gpa.create(Object);
     obj.* = .{
         .fields = (try field_values.toOwnedSlice(self.gc.gpa)).ptr,
-        .functions = try functions.toOwnedSlice(self.gc.gpa),
+        .functions = (try functions.toOwnedSlice(self.gc.gpa)).ptr,
         .schema = self.ast.objects.get(target.name).?,
     };
 

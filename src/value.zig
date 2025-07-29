@@ -41,7 +41,7 @@ pub const Object = struct {
         }
     };
     fields: [*]Value,
-    functions: []Bytecode.Function,
+    functions: [*]Bytecode.Function,
     schema: *const Schema,
 };
 
@@ -118,18 +118,27 @@ pub const Value = union(ValueType) {
                 var freed: usize = 0;
 
                 // Free the field values
-                var ptr: [*:0]const u8 = self.object.schema.fields;
-                var len: usize = 0;
-                while (ptr[0] != 0) {
-                    const field = std.mem.span(ptr);
-                    ptr += field.len + 1; // skip over the field data, as well as its sentinel
-                    len += 1;
+                var field_ptr: [*:0]const u8 = self.object.schema.fields;
+                var field_len: usize = 0;
+                while (field_ptr[0] != 0) {
+                    const field = std.mem.span(field_ptr);
+                    field_ptr += field.len + 1; // skip over the field data, as well as its sentinel
+                    freed += field.len + 1;
+                    field_len += 1;
                 }
-                gc.gpa.free(self.object.fields[0..len]);
-                freed += len;
-                // Free the functions
-                freed += @sizeOf([]Bytecode.Function) * self.object.functions.len;
-                gc.gpa.free(self.object.functions);
+                gc.gpa.free(self.object.fields[0..field_len]);
+                var method_ptr: [*:0]const u8 = self.object.schema.methods;
+                var method_len: usize = 0;
+                while (method_ptr[0] != 0) {
+                    const method = std.mem.span(method_ptr);
+                    method_ptr += method.len + 1;
+                    freed += method.len + 1;
+                    method_len += 1;
+                }
+                for (self.object.functions[0..method_len]) |method| {
+                    gc.gpa.free(method.body);
+                }
+                gc.gpa.free(self.object.functions[0..method_len]);
                 gc.gpa.destroy(self.object);
                 return freed;
             },
