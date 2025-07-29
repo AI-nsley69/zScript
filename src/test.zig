@@ -83,3 +83,15 @@ test "Recursion With Base Case" {
     const has_leak = debug_gpa.deinit();
     try expect(has_leak == .ok);
 }
+
+test "Undefined variable" {
+    var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
+    const gpa = debug_gpa.allocator();
+
+    const file = "./tests/undefined_variable.zs";
+    const val = lib.run(gpa, @embedFile(file), .{ .file = file });
+    try expect(val == error.UndefinedVariable);
+    // Test for potential leaks
+    const has_leak = debug_gpa.deinit();
+    try expect(has_leak == .ok);
+}

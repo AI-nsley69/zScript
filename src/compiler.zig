@@ -20,6 +20,7 @@ pub const Error = error{
     OutOfConstants,
     InvalidJmpTarget,
     EvaluationFailed,
+    UndefinedVariable,
     Unknown,
 };
 
@@ -349,8 +350,9 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     if (metadata == null) {
         log.debug("No available metadata", .{});
         const msg = try std.fmt.allocPrint(self.gpa, "Undefined variable: '{s}'", .{target.name});
+        defer self.gpa.free(msg);
         try self.reportError(msg);
-        return Error.Unknown;
+        return Error.UndefinedVariable;
     }
     // Find the variable in the scope
     if (self.getVariableDst(target.name)) |cached_dst| {
@@ -364,8 +366,9 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
         if (metadata.?.is_param) return dst;
         log.debug("Variable is not a parameter, nor does it have an initializer.", .{});
         const msg = try std.fmt.allocPrint(self.gpa, "Undefined variable: '{s}'", .{target.name});
+        defer self.gpa.free(msg);
         try self.reportError(msg);
-        return Error.Unknown;
+        return Error.UndefinedVariable;
     }
     _ = try self.expression(target.initializer.?, dst);
 
@@ -422,6 +425,7 @@ fn newObject(self: *Compiler, target: Ast.NewObject, dst_reg: ?u8) Errors!u8 {
     const val = self.objects.get(target.name);
     if (val == null) {
         const msg = try std.fmt.allocPrint(self.gpa, "Undefined object '{s}'", .{target.name});
+        defer self.gpa.free(msg);
         try self.reportError(msg);
         return Error.Unknown;
     }
@@ -482,6 +486,7 @@ fn assignment(self: *Compiler, target: *Ast.Infix) Errors!u8 {
     if (self.ast.variables.get(target_var.*.name)) |metadata| {
         if (!metadata.mutable) {
             const msg = try std.fmt.allocPrint(self.gpa, "Invalid assignment to immutable variable '{s}'", .{target_var.*.name});
+            defer self.gpa.free(msg);
             try self.reportError(msg);
             return Error.Unknown;
         }
@@ -541,8 +546,10 @@ fn allocateRegister(self: *Compiler) Errors!u8 {
 }
 
 fn reportError(self: *Compiler, msg: []const u8) Errors!void {
+    if (self.err_msg != null) self.gpa.free(self.err_msg.?); // Free old error message (if exists)
     const err_msg = try self.gpa.dupe(u8, msg);
     errdefer self.gpa.free(err_msg);
+
     self.err_msg = err_msg;
 }
 
