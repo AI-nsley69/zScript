@@ -323,7 +323,18 @@ pub fn run(self: *Vm) !void {
             const obj = try Value.asObj(try self.nextReg());
             const field_name = try Value.asString(self.gc, try self.nextReg());
             var schema = obj.schema;
-            const id = schema.getIndex(field_name);
+            const id = schema.getFieldIndex(field_name);
+            if (id == null) {
+                return Error.InvalidParameter;
+            }
+            self.setRegister(try self.next(), .{ .int = @intCast(id.?) });
+            continue :blk try self.nextOp();
+        },
+        .object_method_id => {
+            const obj = try Value.asObj(try self.nextReg());
+            const method_name = try Value.asString(self.gc, try self.nextReg());
+            var schema = obj.schema;
+            const id = schema.getMethodIndex(method_name);
             if (id == null) {
                 return Error.InvalidParameter;
             }
@@ -421,6 +432,7 @@ fn call(self: *Vm) !void {
 
 fn methodCall(self: *Vm) !void {
     const obj = try Value.asObj(try self.nextReg());
+    const method_id = try Value.asInt(try self.nextReg());
 
     if (self.call_stack.items.len >= max_call_depth) {
         @branchHint(.cold);
@@ -429,6 +441,7 @@ fn methodCall(self: *Vm) !void {
 
     // Push registers to the stack
     try self.reg_stack.appendSlice(self.gc.gpa, self.registers.items[1..self.metadata().reg_size]);
-    const new_call: Frame = .{ .metadata = &obj.functions[try self.next()] };
+    // Create a new call frame
+    const new_call: Frame = .{ .metadata = &obj.functions[@intCast(method_id)] };
     try self.call_stack.append(self.gc.gpa, new_call);
 }

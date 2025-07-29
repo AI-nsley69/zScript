@@ -11,6 +11,7 @@ pub const OpCodes = enum(u8) {
     load_bool,
     load_const,
     object_field_id,
+    object_method_id,
     object_get,
     object_set,
     load_param,

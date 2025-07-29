@@ -10,8 +10,9 @@ pub const Error = error{
 pub const Object = struct {
     pub const Schema = struct {
         fields: [*:0]const u8,
+        methods: [*:0]const u8,
 
-        pub fn getIndex(self: *const Schema, name: []const u8) ?usize {
+        pub fn getFieldIndex(self: *const Schema, name: []const u8) ?usize {
             var ptr: [*:0]const u8 = self.fields;
             var idx: usize = 0;
             while (ptr[0] != 0) {
@@ -20,6 +21,20 @@ pub const Object = struct {
                     return idx;
                 }
                 ptr += field.len + 1; // skip over the field data, as well as its sentinel
+                idx += 1;
+            }
+            return null;
+        }
+
+        pub fn getMethodIndex(self: *const Schema, name: []const u8) ?usize {
+            var ptr: [*:0]const u8 = self.methods;
+            var idx: usize = 0;
+            while (ptr[0] != 0) {
+                const method = std.mem.span(ptr);
+                if (std.mem.eql(u8, method, name)) {
+                    return idx;
+                }
+                ptr += method.len + 1; // skip over the field data, as well as its sentinel
                 idx += 1;
             }
             return null;

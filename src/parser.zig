@@ -143,7 +143,7 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
     _ = try self.consume(.left_bracket, "Expected '{' after object declaration.");
 
     var fields = std.StringArrayHashMapUnmanaged(?Expression){};
-    var functions = std.ArrayListUnmanaged(Statement){};
+    var methods = std.ArrayListUnmanaged(Statement){};
     while (!self.match(.right_bracket)) {
         if (self.match(.dot)) { // Check for properties
             const field_name = try self.consume(.identifier, "Expected property name");
@@ -151,7 +151,7 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
             try fields.put(self.allocator, field_name.span, expr);
             _ = try self.consume(.comma, "Expected ',' after object field");
         } else if (self.match(.fn_declaration)) { // Check for functions
-            try functions.append(self.allocator, try self.functionDeclaration());
+            try methods.append(self.allocator, try self.functionDeclaration());
         } else {
             // Break if no functions or properties are defined
             break;
@@ -162,23 +162,36 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         try self.reportError("Expected '}' after object declaration.");
     }
 
-    var packed_len: usize = 0;
+    var packed_field_len: usize = 0;
     for (fields.keys()) |key| {
-        packed_len += key.len + 1;
+        packed_field_len += key.len + 1;
     }
-
-    var packed_fields: std.ArrayListUnmanaged(u8) = try .initCapacity(self.allocator, packed_len + 1);
+    var packed_fields: std.ArrayListUnmanaged(u8) = try .initCapacity(self.allocator, packed_field_len + 1);
     errdefer packed_fields.deinit(self.allocator);
     for (fields.keys()) |key| {
         packed_fields.appendSliceAssumeCapacity(key);
         packed_fields.appendAssumeCapacity(0);
     }
 
+    var packed_method_len: usize = 0;
+    for (methods.items) |method| {
+        packed_method_len += method.node.function.name.len + 1;
+    }
+    var packed_methods: std.ArrayListUnmanaged(u8) = try .initCapacity(self.allocator, packed_method_len + 1);
+    errdefer packed_fields.deinit(self.allocator);
+    for (methods.items) |method| {
+        packed_methods.appendSliceAssumeCapacity(method.node.function.name);
+        packed_methods.appendAssumeCapacity(0);
+    }
+
     const schema = try self.allocator.create(Object.Schema);
-    schema.* = .{ .fields = try packed_fields.toOwnedSliceSentinel(self.allocator, 0) };
+    schema.* = .{
+        .fields = try packed_fields.toOwnedSliceSentinel(self.allocator, 0),
+        .methods = try packed_methods.toOwnedSliceSentinel(self.allocator, 0),
+    };
     try self.objects.put(self.allocator, name.span, schema);
 
-    return Ast.Object.create(self.allocator, name.span, fields, try functions.toOwnedSlice(self.allocator));
+    return Ast.Object.create(self.allocator, name.span, fields, try methods.toOwnedSlice(self.allocator));
 }
 
 fn statement(self: *Parser) Errors!Statement {

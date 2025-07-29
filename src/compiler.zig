@@ -455,13 +455,16 @@ fn propertyAccess(self: *Compiler, target: *Ast.FieldAccess, dst_reg: ?u8) Error
 
 fn methodCall(self: *Compiler, target: *Ast.MethodCall, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
-
+    // Reference to the root object, passed as the first parameter
     const root = try self.expression(target.root, null);
-    try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), root });
-    // TODO: Get method idx
-    const method_idx = 0;
+    // Get the method on the object
+    const method = try self.expression(target.method, null);
+    const method_dst = try self.allocateRegister();
+    try out.writeAll(&.{ @intFromEnum(OpCodes.object_method_id), root, method, method_dst });
+    // Get the destination for the method call
     const dst = dst_reg orelse try self.allocateRegister();
-    try out.writeAll(&.{ @intFromEnum(OpCodes.method_call), root, method_idx, dst });
+    try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), root });
+    try out.writeAll(&.{ @intFromEnum(OpCodes.method_call), root, method_dst, dst });
 
     return dst;
 }
