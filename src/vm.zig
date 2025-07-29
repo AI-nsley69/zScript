@@ -185,9 +185,23 @@ pub fn run(self: *Vm) !void {
             const dst = try self.next();
             const fst = try self.nextReg();
             const snd = try self.nextReg();
-            const res: Value = switch (fst) {
-                .int => .{ .int = @divFloor(try Value.asInt(fst), try Value.asInt(snd)) },
-                .float => .{ .float = try Value.asFloat(fst) / try Value.asFloat(snd) },
+            const res: Value = val: switch (fst) {
+                .int => {
+                    const snd_int = try Value.asInt(snd);
+                    if (snd_int == 0) {
+                        @branchHint(.cold);
+                        return Error.UnsupportedOperation;
+                    }
+                    break :val .{ .int = @divFloor(try Value.asInt(fst), snd_int) };
+                },
+                .float => {
+                    const float = try Value.asFloat(snd);
+                    if (float == 0) {
+                        @branchHint(.cold);
+                        return Error.UnsupportedOperation;
+                    }
+                    break :val .{ .float = try Value.asFloat(fst) / try Value.asFloat(snd) };
+                },
                 .boolean, .string, .object => return Error.UnsupportedOperation,
             };
             self.setRegister(dst, res);

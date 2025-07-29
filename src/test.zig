@@ -30,3 +30,28 @@ test "Float Arithmetic" {
     const has_leak = debug_gpa.deinit();
     try expect(has_leak == .ok);
 }
+
+test "Integer Zero Division" {
+    var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
+    const gpa = debug_gpa.allocator();
+
+    const file = "./tests/int_zero_div.zs";
+    const val = lib.run(gpa, @embedFile(file), .{ .file = file });
+    // Function throws error on zero div
+    try expect(val == error.UnsupportedOperation);
+    // Test for potential leaks
+    const has_leak = debug_gpa.deinit();
+    try expect(has_leak == .ok);
+}
+
+test "Float Zero Division" {
+    var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
+    const gpa = debug_gpa.allocator();
+
+    const file = "./tests/float_zero_div.zs";
+    const val = lib.run(gpa, @embedFile(file), .{ .file = file });
+    try expect(val == error.UnsupportedOperation);
+    // Test for potential leaks
+    const has_leak = debug_gpa.deinit();
+    try expect(has_leak == .ok);
+}
