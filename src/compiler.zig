@@ -299,7 +299,6 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
     var field_it = target.properties.iterator();
     var next = field_it.next();
     while (next != null) : (next = field_it.next()) {
-        // const field_name = next.?.key_ptr;
         const field_expression = next.?.value_ptr;
         log.debug("TODO: Uninitialized fields as null values.", .{});
         const value: Value = if (field_expression.* != null) try eval(field_expression.*.?) else .{ .int = 0 };
@@ -307,7 +306,6 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
     }
 
     var functions = std.ArrayListUnmanaged(Bytecode.Function){};
-    log.debug("TODO: Create functions for objects", .{});
     for (target.functions) |func| {
         const node = func.node.function;
         try functions.append(self.allocator, try self.compileObjectFrame(node));
@@ -328,50 +326,42 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
 }
 
 fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
-    const node = target.node;
     return switch (target.node) {
-        .infix => try self.infix(node.infix, dst_reg),
-        .unary => try self.unary(node.unary, dst_reg),
-        .literal => try self.literal(node.literal, dst_reg),
-        .variable => try self.variable(node.variable),
-        .call => try self.call(node.call, dst_reg),
-        .native_call => try self.nativeCall(node.native_call, dst_reg),
-        .new_object => try self.newObject(node.new_object, dst_reg),
-        .field_access => try self.propertyAccess(node.field_access, dst_reg),
-        .method_call => try self.methodCall(node.method_call, dst_reg),
+        .infix => try self.infix(target.node.infix, dst_reg),
+        .unary => try self.unary(target.node.unary, dst_reg),
+        .literal => try self.literal(target.node.literal, dst_reg),
+        .variable => try self.variable(target.node.variable),
+        .call => try self.call(target.node.call, dst_reg),
+        .native_call => try self.nativeCall(target.node.native_call, dst_reg),
+        .new_object => try self.newObject(target.node.new_object, dst_reg),
+        .field_access => try self.propertyAccess(target.node.field_access, dst_reg),
+        .method_call => try self.methodCall(target.node.method_call, dst_reg),
     };
 }
 
 fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     // Special case for handling `self` on objects.
     if (std.mem.eql(u8, target.name, "self")) {
-        const initialized_dst = self.getVariableDst(target.name);
-        if (initialized_dst != null) {
-            return initialized_dst.?;
-        }
-        try self.reportError("Invalid usage of 'self'");
-        return Error.Unknown;
+        return self.objectSelf(target);
     }
 
-    const maybe_metadata = self.ast.variables.get(target.name);
-    if (maybe_metadata == null) {
+    const metadata = self.ast.variables.get(target.name);
+    if (metadata == null) {
         log.debug("No available metadata", .{});
         const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
     }
-    const metadata = maybe_metadata.?;
     // Find the variable in the scope
-    const initialized_dst = self.getVariableDst(target.name);
-    if (initialized_dst != null) {
-        return initialized_dst.?;
+    if (self.getVariableDst(target.name)) |cached_dst| {
+        return cached_dst;
     }
     const dst = try self.allocateRegister();
 
     try self.scope().put(self.allocator, target.name, dst);
     if (target.initializer == null) {
         // Ast.Return destination if the variable is a function parameter
-        if (metadata.is_param) return dst;
+        if (metadata.?.is_param) return dst;
         log.debug("Variable is not a parameter, nor does it have an initializer.", .{});
         const msg = try std.fmt.allocPrint(self.allocator, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
@@ -382,15 +372,20 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     return dst;
 }
 
+fn objectSelf(self: *Compiler, target: *Ast.Variable) Errors!u8 {
+    if (self.getVariableDst(target.name)) |dst| {
+        return dst;
+    }
+    try self.reportError("Invalid usage of 'self'");
+    return Error.Unknown;
+}
+
 fn call(self: *Compiler, target: *Ast.Call, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
-    const node = target.*;
-    const call_expr = node.callee.node;
-    const func_name = call_expr.variable.*.name;
+    const func_name = target.callee.node.variable.name;
     // Compile store instructions for all parameters
-    for (node.args) |arg| {
-        const arg_dst = try self.expression(arg, null);
-        try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), arg_dst });
+    for (target.args) |arg| {
+        try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), try self.expression(arg, null) });
     }
     // Find the frame target
     var frame_idx: ?u8 = self.functions.get(func_name);
@@ -402,17 +397,17 @@ fn call(self: *Compiler, target: *Ast.Call, dst_reg: ?u8) Errors!u8 {
     const dst = dst_reg orelse try self.allocateRegister();
     // Finalize the call instruction
     try out.writeAll(&.{ @intFromEnum(OpCodes.call), frame_idx.? });
+    // Copy return reg (0x00) to final location
     try out.writeAll(&.{ @intFromEnum(OpCodes.copy), dst, 0x00 });
+
     return dst;
 }
 
 fn nativeCall(self: *Compiler, target: *Ast.NativeCall, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
-    const node = target.*;
     // Compile store instructions for all parameters
-    for (node.args) |arg| {
-        const arg_dst = try self.expression(arg, null);
-        try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), arg_dst });
+    for (target.args) |arg| {
+        try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), try self.expression(arg, null) });
     }
 
     const dst = dst_reg orelse try self.allocateRegister();
@@ -424,18 +419,16 @@ fn nativeCall(self: *Compiler, target: *Ast.NativeCall, dst_reg: ?u8) Errors!u8 
 
 fn newObject(self: *Compiler, target: Ast.NewObject, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
-    const obj = target.name;
-    const val = self.objects.get(obj);
+    const val = self.objects.get(target.name);
     if (val == null) {
-        const msg = try std.fmt.allocPrint(self.allocator, "Undefined object '{s}'", .{obj});
+        const msg = try std.fmt.allocPrint(self.allocator, "Undefined object '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
     }
 
     try self.constants.append(self.allocator, val.?);
-    const const_idx = self.constants.items.len - 1;
     const dst = dst_reg orelse try self.allocateRegister();
-    try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
+    try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(self.constants.items.len - 1) });
     return dst;
 }
 
@@ -473,7 +466,9 @@ fn methodCall(self: *Compiler, target: *Ast.MethodCall, dst_reg: ?u8) Errors!u8 
 }
 
 fn infix(self: *Compiler, target: *Ast.Infix, dst_reg: ?u8) Errors!u8 {
-    if (target.op == .assign) return try self.assignment(target);
+    if (target.op == .assign) {
+        return try self.assignment(target);
+    }
     const lhs = try self.expression(target.lhs, null);
     const rhs = try self.expression(target.rhs, null);
     const dst = if (dst_reg == null) try self.allocateRegister() else dst_reg.?;
