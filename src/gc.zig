@@ -1,4 +1,5 @@
 const std = @import("std");
+const Bytecode = @import("bytecode.zig");
 const Vm = @import("vm.zig");
 const Val = @import("value.zig");
 
@@ -47,6 +48,8 @@ pub fn markRoots(self: *Gc, vm: *Vm) !void {
         try self.markValue(value);
     }
 
+    log.debug("TODO: Mark registers & params in stack.", .{});
+
     for (vm.constants) |constant| {
         try self.markValue(constant);
     }
@@ -58,6 +61,21 @@ fn markValue(self: *Gc, value: Value) !void {
         // No heap allocations done for these values
         .int, .float, .boolean => {},
         .string => try self.marked.put(@intFromPtr(value.string.ptr), undefined),
+        .object => {
+            // Mark the fields and their values
+            var field_ptr: [*:0]const u8 = value.object.schema.fields;
+            var field_len: usize = 0;
+            while (field_ptr[0] != 0) {
+                const field = std.mem.span(field_ptr);
+                field_ptr += field.len + 1;
+                field_len += 1;
+            }
+            for (value.object.fields[0..field_len]) |field| {
+                try self.markValue(field);
+            }
+            // Mark self as used
+            try self.marked.put(@intFromPtr(value.object), undefined);
+        },
     }
 }
 
@@ -76,6 +94,7 @@ pub fn sweep(self: *Gc) !void {
         const ptr = switch (elem) {
             .boolean, .float, .int => unreachable,
             .string => @intFromPtr(elem.string.ptr),
+            .object => @intFromPtr(elem.object),
         };
         if (self.marked.contains(ptr)) continue;
         try idx_to_remove.append(self.gpa, i);
@@ -93,16 +112,10 @@ pub fn sweep(self: *Gc) !void {
     self.marked.clearRetainingCapacity();
 }
 
-fn free(self: *Gc, value: Value, idx: ?usize) usize {
+fn free(self: *Gc, val: Value, idx: ?usize) usize {
+    var value = val;
     if (idx != null) _ = self.allocated.orderedRemove(idx.?);
-
-    return blk: switch (value) {
-        .boolean, .float, .int => unreachable,
-        .string => {
-            self.gpa.free(value.string);
-            break :blk value.string.len * 8;
-        },
-    };
+    return value.deinit(self);
 }
 
 pub fn alloc(self: *Gc, value_type: ValueType, count: usize) !Value {
@@ -114,6 +127,38 @@ pub fn alloc(self: *Gc, value_type: ValueType, count: usize) !Value {
             const str = try self.gpa.alloc(u8, count);
             self.allocated_bytes += count;
             break :val .{ .string = str };
+        },
+        .object => unreachable,
+    };
+    try self.allocated.append(self.gpa, val);
+    return val;
+}
+
+pub fn dupe(self: *Gc, value: Value) !Value {
+    const val: Value = val: switch (value) {
+        // Should never be on the heap
+        .boolean, .int, .float => unreachable,
+        .string => {
+            const str = try self.gpa.dupe(u8, value.string);
+            self.allocated_bytes += str.len;
+            break :val .{ .string = str };
+        },
+        .object => {
+            const old = value.object;
+            // Reuse the old functions
+            const functions = old.functions;
+            const fields = try old.fields.clone(self.gpa);
+
+            const it = fields.iterator();
+            var next = it.next();
+            while (next != null) : (next = it.next()) {
+                self.allocated_bytes += next.?.key_ptr.len;
+            }
+
+            break :val .{ .object = .{
+                .fields = fields,
+                .functions = functions,
+            } };
         },
     };
     try self.allocated.append(self.gpa, val);

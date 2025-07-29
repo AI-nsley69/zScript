@@ -37,6 +37,10 @@ fn print(ctx: Context) void {
         .float => out.print("{d}\n", .{value.float}),
         .boolean => out.print("{any}\n", .{value.boolean}),
         .string => out.print("{s}\n", .{value.string}),
+        else => {
+            std.log.debug("Unhandled value type!", .{});
+            unreachable;
+        },
     } catch {};
 }
 

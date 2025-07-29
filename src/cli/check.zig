@@ -5,8 +5,8 @@ const zli = @import("zli");
 
 const builtin = @import("builtin");
 
-pub fn register(allocator: std.mem.Allocator) !*zli.Command {
-    const cmd = try zli.Command.init(allocator, .{
+pub fn register(gpa: std.mem.Allocator) !*zli.Command {
+    const cmd = try zli.Command.init(gpa, .{
         .name = "check",
         // .shortcut = "ast",
         .description = "Verifies the ast",
@@ -19,19 +19,19 @@ pub fn register(allocator: std.mem.Allocator) !*zli.Command {
     return cmd;
 }
 
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
 
 fn check(ctx: zli.CommandContext) !void {
     const gpa, const is_debug = comptime gpa: {
         break :gpa switch (builtin.mode) {
-            .Debug => .{ debug_allocator.allocator(), true },
+            .Debug => .{ debug_gpa.allocator(), true },
             else => .{ std.heap.smp_allocator, false },
         };
     };
     defer if (is_debug) {
-        const has_leak = debug_allocator.deinit();
+        const has_leak = debug_gpa.deinit();
         if (has_leak == .leak) {
-            std.log.debug("Leak detected after freeing allocator.", .{});
+            std.log.debug("Leak detected after freeing gpa.", .{});
         }
     };
 

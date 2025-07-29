@@ -4,19 +4,22 @@ const Bytecode = @import("bytecode.zig");
 const Gc = @import("gc.zig");
 const Vm = @import("vm.zig");
 const Ast = @import("ast.zig");
-const Value = @import("value.zig").Value;
-
+const Val = @import("value.zig");
 const tracy = @import("tracy");
 
 const log = std.log.scoped(.compiler);
 
+const Value = Val.Value;
+const Object = Val.Object;
+
 const TokenType = Lexer.TokenType;
 const OpCodes = Bytecode.OpCodes;
 
-const Error = error{
+pub const Error = error{
     OutOfRegisters,
     OutOfConstants,
     InvalidJmpTarget,
+    EvaluationFailed,
     Unknown,
 };
 
@@ -33,12 +36,14 @@ pub const CompilerOutput = struct {
     const Self = @This();
     frames: []Bytecode.Function,
     constants: []Value,
+    objects: std.StringArrayHashMapUnmanaged(Value),
 
-    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
         for (self.frames) |frame| {
-            allocator.free(frame.body);
+            gpa.free(frame.body);
         }
-        allocator.free(self.frames);
+        gpa.free(self.frames);
+        self.objects.deinit(gpa);
     }
 };
 
@@ -54,6 +59,8 @@ frame_idx: usize = 0,
 variables: std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)) = std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)){},
 functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
 constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+
+objects: std.StringArrayHashMapUnmanaged(Value) = std.StringArrayHashMapUnmanaged(Value){},
 
 err_msg: ?[]u8 = null,
 
@@ -71,6 +78,16 @@ inline fn destroyScope(self: *Compiler) void {
     popped.?.deinit(self.gpa);
 }
 
+fn getVariableDst(self: *Compiler, name: []const u8) ?u8 {
+    // Find the variable in the scope, starting from the back.
+    for (self.variables.items) |var_scope| {
+        if (!var_scope.contains(name)) continue;
+        return var_scope.get(name).?;
+    }
+
+    return null;
+}
+
 inline fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
     return self.current().instructions.writer(self.gpa);
 }
@@ -85,15 +102,16 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
         self.comp_frames.deinit(self.gpa);
     }
     // Create a pseudo main function for initial frame
-    const no_body: Ast.Statement = .{ .node = .{ .block = .{ .statements = &.{} } } };
-    var main_func: Ast.Function = .{ .name = "main", .params = &.{}, .body = no_body };
+    const main_body: Ast.Statement = try Ast.Block.create(self.ast.statements.items);
+    const main_func = try Ast.Function.create(self.gpa, "main", main_body, &.{});
+    defer self.gpa.destroy(main_func.node.function);
 
     try self.functions.put(self.gpa, "main", 0);
 
     try self.variables.append(self.gpa, .{});
     defer self.destroyScope();
     // Compile the actual frame
-    const final_dst = try self.compileFrame(self.ast.statements.items, &main_func);
+    const final_dst = try self.compileFrame(main_func.node.function);
     // Emit return instruction at the end
     try self.getOut().writeAll(&.{ @intFromEnum(OpCodes.@"return"), final_dst });
     // Convert all comp frames to vm frames
@@ -108,10 +126,11 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     return .{
         .frames = try frames.toOwnedSlice(self.gpa),
         .constants = try self.constants.toOwnedSlice(self.gpa),
+        .objects = self.objects,
     };
 }
 
-pub fn compileFrame(self: *Compiler, target: []Ast.Statement, func: *Ast.Function) Errors!u8 {
+pub fn compileFrame(self: *Compiler, func: *Ast.Function) Errors!u8 {
     const previous_frame = self.frame_idx;
     defer self.frame_idx = previous_frame;
     // Setup a new frame
@@ -119,20 +138,46 @@ pub fn compileFrame(self: *Compiler, target: []Ast.Statement, func: *Ast.Functio
     self.frame_idx = self.comp_frames.items.len - 1;
     // Compile the new frame
     const out = self.getOut();
-    // Load the parameters for the function (if exists)
-    const reversed = try self.gpa.dupe(*Ast.Variable, func.params);
-    defer self.gpa.free(reversed);
-    std.mem.reverse(*Ast.Variable, reversed);
-    for (reversed) |param| {
+    for (func.params) |param| {
         try out.writeAll(&.{ @intFromEnum(OpCodes.load_param), try self.variable(param) });
     }
+
+    const stmts = func.body.node.block.statements;
     // Compile the statements
     var final_dst: u8 = 0;
-    for (target) |elem| {
+    for (stmts) |elem| {
         final_dst = try self.statement(elem);
     }
 
     return final_dst;
+}
+
+fn compileObjectFrame(self: *Compiler, func: *Ast.Function) Errors!Bytecode.Function {
+    const previous_frame = self.frame_idx;
+    defer self.frame_idx = previous_frame;
+    // Create new scope for the variable
+    try self.variables.append(self.gpa, .{});
+    defer self.destroyScope();
+    // Setup a new frame
+    try self.comp_frames.append(self.gpa, .{ .name = func.name });
+    self.frame_idx = self.comp_frames.items.len - 1;
+    // Compile new frame
+    const out = self.getOut();
+    // Setup self variable in scope
+    const dst = try self.allocateRegister();
+    try self.scope().put(self.gpa, "self", dst);
+    try out.writeAll(&.{ @intFromEnum(OpCodes.load_param), dst });
+
+    var final_dst: u8 = 0;
+    for (func.body.node.block.statements) |stmt| {
+        final_dst = try self.statement(stmt);
+    }
+
+    try out.writeAll(&.{ @intFromEnum(OpCodes.@"return"), final_dst });
+
+    const comp_frame = self.comp_frames.pop();
+    var instructions = comp_frame.?.instructions;
+    return .{ .name = comp_frame.?.name, .body = try instructions.toOwnedSlice(self.gpa), .reg_size = comp_frame.?.reg_idx };
 }
 
 fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
@@ -152,6 +197,7 @@ fn statement(self: *Compiler, target: Ast.Statement) Errors!u8 {
         .loop => try self.loop(node.loop),
         .function => try self.function(node.function),
         .@"return" => try self.@"return"(node.@"return"),
+        .object => try self.object(node.object),
     };
 }
 
@@ -235,8 +281,7 @@ fn function(self: *Compiler, target: *Ast.Function) Errors!u8 {
     try self.variables.append(self.gpa, .{});
     defer self.destroyScope();
     // Ast.Function always parses a body after it
-    const func_body = target.body.node.block.statements;
-    _ = try self.compileFrame(func_body, target);
+    _ = try self.compileFrame(target);
     return dst;
 }
 
@@ -246,38 +291,77 @@ fn @"return"(self: *Compiler, target: Ast.Return) Errors!u8 {
     return dst;
 }
 
+fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
+    try self.variables.append(self.gpa, .{});
+    defer self.destroyScope();
+
+    var field_values = std.ArrayListUnmanaged(Value){};
+    var field_it = target.properties.iterator();
+    var next = field_it.next();
+    while (next != null) : (next = field_it.next()) {
+        const field_expression = next.?.value_ptr;
+        log.debug("TODO: Uninitialized fields as null values.", .{});
+        const value: Value = if (field_expression.* != null) try eval(field_expression.*.?) else .{ .int = 0 };
+        try field_values.append(self.gc.gpa, value);
+    }
+
+    var functions = std.ArrayListUnmanaged(Bytecode.Function){};
+    for (target.functions) |func| {
+        const node = func.node.function;
+        try functions.append(self.gpa, try self.compileObjectFrame(node));
+    }
+
+    const obj = try self.gc.gpa.create(Object);
+    obj.* = .{
+        .fields = (try field_values.toOwnedSlice(self.gc.gpa)).ptr,
+        .functions = (try functions.toOwnedSlice(self.gc.gpa)).ptr,
+        .schema = self.ast.objects.get(target.name).?,
+    };
+
+    const obj_val: Value = .{ .object = obj };
+    try self.objects.put(self.gc.gpa, target.name, obj_val);
+    try self.gc.allocated.append(self.gc.gpa, obj_val);
+    // @panic("Not implemented");
+    return 0;
+}
+
 fn expression(self: *Compiler, target: Ast.Expression, dst_reg: ?u8) Errors!u8 {
-    const node = target.node;
     return switch (target.node) {
-        .infix => try self.infix(node.infix, dst_reg),
-        .unary => try self.unary(node.unary, dst_reg),
-        .literal => try self.literal(node.literal, dst_reg),
-        .variable => try self.variable(node.variable),
-        .call => try self.call(node.call, dst_reg),
-        .native_call => try self.nativeCall(node.native_call, dst_reg),
+        .infix => try self.infix(target.node.infix, dst_reg),
+        .unary => try self.unary(target.node.unary, dst_reg),
+        .literal => try self.literal(target.node.literal, dst_reg),
+        .variable => try self.variable(target.node.variable),
+        .call => try self.call(target.node.call, dst_reg),
+        .native_call => try self.nativeCall(target.node.native_call, dst_reg),
+        .new_object => try self.newObject(target.node.new_object, dst_reg),
+        .field_access => try self.propertyAccess(target.node.field_access, dst_reg),
+        .method_call => try self.methodCall(target.node.method_call, dst_reg),
     };
 }
 
 fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
-    const maybe_metadata = self.ast.variables.get(target.name);
-    if (maybe_metadata == null) {
+    // Special case for handling `self` on objects.
+    if (std.mem.eql(u8, target.name, "self")) {
+        return self.objectSelf(target);
+    }
+
+    const metadata = self.ast.variables.get(target.name);
+    if (metadata == null) {
         log.debug("No available metadata", .{});
         const msg = try std.fmt.allocPrint(self.gpa, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
         return Error.Unknown;
     }
-    const metadata = maybe_metadata.?;
     // Find the variable in the scope
-    for (self.variables.items) |var_scope| {
-        if (!var_scope.contains(target.name)) continue;
-        return var_scope.get(target.name).?;
+    if (self.getVariableDst(target.name)) |cached_dst| {
+        return cached_dst;
     }
     const dst = try self.allocateRegister();
 
     try self.scope().put(self.gpa, target.name, dst);
     if (target.initializer == null) {
         // Ast.Return destination if the variable is a function parameter
-        if (metadata.is_param) return dst;
+        if (metadata.?.is_param) return dst;
         log.debug("Variable is not a parameter, nor does it have an initializer.", .{});
         const msg = try std.fmt.allocPrint(self.gpa, "Undefined variable: '{s}'", .{target.name});
         try self.reportError(msg);
@@ -288,15 +372,20 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     return dst;
 }
 
+fn objectSelf(self: *Compiler, target: *Ast.Variable) Errors!u8 {
+    if (self.getVariableDst(target.name)) |dst| {
+        return dst;
+    }
+    try self.reportError("Invalid usage of 'self'");
+    return Error.Unknown;
+}
+
 fn call(self: *Compiler, target: *Ast.Call, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
-    const node = target.*;
-    const call_expr = node.callee.node;
-    const func_name = call_expr.variable.*.name;
+    const func_name = target.callee.node.variable.name;
     // Compile store instructions for all parameters
-    for (node.args) |arg| {
-        const arg_dst = try self.expression(arg, null);
-        try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), arg_dst });
+    for (target.args) |arg| {
+        try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), try self.expression(arg, null) });
     }
     // Find the frame target
     var frame_idx: ?u8 = self.functions.get(func_name);
@@ -308,17 +397,17 @@ fn call(self: *Compiler, target: *Ast.Call, dst_reg: ?u8) Errors!u8 {
     const dst = dst_reg orelse try self.allocateRegister();
     // Finalize the call instruction
     try out.writeAll(&.{ @intFromEnum(OpCodes.call), frame_idx.? });
+    // Copy return reg (0x00) to final location
     try out.writeAll(&.{ @intFromEnum(OpCodes.copy), dst, 0x00 });
+
     return dst;
 }
 
 fn nativeCall(self: *Compiler, target: *Ast.NativeCall, dst_reg: ?u8) Errors!u8 {
     const out = self.getOut();
-    const node = target.*;
     // Compile store instructions for all parameters
-    for (node.args) |arg| {
-        const arg_dst = try self.expression(arg, null);
-        try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), arg_dst });
+    for (target.args) |arg| {
+        try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), try self.expression(arg, null) });
     }
 
     const dst = dst_reg orelse try self.allocateRegister();
@@ -328,9 +417,58 @@ fn nativeCall(self: *Compiler, target: *Ast.NativeCall, dst_reg: ?u8) Errors!u8 
     return dst;
 }
 
-fn infix(self: *Compiler, target: *Ast.Infix, dst_reg: ?u8) Errors!u8 {
-    if (target.op == .assign) return try self.assignment(target);
+fn newObject(self: *Compiler, target: Ast.NewObject, dst_reg: ?u8) Errors!u8 {
+    const out = self.getOut();
+    const val = self.objects.get(target.name);
+    if (val == null) {
+        const msg = try std.fmt.allocPrint(self.gpa, "Undefined object '{s}'", .{target.name});
+        try self.reportError(msg);
+        return Error.Unknown;
+    }
 
+    try self.constants.append(self.gpa, val.?);
+    const dst = dst_reg orelse try self.allocateRegister();
+    try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(self.constants.items.len - 1) });
+    return dst;
+}
+
+fn propertyAccess(self: *Compiler, target: *Ast.FieldAccess, dst_reg: ?u8) Errors!u8 {
+    const out = self.getOut();
+    const op: OpCodes = if (target.assignment == null) .object_get else .object_set;
+    log.debug("TODO: Cache field id if register still available in scope", .{});
+    const root = try self.expression(target.root, null);
+    // Codegen for field id
+    const field = try self.expression(target.field, null);
+    const field_dst = try self.allocateRegister();
+    try out.writeAll(&.{ @intFromEnum(OpCodes.object_field_id), root, field, field_dst });
+    // Set / get for field
+    const dst = dst_reg orelse if (target.assignment != null) try self.expression(target.assignment.?, try self.allocateRegister()) else try self.allocateRegister();
+    try out.writeAll(&.{ @intFromEnum(op), root, field_dst, dst });
+
+    return dst;
+}
+
+fn methodCall(self: *Compiler, target: *Ast.MethodCall, dst_reg: ?u8) Errors!u8 {
+    const out = self.getOut();
+    // Reference to the root object, passed as the first parameter
+    const root = try self.expression(target.root, null);
+    // Get the method on the object
+    const method = try self.expression(target.method, null);
+    const method_dst = try self.allocateRegister();
+    try out.writeAll(&.{ @intFromEnum(OpCodes.object_method_id), root, method, method_dst });
+    // Get the destination for the method call
+    const dst = dst_reg orelse try self.allocateRegister();
+    try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), root });
+    try out.writeAll(&.{ @intFromEnum(OpCodes.method_call), root, method_dst });
+    try out.writeAll(&.{ @intFromEnum(OpCodes.copy), dst, 0x00 });
+
+    return dst;
+}
+
+fn infix(self: *Compiler, target: *Ast.Infix, dst_reg: ?u8) Errors!u8 {
+    if (target.op == .assign) {
+        return try self.assignment(target);
+    }
     const lhs = try self.expression(target.lhs, null);
     const rhs = try self.expression(target.rhs, null);
     const dst = dst_reg orelse try self.allocateRegister();
@@ -386,6 +524,7 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
             const const_idx = self.constants.items.len - 1;
             try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
         },
+        else => unreachable,
     }
     return dst;
 }
@@ -424,4 +563,53 @@ fn opcode(target: TokenType) !u8 {
         else => return Error.Unknown,
     };
     return @intFromEnum(op);
+}
+
+pub fn eval(expr: Ast.Expression) !Value {
+    const node = expr.node;
+    return switch (node) {
+        .infix => {
+            const infix_node = node.infix.*;
+            const lhs = try eval(infix_node.lhs);
+            const rhs = try eval(infix_node.rhs);
+
+            return switch (infix_node.op) {
+                .add => {
+                    return switch (lhs) {
+                        .int => .{ .int = lhs.int + rhs.int },
+                        .float => .{ .float = lhs.float + rhs.float },
+                        else => Error.EvaluationFailed,
+                    };
+                },
+                .sub => {
+                    return switch (lhs) {
+                        .int => .{ .int = lhs.int - rhs.int },
+                        .float => .{ .float = lhs.float - rhs.float },
+                        else => Error.EvaluationFailed,
+                    };
+                },
+                .mul => {
+                    return switch (lhs) {
+                        .int => .{ .int = lhs.int * rhs.int },
+                        .float => .{ .float = lhs.float * rhs.float },
+                        else => Error.EvaluationFailed,
+                    };
+                },
+                .div => {
+                    return switch (lhs) {
+                        .int => .{ .int = @divFloor(lhs.int, rhs.int) },
+                        .float => .{ .float = @divFloor(lhs.float, rhs.float) },
+                        else => Error.EvaluationFailed,
+                    };
+                },
+                else => Error.EvaluationFailed,
+            };
+        },
+        .unary => {
+            return try eval(expr.node.unary.*.rhs);
+        },
+
+        .literal => return expr.node.literal,
+        else => Error.EvaluationFailed,
+    };
 }

@@ -3,7 +3,7 @@ const lib = @import("lib.zig");
 const cli = @import("cli/root.zig");
 const builtin = @import("builtin");
 
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
 
 // Function to strip unnecessary overhead when looking at performance of certain parts of the runtime.
 fn benchmark() !void {
@@ -20,8 +20,6 @@ pub fn main() !void {
 
     return;
 }
-
-const expect = std.testing.expect;
 
 // Import the tests from test-file
 test {

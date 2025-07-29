@@ -3,8 +3,8 @@ const zli = @import("zli");
 
 const build_zig_zon = @import("build.zig.zon");
 
-pub fn register(allocator: std.mem.Allocator) !*zli.Command {
-    return zli.Command.init(allocator, .{
+pub fn register(gpa: std.mem.Allocator) !*zli.Command {
+    return zli.Command.init(gpa, .{
         .name = "version",
         .shortcut = "v",
         .description = "Show CLI version",
