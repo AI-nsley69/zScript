@@ -3,6 +3,12 @@ const lib = @import("./lib.zig");
 
 const expect = std.testing.expect;
 
+fn expectNoLeak(gpa: std.heap.DebugAllocator(.{})) !void {
+    var debug_gpa = gpa;
+    const check = debug_gpa.deinit();
+    try expect(check != .leak);
+}
+
 test "Integer Arithmetic" {
     var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
@@ -13,8 +19,7 @@ test "Integer Arithmetic" {
     try expect(val.? == .int);
     try expect(val.?.int == 6);
     // Test for potential leaks
-    const has_leak = debug_gpa.deinit();
-    try expect(has_leak == .ok);
+    try expectNoLeak(debug_gpa);
 }
 
 test "Float Arithmetic" {
@@ -27,8 +32,7 @@ test "Float Arithmetic" {
     try expect(val.? == .float);
     try expect(val.?.float == 1.5);
     // Test for potential leaks
-    const has_leak = debug_gpa.deinit();
-    try expect(has_leak == .ok);
+    try expectNoLeak(debug_gpa);
 }
 
 test "Integer Zero Division" {
@@ -40,8 +44,7 @@ test "Integer Zero Division" {
     // Function throws error on zero div
     try expect(val == error.UnsupportedOperation);
     // Test for potential leaks
-    const has_leak = debug_gpa.deinit();
-    try expect(has_leak == .ok);
+    try expectNoLeak(debug_gpa);
 }
 
 test "Float Zero Division" {
@@ -53,8 +56,7 @@ test "Float Zero Division" {
     // Function throws error on zero div
     try expect(val == error.UnsupportedOperation);
     // Test for potential leaks
-    const has_leak = debug_gpa.deinit();
-    try expect(has_leak == .ok);
+    try expectNoLeak(debug_gpa);
 }
 
 test "Recursion Overflow" {
@@ -66,8 +68,7 @@ test "Recursion Overflow" {
     // Function throws error stack overflow (max call depth > current call stack depth)
     try expect(val == error.StackOverflow);
     // Test for potential leaks
-    const has_leak = debug_gpa.deinit();
-    try expect(has_leak == .ok);
+    try expectNoLeak(debug_gpa);
 }
 
 test "Recursion With Base Case" {
@@ -80,8 +81,7 @@ test "Recursion With Base Case" {
     try expect(val.? == .int);
     try expect(val.?.int == 2);
     // Test for potential leaks
-    const has_leak = debug_gpa.deinit();
-    try expect(has_leak == .ok);
+    try expectNoLeak(debug_gpa);
 }
 
 test "Undefined variable" {
@@ -92,6 +92,5 @@ test "Undefined variable" {
     const val = lib.run(gpa, @embedFile(file), .{ .file = file });
     try expect(val == error.UndefinedVariable);
     // Test for potential leaks
-    const has_leak = debug_gpa.deinit();
-    try expect(has_leak == .ok);
+    try expectNoLeak(debug_gpa);
 }
