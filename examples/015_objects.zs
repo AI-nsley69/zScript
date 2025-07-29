@@ -3,9 +3,11 @@ object Person {
     .surname = "Aliceson",
 
     fn sayName() {
-        print(self.name + self.surname);
+        print(self.name + " " + self.surname);
     }
 }
 
 mut obj = new Person();
+obj.sayName();
+obj.surname = "Dylan";
 obj.sayName();

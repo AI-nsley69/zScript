@@ -105,11 +105,11 @@ pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std
             try writer.print("  [{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(i64, @bitCast(val)) });
         },
         // 2x reg arg
-        .copy, .load_const => {
+        .copy, .load_const, .method_call => {
             try writer.print("  [{x:0>6}] {s} ${d} ${d}\n", .{ pos, name, try in.readByte(), try in.readByte() });
         },
         // 3x reg arg
-        .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq, .less_than, .lte, .greater_than, .gte, .object_get, .object_set, .object_field_id, .object_method_id, .method_call => {
+        .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq, .less_than, .lte, .greater_than, .gte, .object_get, .object_set, .object_field_id, .object_method_id => {
             try writer.print("  [{x:0>6}] {s} ${d} ${d} ${d}\n", .{ pos, name, try in.readByte(), try in.readByte(), try in.readByte() });
         },
     }

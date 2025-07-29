@@ -173,6 +173,8 @@ fn compileObjectFrame(self: *Compiler, func: *Ast.Function) Errors!Bytecode.Func
         final_dst = try self.statement(stmt);
     }
 
+    try out.writeAll(&.{ @intFromEnum(OpCodes.@"return"), final_dst });
+
     const comp_frame = self.comp_frames.pop();
     var instructions = comp_frame.?.instructions;
     return .{ .name = comp_frame.?.name, .body = try instructions.toOwnedSlice(self.allocator), .reg_size = comp_frame.?.reg_idx };
@@ -464,7 +466,8 @@ fn methodCall(self: *Compiler, target: *Ast.MethodCall, dst_reg: ?u8) Errors!u8 
     // Get the destination for the method call
     const dst = dst_reg orelse try self.allocateRegister();
     try out.writeAll(&.{ @intFromEnum(OpCodes.store_param), root });
-    try out.writeAll(&.{ @intFromEnum(OpCodes.method_call), root, method_dst, dst });
+    try out.writeAll(&.{ @intFromEnum(OpCodes.method_call), root, method_dst });
+    try out.writeAll(&.{ @intFromEnum(OpCodes.copy), dst, 0x00 });
 
     return dst;
 }
