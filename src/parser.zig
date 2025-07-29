@@ -279,7 +279,7 @@ fn logicalOr(self: *Parser) Errors!Expression {
     if (self.match(.logical_or)) {
         const op = self.previous().tag;
         const rhs = try self.logicalAnd();
-        
+
         expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
     }
     return expr;
@@ -323,7 +323,7 @@ fn term(self: *Parser) Errors!Expression {
     while (self.match(.add) or self.match(.sub)) {
         const op = self.previous().tag;
         const rhs = try self.factor();
-        
+
         expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
     }
     return expr;
@@ -413,13 +413,6 @@ fn call(self: *Parser) Errors!Expression {
 
 fn dot(self: *Parser) Errors!Expression {
     const root = try self.primary();
-
-    if (root.node == .variable) {
-        const node = root.node.variable.*;
-        if (std.mem.startsWith(u8, node.name, "self")) {
-            std.debug.print("node.name: {s}\n", .{node.name});
-        }
-    }
 
     if (self.match(.dot)) {
         const field_tkn = try self.consume(.identifier, "Expected expression after '.'");
