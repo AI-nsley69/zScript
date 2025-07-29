@@ -103,7 +103,7 @@ fn nextOp(self: *Vm) !OpCodes {
         try self.gc.sweep();
     }
     const op: OpCodes = @enumFromInt(try self.next());
-    std.debug.print("Next op: {s}\n", .{@tagName(op)});
+    // std.debug.print("Next op: {s}\n", .{@tagName(op)});
     return op;
 }
 
