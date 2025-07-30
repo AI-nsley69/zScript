@@ -20,6 +20,8 @@ pub const Error = error{
     OutOfConstants,
     InvalidJmpTarget,
     EvaluationFailed,
+    UndefinedVariable,
+    ConstAssignment,
     Unknown,
 };
 
@@ -92,15 +94,18 @@ inline fn getOut(self: *Compiler) std.ArrayListUnmanaged(u8).Writer {
     return self.current().instructions.writer(self.gpa);
 }
 
+fn deinit(self: *Compiler) void {
+    self.variables.deinit(self.gpa);
+    self.functions.deinit(self.gpa);
+    self.comp_frames.deinit(self.gpa);
+}
+
 pub fn compile(self: *Compiler) Errors!CompilerOutput {
     const tr = tracy.trace(@src());
     defer tr.end();
     log.debug("Compiling bytecode..", .{});
-    defer {
-        self.variables.deinit(self.gpa);
-        self.functions.deinit(self.gpa);
-        self.comp_frames.deinit(self.gpa);
-    }
+    defer self.deinit();
+    errdefer self.objects.deinit(self.gpa);
     // Create a pseudo main function for initial frame
     const main_body: Ast.Statement = try Ast.Block.create(self.ast.statements.items);
     const main_func = try Ast.Function.create(self.gpa, "main", main_body, &.{});
@@ -116,6 +121,7 @@ pub fn compile(self: *Compiler) Errors!CompilerOutput {
     try self.getOut().writeAll(&.{ @intFromEnum(OpCodes.@"return"), final_dst });
     // Convert all comp frames to vm frames
     var frames = std.ArrayListUnmanaged(Bytecode.Function){};
+    errdefer frames.deinit(self.gpa);
     for (self.comp_frames.items) |compilerFrame| {
         var instructions = compilerFrame.instructions;
         try frames.append(self.gpa, .{ .name = compilerFrame.name, .body = try instructions.toOwnedSlice(self.gpa), .reg_size = compilerFrame.reg_idx });
@@ -135,6 +141,7 @@ pub fn compileFrame(self: *Compiler, func: *Ast.Function) Errors!u8 {
     defer self.frame_idx = previous_frame;
     // Setup a new frame
     try self.comp_frames.append(self.gpa, .{ .name = func.name });
+    errdefer self.current().instructions.deinit(self.gpa);
     self.frame_idx = self.comp_frames.items.len - 1;
     // Compile the new frame
     const out = self.getOut();
@@ -160,6 +167,7 @@ fn compileObjectFrame(self: *Compiler, func: *Ast.Function) Errors!Bytecode.Func
     defer self.destroyScope();
     // Setup a new frame
     try self.comp_frames.append(self.gpa, .{ .name = func.name });
+    errdefer self.current().instructions.deinit(self.gpa);
     self.frame_idx = self.comp_frames.items.len - 1;
     // Compile new frame
     const out = self.getOut();
@@ -349,8 +357,9 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
     if (metadata == null) {
         log.debug("No available metadata", .{});
         const msg = try std.fmt.allocPrint(self.gpa, "Undefined variable: '{s}'", .{target.name});
+        defer self.gpa.free(msg);
         try self.reportError(msg);
-        return Error.Unknown;
+        return Error.UndefinedVariable;
     }
     // Find the variable in the scope
     if (self.getVariableDst(target.name)) |cached_dst| {
@@ -364,8 +373,9 @@ fn variable(self: *Compiler, target: *Ast.Variable) Errors!u8 {
         if (metadata.?.is_param) return dst;
         log.debug("Variable is not a parameter, nor does it have an initializer.", .{});
         const msg = try std.fmt.allocPrint(self.gpa, "Undefined variable: '{s}'", .{target.name});
+        defer self.gpa.free(msg);
         try self.reportError(msg);
-        return Error.Unknown;
+        return Error.UndefinedVariable;
     }
     _ = try self.expression(target.initializer.?, dst);
 
@@ -422,6 +432,7 @@ fn newObject(self: *Compiler, target: Ast.NewObject, dst_reg: ?u8) Errors!u8 {
     const val = self.objects.get(target.name);
     if (val == null) {
         const msg = try std.fmt.allocPrint(self.gpa, "Undefined object '{s}'", .{target.name});
+        defer self.gpa.free(msg);
         try self.reportError(msg);
         return Error.Unknown;
     }
@@ -482,8 +493,9 @@ fn assignment(self: *Compiler, target: *Ast.Infix) Errors!u8 {
     if (self.ast.variables.get(target_var.*.name)) |metadata| {
         if (!metadata.mutable) {
             const msg = try std.fmt.allocPrint(self.gpa, "Invalid assignment to immutable variable '{s}'", .{target_var.*.name});
+            defer self.gpa.free(msg);
             try self.reportError(msg);
-            return Error.Unknown;
+            return Error.ConstAssignment;
         }
     }
     const lhs = try self.variable(target_var);
@@ -541,6 +553,7 @@ fn allocateRegister(self: *Compiler) Errors!u8 {
 }
 
 fn reportError(self: *Compiler, msg: []const u8) Errors!void {
+    if (self.err_msg != null) self.gpa.free(self.err_msg.?); // Free old error message (if exists)
     const err_msg = try self.gpa.dupe(u8, msg);
     errdefer self.gpa.free(err_msg);
     self.err_msg = err_msg;
