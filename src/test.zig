@@ -94,3 +94,14 @@ test "Undefined variable" {
     // Test for potential leaks
     try expectNoLeak(debug_gpa);
 }
+
+test "Constant Assignment" {
+    var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
+    const gpa = debug_gpa.allocator();
+
+    const file = "./tests/const_assignment.zs";
+    const val = lib.run(gpa, @embedFile(file), .{ .file = file });
+    try expect(val == error.ConstAssignment);
+    // Test for potential leaks
+    try expectNoLeak(debug_gpa);
+}
