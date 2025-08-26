@@ -59,7 +59,6 @@ fn run(ctx: zli.CommandContext) !void {
     var stderr_buf: [1024]u8 = undefined;
     var stderr = std.fs.File.stderr().writer(&stderr_buf);
     var stderr_writer = &stderr.interface;
-
     const file = std.fs.cwd().openFile(ctx.positional_args[0], .{}) catch |err| {
         try utils.printFileError(stderr_writer, err, ctx.positional_args[0]);
         try stderr_writer.flush();
