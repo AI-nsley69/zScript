@@ -13,10 +13,16 @@ fn benchmark() !void {
 pub fn main() !void {
     // try benchmark();
     const gpa = std.heap.smp_allocator;
-    var root = try cli.build(gpa);
+
+    var file = std.fs.File.stdout();
+    var writer = file.writerStreaming(&.{}).interface;
+
+    var root = try cli.build(&writer, gpa);
     defer root.deinit();
 
     try root.execute(.{});
+    // Flush the writer
+    try writer.flush();
 
     return;
 }

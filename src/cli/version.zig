@@ -3,8 +3,8 @@ const zli = @import("zli");
 
 const build_zig_zon = @import("build.zig.zon");
 
-pub fn register(gpa: std.mem.Allocator) !*zli.Command {
-    return zli.Command.init(gpa, .{
+pub fn register(writer: *std.io.Writer, gpa: std.mem.Allocator) !*zli.Command {
+    return zli.Command.init(writer, gpa, .{
         .name = "version",
         .shortcut = "v",
         .description = "Show CLI version",
@@ -12,9 +12,7 @@ pub fn register(gpa: std.mem.Allocator) !*zli.Command {
 }
 
 fn show(ctx: zli.CommandContext) !void {
-    _ = ctx;
-    const out = std.io.getStdOut().writer();
-    try out.print("v{s}\n", .{version() orelse "(unknown version)"});
+    try ctx.writer.print("v{s}\n", .{version() orelse "(unknown version)"});
 }
 
 // https://renerocks.ai/blog/2025-04-27--version-in-zig/

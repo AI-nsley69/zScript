@@ -8,6 +8,8 @@ const Value = @import("value.zig").Value;
 
 const TokenType = Lexer.TokenType;
 
+const Writer = std.io.Writer;
+
 const CompilerOutput = Compiler.CompilerOutput;
 
 const Statement = types.Statement;
@@ -65,7 +67,7 @@ fn valueToString(gpa: std.mem.Allocator, value: Value) ![]u8 {
     };
 }
 
-pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std.io.FixedBufferStream([]u8)) !void {
+pub fn disassembleNextInstruction(writer: *Writer, instructions: *std.io.FixedBufferStream([]u8)) !void {
     const pos = try instructions.getPos();
     const in = instructions.reader();
     const opcode: Bytecode.OpCodes = @enumFromInt(try in.readByte());
@@ -115,7 +117,7 @@ pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std
     }
 }
 
-pub fn disassemble(output: CompilerOutput, writer: std.fs.File.Writer) !void {
+pub fn disassemble(output: CompilerOutput, writer: *Writer) !void {
     for (output.frames) |frame| {
         var instructions = std.io.fixedBufferStream(frame.body);
         try writer.print("{s}:\n", .{frame.name});
@@ -135,11 +137,11 @@ fn createIndent(gpa: std.mem.Allocator, indent_step: usize) ![]u8 {
     return indent_msg;
 }
 
-const Errors = (std.mem.Allocator.Error || std.fs.File.WriteError);
+const Errors = (std.mem.Allocator.Error || std.io.Writer.Error);
 
 pub const Ast = struct {
     const Self = @This();
-    writer: std.fs.File.Writer,
+    writer: *std.io.Writer,
     gpa: std.mem.Allocator,
     const indent_step = 2;
 
