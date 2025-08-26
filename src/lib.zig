@@ -87,20 +87,19 @@ pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: 
     return compiled;
 }
 
-pub fn run(gpa: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
-    var out = std.fs.File.stdout().writer(&.{}).interface;
+pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
     // Source -> Tokens
-    const tokens, var lexer = try tokenize(gpa, &out, src, opt);
+    const tokens, var lexer = try tokenize(gpa, writer, src, opt);
     defer lexer.deinit();
 
     // Tokens -> Ast
-    const parsed = try parse(gpa, &out, lexer, tokens, opt);
+    const parsed = try parse(gpa, writer, lexer, tokens, opt);
     defer parsed.arena.deinit();
 
     var gc = try Gc.init(gpa);
     defer gc.deinit();
     // Ast -> Bytecode
-    var compiled = try compile(gpa, &out, gc, parsed, opt);
+    var compiled = try compile(gpa, writer, gc, parsed, opt);
     defer compiled.deinit(gpa);
 
     // Bytecode execution

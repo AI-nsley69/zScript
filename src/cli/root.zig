@@ -72,7 +72,7 @@ fn run(ctx: zli.CommandContext) !void {
     };
     defer gpa.free(contents);
 
-    _ = try lib.run(gpa, contents, .{
+    _ = try lib.run(ctx.writer, gpa, contents, .{
         .file = ctx.positional_args[0],
         .print_asm = ctx.flag("print-bytecode", bool),
         .print_ast = ctx.flag("print-ast", bool),

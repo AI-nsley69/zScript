@@ -47,10 +47,9 @@ fn check(ctx: zli.CommandContext) !void {
     };
     defer gpa.free(contents);
 
-    var out = std.fs.File.stdout().writer(&.{}).interface;
-    const tokens, var lexer = try lib.tokenize(gpa, &out, contents, .{});
+    const tokens, var lexer = try lib.tokenize(gpa, ctx.writer, contents, .{});
     defer lexer.deinit();
 
-    const parsed = try lib.parse(gpa, &out, lexer, tokens, .{ .file = ctx.positional_args[0] });
+    const parsed = try lib.parse(gpa, ctx.writer, lexer, tokens, .{ .file = ctx.positional_args[0] });
     defer parsed.arena.deinit();
 }
