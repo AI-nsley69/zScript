@@ -60,6 +60,8 @@ pub const Token = struct {
 
 const Lexer = @This();
 
+gpa: std.mem.Allocator,
+
 buf: []const u8,
 current: usize = 0,
 
@@ -67,8 +69,6 @@ line: usize = 1,
 line_pos: usize = 0,
 
 tokens: std.MultiArrayList(Token) = std.MultiArrayList(Token){},
-
-gpa: std.mem.Allocator,
 
 pub fn init(buffer: []const u8, gpa: std.mem.Allocator) Lexer {
     // Skip the UTF-8 BOM if present.

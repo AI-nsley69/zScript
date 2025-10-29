@@ -13,6 +13,8 @@ const Value = @import("value.zig").Value;
 const Allocator = std.mem.Allocator;
 const Writer = std.fs.File.Writer;
 
+const log = std.log.scoped(.lib);
+
 pub const runOpts = struct {
     file: []const u8 = "",
     print_asm: bool = false,
@@ -70,10 +72,11 @@ pub fn parse(gpa: Allocator, out: Writer, lexer: Lexer, tokens: std.MultiArrayLi
 
 pub fn compile(gpa: Allocator, out: Writer, gc: *Gc, parsed: Ast.Program, opt: runOpts) !Compiler.CompilerOutput {
     var compiler = Compiler{ .gpa = gpa, .gc = gc, .ast = parsed };
-    const compiled = compiler.compile() catch {
+    const compiled = compiler.compile() catch |err| {
         const stderr = std.io.getStdErr().writer();
         try utils.printCompileErr(stderr, compiler.err_msg.?);
-        return error.CompileError;
+        gpa.free(compiler.err_msg.?); // Free the message after writing it
+        return err;
     };
     errdefer compiled.deinit(gpa);
 
@@ -107,6 +110,8 @@ pub fn run(gpa: std.mem.Allocator, src: []const u8, opt: runOpts) !?Value {
         error.EndOfStream => {},
         else => |e| return e,
     };
+
+    log.debug("VM result: {any}", .{vm.result});
 
     return vm.result;
 }
