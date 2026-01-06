@@ -10,98 +10,152 @@ fn expectNoLeak(gpa: std.heap.DebugAllocator(.{})) !void {
 }
 
 test "Integer Arithmetic" {
+    var stdout = std.fs.File.stdout();
+    var writer = stdout.writerStreaming(&.{}).interface;
+
     var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
 
     const file = "./tests/int_arithmetic.zs";
-    const val = try lib.run(gpa, @embedFile(file), .{ .file = file });
+    const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
+    const val = res.value;
+
     try expect(val != null);
     try expect(val.? == .int);
     try expect(val.?.int == 6);
+    // Cleanup
+    res.deinit(gpa);
     // Test for potential leaks
     try expectNoLeak(debug_gpa);
 }
 
 test "Float Arithmetic" {
+    var stdout = std.fs.File.stdout();
+    var writer = stdout.writerStreaming(&.{}).interface;
+
     var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
 
     const file = "./tests/float_arithmetic.zs";
-    const val = try lib.run(gpa, @embedFile(file), .{ .file = file });
+    const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
+    const val = res.value;
+
     try expect(val != null);
     try expect(val.? == .float);
     try expect(val.?.float == 1.5);
+    // Cleanup
+    res.deinit(gpa);
     // Test for potential leaks
     try expectNoLeak(debug_gpa);
 }
 
 test "Integer Zero Division" {
+    var stdout = std.fs.File.stdout();
+    var writer = stdout.writerStreaming(&.{}).interface;
+
     var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
 
     const file = "./tests/int_zero_div.zs";
-    const val = lib.run(gpa, @embedFile(file), .{ .file = file });
+    const res = lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
     // Function throws error on zero div
-    try expect(val == error.UnsupportedOperation);
+    try expect(res == error.UnsupportedOperation);
+
+    try writer.flush();
     // Test for potential leaks
     try expectNoLeak(debug_gpa);
 }
 
 test "Float Zero Division" {
+    var stdout = std.fs.File.stdout();
+    var writer = stdout.writerStreaming(&.{}).interface;
+
     var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
 
     const file = "./tests/float_zero_div.zs";
-    const val = lib.run(gpa, @embedFile(file), .{ .file = file });
+    const res = lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
     // Function throws error on zero div
-    try expect(val == error.UnsupportedOperation);
+    try expect(res == error.UnsupportedOperation);
+    try writer.flush();
     // Test for potential leaks
     try expectNoLeak(debug_gpa);
 }
 
 test "Recursion Overflow" {
+    var stdout = std.fs.File.stdout();
+    var writer = stdout.writerStreaming(&.{}).interface;
+
     var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
 
     const file = "./tests/recursion_overflow.zs";
-    const val = lib.run(gpa, @embedFile(file), .{ .file = file });
+    const res = lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
     // Function throws error stack overflow (max call depth > current call stack depth)
-    try expect(val == error.StackOverflow);
+    try expect(res == error.StackOverflow);
+    try writer.flush();
     // Test for potential leaks
     try expectNoLeak(debug_gpa);
 }
 
 test "Recursion With Base Case" {
+    var stdout = std.fs.File.stdout();
+    var writer = stdout.writerStreaming(&.{}).interface;
+
     var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
 
     const file = "./tests/recursion_no_overflow.zs";
-    const val = try lib.run(gpa, @embedFile(file), .{ .file = file });
+    const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
+    const val = res.value;
+
     try expect(val != null);
     try expect(val.? == .int);
     try expect(val.?.int == 2);
+
+    // Cleanup
+    res.deinit(gpa);
+    try writer.flush();
     // Test for potential leaks
     try expectNoLeak(debug_gpa);
 }
 
 test "Undefined variable" {
+    var stdout = std.fs.File.stdout();
+    var writer = stdout.writerStreaming(&.{}).interface;
+
     var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
 
     const file = "./tests/undefined_variable.zs";
-    const val = lib.run(gpa, @embedFile(file), .{ .file = file });
-    try expect(val == error.UndefinedVariable);
+    const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
+
+    try expect(res.compile != null);
+    try expect(res.compile.?.err != null);
+    try expect(res.compile.?.err.?.len > 0);
+    // Cleanup
+    res.deinit(gpa);
+    try writer.flush();
     // Test for potential leaks
     try expectNoLeak(debug_gpa);
 }
 
 test "Constant Assignment" {
+    var stdout = std.fs.File.stdout();
+    var writer = stdout.writerStreaming(&.{}).interface;
+
     var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
     const gpa = debug_gpa.allocator();
 
     const file = "./tests/const_assignment.zs";
-    const val = lib.run(gpa, @embedFile(file), .{ .file = file });
-    try expect(val == error.ConstAssignment);
+    const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
+
+    try expect(res.compile != null);
+    try expect(res.compile.?.err != null);
+    try expect(res.compile.?.err.?.len > 0);
+    // Cleanup
+    res.deinit(gpa);
+    try writer.flush();
     // Test for potential leaks
     try expectNoLeak(debug_gpa);
 }
