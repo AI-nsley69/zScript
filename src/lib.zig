@@ -111,6 +111,7 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
     const tokens, var lexer = try tokenize(gpa, writer, src, opt);
     result.lexer = lexer;
     defer lexer.deinit();
+    result.tokenize = .{ tokens, lexer };
 
     var gc = try Gc.init(gpa);
     defer gc.deinit(gpa);
