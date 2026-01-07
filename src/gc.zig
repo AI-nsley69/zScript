@@ -138,10 +138,14 @@ pub fn deinit(self: *Gc, gpa: Allocator) void {
 //     return val;
 // }
 
+fn alignCursor(self: *Gc) void {
+    self.cursor = std.mem.Alignment.of(Val.BoxedHeader).forward(self.cursor);
+}
+
 fn allocHeader(self: *Gc, header: Val.BoxedHeader) *Val.BoxedHeader {
     log.debug("TODO: Implement alloc check, move & collect", .{});
     // Get pointer
-    self.cursor = std.mem.Alignment.of(Val.BoxedHeader).forward(self.cursor);
+    self.alignCursor();
     const ptr = self.heap[self.cursor..].ptr;
     const header_ptr: *Val.BoxedHeader = @ptrCast(@alignCast(ptr));
     header_ptr.* = header;
@@ -158,6 +162,7 @@ pub fn allocObject(self: *Gc, object: *Val.Object) Value {
     };
     const header_ptr = self.allocHeader(header);
 
+    self.alignCursor();
     const heap_ptr = self.heap[self.cursor..].ptr;
     const values: [*]Value = @ptrCast(@alignCast(heap_ptr));
     const offset = object.schema.fields_count;
@@ -176,6 +181,7 @@ pub fn allocString(self: *Gc, string: []const u8) Value {
     };
     const header_ptr = self.allocHeader(header);
 
+    self.alignCursor();
     const offset = string.len;
     @memcpy(self.heap[self.cursor .. self.cursor + offset], string);
     self.cursor += offset;
