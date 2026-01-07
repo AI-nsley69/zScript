@@ -8,6 +8,8 @@ const Value = @import("value.zig").Value;
 
 const TokenType = Lexer.TokenType;
 
+const Writer = std.io.Writer;
+
 const CompilerOutput = Compiler.CompilerOutput;
 
 const Statement = types.Statement;
@@ -65,10 +67,9 @@ fn valueToString(gpa: std.mem.Allocator, value: Value) ![]u8 {
     };
 }
 
-pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std.io.FixedBufferStream([]u8)) !void {
-    const pos = try instructions.getPos();
-    const in = instructions.reader();
-    const opcode: Bytecode.OpCodes = @enumFromInt(try in.readByte());
+pub fn disassembleNextInstruction(writer: *Writer, reader: *std.io.Reader) !void {
+    const pos = reader.seek;
+    const opcode: Bytecode.OpCodes = @enumFromInt(try reader.takeByte());
     const name = codeToString(opcode);
 
     switch (opcode) {
@@ -76,48 +77,48 @@ pub fn disassembleNextInstruction(writer: std.fs.File.Writer, instructions: *std
         .noop, .halt => try writer.print("  [{x:0>6}] {s}\n", .{ pos, name }),
         // 1x reg with imm arg
         .jump_eql, .jump_neq => {
-            const reg = try in.readByte();
-            const imm: u16 = try in.readInt(u16, .big);
+            const reg = try reader.takeByte();
+            const imm: u16 = try reader.takeInt(u16, .big);
             try writer.print("  [{x:0>6}] {s} ${d} #{x}\n", .{ pos, name, reg, imm });
         },
         // imm arg
         .jump => {
-            const imm: u16 = try in.readInt(u16, .big);
+            const imm: u16 = try reader.takeInt(u16, .big);
             try writer.print("  [{x:0>6}] {s} #{x}\n", .{ pos, name, imm });
         },
         // 1x reg arg
         .@"return", .load_param, .store_param, .call, .native_call => {
-            try writer.print("  [{x:0>6}] {s} ${d}\n", .{ pos, name, try in.readByte() });
+            try writer.print("  [{x:0>6}] {s} ${d}\n", .{ pos, name, try reader.takeByte() });
         },
         .load_bool => {
-            const dst = try in.readByte();
-            const val = try in.readByte() == 1;
+            const dst = try reader.takeByte();
+            const val = try reader.takeByte() == 1;
             try writer.print("  [{x:0>6}] {s} ${d} {}\n", .{ pos, name, dst, val });
         },
         .load_float => {
-            const dst = try in.readByte();
-            const val = try in.readInt(u64, .big);
+            const dst = try reader.takeByte();
+            const val = try reader.takeInt(u64, .big);
             try writer.print("  [{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(f64, @bitCast(val)) });
         },
         .load_int => {
-            const dst = try in.readByte();
-            const val = try in.readInt(u64, .big);
+            const dst = try reader.takeByte();
+            const val = try reader.takeInt(u64, .big);
             try writer.print("  [{x:0>6}] {s} ${d} {d}\n", .{ pos, name, dst, @as(i64, @bitCast(val)) });
         },
         // 2x reg arg
         .copy, .load_const, .method_call => {
-            try writer.print("  [{x:0>6}] {s} ${d} ${d}\n", .{ pos, name, try in.readByte(), try in.readByte() });
+            try writer.print("  [{x:0>6}] {s} ${d} ${d}\n", .{ pos, name, try reader.takeByte(), try reader.takeByte() });
         },
         // 3x reg arg
         .add, .sub, .mult, .divide, .xor, .@"and", .not, .@"or", .eql, .neq, .less_than, .lte, .greater_than, .gte, .object_get, .object_set, .object_field_id, .object_method_id => {
-            try writer.print("  [{x:0>6}] {s} ${d} ${d} ${d}\n", .{ pos, name, try in.readByte(), try in.readByte(), try in.readByte() });
+            try writer.print("  [{x:0>6}] {s} ${d} ${d} ${d}\n", .{ pos, name, try reader.takeByte(), try reader.takeByte(), try reader.takeByte() });
         },
     }
 }
 
-pub fn disassemble(output: CompilerOutput, writer: std.fs.File.Writer) !void {
+pub fn disassemble(output: CompilerOutput, writer: *Writer) !void {
     for (output.frames) |frame| {
-        var instructions = std.io.fixedBufferStream(frame.body);
+        var instructions = std.io.Reader.fixed(frame.body);
         try writer.print("{s}:\n", .{frame.name});
         while (true) {
             disassembleNextInstruction(writer, &instructions) catch |err| switch (err) {
@@ -135,11 +136,11 @@ fn createIndent(gpa: std.mem.Allocator, indent_step: usize) ![]u8 {
     return indent_msg;
 }
 
-const Errors = (std.mem.Allocator.Error || std.fs.File.WriteError);
+const Errors = (std.mem.Allocator.Error || std.io.Writer.Error);
 
 pub const Ast = struct {
     const Self = @This();
-    writer: std.fs.File.Writer,
+    writer: *std.io.Writer,
     gpa: std.mem.Allocator,
     const indent_step = 2;
 

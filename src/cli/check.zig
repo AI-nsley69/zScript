@@ -5,8 +5,8 @@ const zli = @import("zli");
 
 const builtin = @import("builtin");
 
-pub fn register(gpa: std.mem.Allocator) !*zli.Command {
-    const cmd = try zli.Command.init(gpa, .{
+pub fn register(writer: *std.io.Writer, gpa: std.mem.Allocator) !*zli.Command {
+    const cmd = try zli.Command.init(writer, gpa, .{
         .name = "check",
         // .shortcut = "ast",
         .description = "Verifies the ast",
@@ -35,22 +35,21 @@ fn check(ctx: zli.CommandContext) !void {
         }
     };
 
+    var stderr = std.fs.File.stderr().writer(&.{}).interface;
     const file = std.fs.cwd().openFile(ctx.positional_args[0], .{}) catch |err| {
-        try utils.printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);
+        try utils.printFileError(&stderr, err, ctx.positional_args[0]);
         std.process.exit(1);
     };
 
     const contents = file.readToEndAlloc(gpa, 1 << 24) catch |err| {
-        try utils.printFileError(std.io.getStdErr().writer(), err, ctx.positional_args[0]);
+        try utils.printFileError(&stderr, err, ctx.positional_args[0]);
         std.process.exit(1);
     };
     defer gpa.free(contents);
 
-    const out = std.io.getStdOut().writer();
-
-    const tokens, var lexer = try lib.tokenize(gpa, out, contents, .{});
+    const tokens, var lexer = try lib.tokenize(gpa, ctx.writer, contents, .{});
     defer lexer.deinit();
 
-    const parsed = try lib.parse(gpa, out, lexer, tokens, .{ .file = ctx.positional_args[0] });
+    const parsed = try lib.parse(gpa, ctx.writer, lexer, tokens, .{ .file = ctx.positional_args[0] });
     defer parsed.arena.deinit();
 }

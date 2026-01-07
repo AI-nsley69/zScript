@@ -30,18 +30,20 @@ pub fn nameToIdx(name: []const u8) u8 {
 }
 
 fn print(ctx: Context) void {
-    const out = std.io.getStdOut().writer();
+    var out_buf: [1024]u8 = undefined;
+    var out = std.fs.File.stdout().writer(&out_buf).interface;
     const value = ctx.params[0];
-    return switch (value) {
-        .int => out.print("{d}\n", .{value.int}),
-        .float => out.print("{d}\n", .{value.float}),
-        .boolean => out.print("{any}\n", .{value.boolean}),
-        .string => out.print("{s}\n", .{value.string}),
+    switch (value) {
+        .int => out.print("{d}\n", .{value.int}) catch {},
+        .float => out.print("{d}\n", .{value.float}) catch {},
+        .boolean => out.print("{any}\n", .{value.boolean}) catch {},
+        .string => out.print("{s}\n", .{value.string}) catch {},
         else => {
             std.log.debug("Unhandled value type!", .{});
             unreachable;
         },
-    } catch {};
+    }
+    out.flush() catch {};
 }
 
 pub const printFn: NativeFn = .{ .params = 1, .run = &print };

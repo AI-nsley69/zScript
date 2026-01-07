@@ -7,9 +7,9 @@ const TokenData = Lexer.TokenData;
 const Token = Lexer.Token;
 const TokenInfo = Lexer.TokenInfo;
 const Allocator = std.mem.Allocator;
-const Writer = std.fs.File.Writer;
+const Writer = std.io.Writer;
 
-pub fn printParseError(gpa: Allocator, writer: Writer, lex: Lexer, token: Token, src_file: []const u8) !void {
+pub fn printParseError(gpa: Allocator, writer: *Writer, lex: Lexer, token: Token, src_file: []const u8) !void {
     var lexer = lex;
     const data = token.data;
     const info = token.info;
@@ -53,7 +53,7 @@ pub fn printParseError(gpa: Allocator, writer: Writer, lex: Lexer, token: Token,
     try format.resetStyle(writer);
 }
 
-pub fn printCompileErr(writer: Writer, msg: []const u8) !void {
+pub fn printCompileErr(writer: *Writer, msg: []const u8) !void {
     // Print the "error" label
     try format.updateStyle(writer, .{ .font_style = .{ .bold = true }, .foreground = .Red }, null);
     try writer.writeAll("Compile error: ");
@@ -67,7 +67,7 @@ pub fn printCompileErr(writer: Writer, msg: []const u8) !void {
 
 const fileErrors = (std.fs.File.ReadError || std.fs.File.OpenError || std.posix.FlockError || std.mem.Allocator.Error);
 
-pub fn printFileError(out: std.fs.File.Writer, err: fileErrors, file: []const u8) !void {
+pub fn printFileError(out: *Writer, err: fileErrors, file: []const u8) !void {
     try format.updateStyle(out, .{ .font_style = .{ .bold = true }, .foreground = .Red }, null);
     try out.writeAll("Error: ");
     try format.updateStyle(out, .{ .font_style = .{ .bold = true } }, null);
