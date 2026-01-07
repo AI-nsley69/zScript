@@ -9,12 +9,14 @@ pub const Error = error{
 
 pub const Object = struct {
     pub const Schema = struct {
+        fields_count: u64,
         fields: [*:0]const u8,
         methods: [*:0]const u8,
+        functions: [*]Bytecode.Function,
 
-        pub fn getFieldIndex(self: *const Schema, name: []const u8) ?usize {
+        pub fn getFieldIndex(self: *const Schema, name: []const u8) ?u64 {
             var ptr: [*:0]const u8 = self.fields;
-            var idx: usize = 0;
+            var idx: u64 = 0;
             while (ptr[0] != 0) {
                 const field = std.mem.span(ptr);
                 if (std.mem.eql(u8, field, name)) {
@@ -26,9 +28,9 @@ pub const Object = struct {
             return null;
         }
 
-        pub fn getMethodIndex(self: *const Schema, name: []const u8) ?usize {
+        pub fn getMethodIndex(self: *const Schema, name: []const u8) ?u64 {
             var ptr: [*:0]const u8 = self.methods;
-            var idx: usize = 0;
+            var idx: u64 = 0;
             while (ptr[0] != 0) {
                 const method = std.mem.span(ptr);
                 if (std.mem.eql(u8, method, name)) {
@@ -41,17 +43,29 @@ pub const Object = struct {
         }
     };
     fields: [*]Value,
-    functions: [*]Bytecode.Function,
     schema: *const Schema,
 };
 
-pub const ValueType = enum { int, float, boolean, string, object };
+pub const BoxedHeader = packed struct(u64) {
+    /// if `kind == .string`, this is the length of the string in bytes.
+    /// if `kind == .object`, this is a pointer to the object's schema.
+    /// if `kind == .moved`, this is a pointer to the boxed value's new location.
+    ptr_or_size: u62,
+    kind: enum(u2) {
+        string,
+        object,
+        moved,
+    },
+};
+
+pub const ConvertError = error{ NoSpaceLeft, InvalidType, UnknownField };
+
+pub const ValueType = enum { int, float, boolean, boxed };
 pub const Value = union(ValueType) {
     int: i64,
     float: f64,
     boolean: bool,
-    string: []u8,
-    object: *Object,
+    boxed: *BoxedHeader,
 
     // Helper functions
     pub fn asInt(value: Value) !i64 {
@@ -69,79 +83,66 @@ pub const Value = union(ValueType) {
         return value.boolean;
     }
 
-    pub fn asString(gc: *Gc, value: Value) ![]u8 {
+    pub fn asString(value: Value, gc: *Gc) ![]u8 {
         return switch (value) {
             .int => {
                 const num = try Value.asInt(value);
                 const count = std.fmt.count("{d}", .{num});
-                const str = try gc.alloc(.string, count);
-                _ = try std.fmt.bufPrint(str.string, "{d}", .{num});
-                return str.string;
+                const val = gc.allocStringCount(@intCast(count));
+                const str: []u8 = @ptrCast(val.boxed[1..1]);
+                _ = try std.fmt.bufPrint(str, "{d}", .{num});
+                return str;
             },
             .float => {
                 const num = try Value.asFloat(value);
                 const count = std.fmt.count("{d}", .{num});
-                const str = try gc.alloc(.string, count);
-                _ = try std.fmt.bufPrint(str.string, "{d}", .{num});
-                return str.string;
+                const val = gc.allocStringCount(@intCast(count));
+                const str: []u8 = @ptrCast(val.boxed[1..1]);
+                _ = try std.fmt.bufPrint(str, "{d}", .{num});
+                return str;
             },
             .boolean => {
                 const boolean = try Value.asBool(value);
                 const count = std.fmt.count("{}", .{boolean});
-                const str = try gc.alloc(.string, count);
-                _ = try std.fmt.bufPrint(str.string, "{}", .{boolean});
-                return str.string;
+                const val = gc.allocStringCount(@intCast(count));
+                const str: []u8 = @ptrCast(val.boxed[1..1]);
+                _ = try std.fmt.bufPrint(str, "{}", .{boolean});
+                return str;
             },
-            .string => value.string,
-            else => {
-                std.log.debug("Implement object -> string conversion", .{});
-                unreachable;
+            .boxed => {
+                switch (value.boxed.kind) {
+                    .string => {
+                        return Value.unboxString(value.boxed);
+                    },
+                    .object => {
+                        std.log.debug("Implement object -> string conversion", .{});
+                        unreachable;
+                    },
+                    else => {
+                        unreachable;
+                    },
+                }
             },
         };
     }
 
-    pub fn asObj(value: Value) !*Object {
-        if (value != .object) return Error.InvalidType;
-        return value.object;
+    pub fn asObj(value: Value) !Object {
+        if (value != .boxed) return Error.InvalidType;
+        if (value.boxed.kind != .object) return Error.InvalidType;
+        return Value.unboxObject(value.boxed);
     }
 
-    // Memory helpers
-    pub fn deinit(self: *Value, gc: *Gc) usize {
-        return switch (self.*) {
-            // Non-heap values
-            .int, .float, .boolean => 0,
-            .string => {
-                defer gc.gpa.free(self.string);
-                return self.string.len * 8;
-            },
-            .object => {
-                var freed: usize = 0;
-
-                // Free the field values
-                var field_ptr: [*:0]const u8 = self.object.schema.fields;
-                var field_len: usize = 0;
-                while (field_ptr[0] != 0) {
-                    const field = std.mem.span(field_ptr);
-                    field_ptr += field.len + 1; // skip over the field data, as well as its sentinel
-                    freed += field.len + 1;
-                    field_len += 1;
-                }
-                gc.gpa.free(self.object.fields[0..field_len]);
-                var method_ptr: [*:0]const u8 = self.object.schema.methods;
-                var method_len: usize = 0;
-                while (method_ptr[0] != 0) {
-                    const method = std.mem.span(method_ptr);
-                    method_ptr += method.len + 1;
-                    freed += method.len + 1;
-                    method_len += 1;
-                }
-                for (self.object.functions[0..method_len]) |method| {
-                    gc.gpa.free(method.body);
-                }
-                gc.gpa.free(self.object.functions[0..method_len]);
-                gc.gpa.destroy(self.object);
-                return freed;
-            },
-        };
+    // Value unboxing
+    fn unboxString(header: *BoxedHeader) []u8 {
+        std.debug.assert(header.kind == .string);
+        const size = header.ptr_or_size;
+        var ptr: [*]u8 = @ptrCast(header[1..1]);
+        return ptr[0..size];
+    }
+    fn unboxObject(header: *BoxedHeader) Object {
+        std.debug.assert(header.kind == .object);
+        const schema: *const Object.Schema = @ptrFromInt(header.ptr_or_size);
+        const ptr: [*]Value = @ptrCast(header[1..1]);
+        return .{ .fields = ptr, .schema = schema };
     }
 };

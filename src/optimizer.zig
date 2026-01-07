@@ -99,8 +99,7 @@ fn isFoldable(self: *Optimizer, expr: Expression) bool {
                 .boolean => false,
                 .float => true,
                 .int => true,
-                .string => false,
-                .object => false,
+                .boxed => false,
             };
         },
         else => false,
@@ -116,7 +115,7 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
             const infix = expr.node.infix.*;
             const lhs = try self.constantFold(infix.lhs);
             const rhs = try self.constantFold(infix.rhs);
-            
+
             return try Ast.Infix.create(self.gpa, infix.op, lhs, rhs, expr.src);
         },
 

@@ -106,9 +106,9 @@ pub const Call = struct {
 
 pub const NativeCall = struct {
     args: []Expression,
-    idx: usize,
+    idx: u64,
 
-    pub fn create(gpa: std.mem.Allocator, args: []Expression, idx: usize, src: TokenData) !Expression {
+    pub fn create(gpa: std.mem.Allocator, args: []Expression, idx: u64, src: TokenData) !Expression {
         const call = try gpa.create(NativeCall);
         call.* = .{
             .args = args,

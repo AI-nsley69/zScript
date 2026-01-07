@@ -1,5 +1,6 @@
 const std = @import("std");
 const Value = @import("value.zig").Value;
+const Gc = @import("gc.zig");
 
 pub const Error = error{
     UnknownFunction,
@@ -10,8 +11,8 @@ pub const Context = struct {
 };
 
 pub const NativeFn = struct {
-    params: usize,
-    run: *const fn (Context) void,
+    params: u64,
+    run: *const fn (Context, *Gc) void,
 };
 
 const Errors = (Error || std.mem.Allocator.Error);
@@ -29,7 +30,7 @@ pub fn nameToIdx(name: []const u8) u8 {
     return 0;
 }
 
-fn print(ctx: Context) void {
+fn print(ctx: Context, gc: *Gc) void {
     var out_buf: [1024]u8 = undefined;
     var out = std.fs.File.stdout().writer(&out_buf).interface;
     const value = ctx.params[0];
@@ -37,10 +38,14 @@ fn print(ctx: Context) void {
         .int => out.print("{d}\n", .{value.int}) catch {},
         .float => out.print("{d}\n", .{value.float}) catch {},
         .boolean => out.print("{any}\n", .{value.boolean}) catch {},
-        .string => out.print("{s}\n", .{value.string}) catch {},
-        else => {
-            std.log.debug("Unhandled value type!", .{});
-            unreachable;
+        .boxed => {
+            switch (value.boxed.kind) {
+                .string => out.print("{s}\n", .{Value.asString(value, gc) catch "N/A"}) catch {},
+                else => {
+                    std.log.debug("Unhandled value type!", .{});
+                    unreachable;
+                },
+            }
         },
     }
     out.flush() catch {};

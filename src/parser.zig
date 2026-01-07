@@ -2,14 +2,15 @@ const std = @import("std");
 const Ast = @import("ast.zig");
 const Lexer = @import("lexer.zig");
 const Vm = @import("vm.zig");
-const val = @import("value.zig");
+const Gc = @import("gc.zig");
+const Val = @import("value.zig");
 const Native = @import("native.zig");
 
 const tracy = @import("tracy");
 
-const Object = val.Object;
-const Value = val.Value;
-const ValueType = val.ValueType;
+const Object = Val.Object;
+const Value = Val.Value;
+const ValueType = Val.ValueType;
 
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
@@ -30,7 +31,7 @@ pub const VariableMetaData = struct {
 };
 
 pub const FunctionMetadata = struct {
-    params: usize,
+    params: u64,
     return_type: ?ValueType = null,
 };
 
@@ -41,13 +42,14 @@ pub const Error = error{
     InvalidArguments,
 };
 
-const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || Native.Error);
+const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || Native.Error || Val.ConvertError);
 
 const Parser = @This();
 
 gpa: std.mem.Allocator = undefined,
+gc: *Gc = undefined,
 tokens: std.MultiArrayList(Token) = undefined,
-current: usize = 0,
+current: u64 = 0,
 
 variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnmanaged(VariableMetaData){},
 functions: std.StringHashMapUnmanaged(FunctionMetadata) = std.StringHashMapUnmanaged(FunctionMetadata){},
@@ -59,13 +61,14 @@ current_func: []const u8 = "main",
 
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = TokenData{ .tag = .err, .span = "" } } } };
 
-pub fn parse(self: *Parser, alloc: std.mem.Allocator, tokens: std.MultiArrayList(Token)) Errors!Program {
+pub fn parse(self: *Parser, alloc: std.mem.Allocator, gc: *Gc, tokens: std.MultiArrayList(Token)) Errors!Program {
     const tr = tracy.trace(@src());
     defer tr.end();
 
     log.debug("Parsing tokens..", .{});
     var arena = std.heap.ArenaAllocator.init(alloc);
     self.gpa = arena.allocator();
+    self.gc = gc;
     self.tokens = tokens;
     var statements = std.ArrayListUnmanaged(Statement){};
     while (!self.isEof() and self.errors.items(.data).len < 1) {
@@ -163,36 +166,38 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         try self.reportError("Expected '}' after object declaration.");
     }
 
-    var packed_field_len: usize = 0;
+    var packed_field_count: u64 = 0;
     for (fields.keys()) |key| {
-        packed_field_len += key.len + 1;
+        packed_field_count += key.len + 1;
     }
-    var packed_fields: std.ArrayListUnmanaged(u8) = try .initCapacity(self.gpa, packed_field_len + 1);
+    var packed_fields: std.ArrayListUnmanaged(u8) = try .initCapacity(self.gpa, packed_field_count + 1);
     errdefer packed_fields.deinit(self.gpa);
     for (fields.keys()) |key| {
         packed_fields.appendSliceAssumeCapacity(key);
         packed_fields.appendAssumeCapacity(0);
     }
 
-    var packed_method_len: usize = 0;
+    var packed_method_count: u64 = 0;
     for (methods.items) |method| {
-        packed_method_len += method.node.function.name.len + 1;
+        packed_method_count += method.node.function.name.len + 1;
     }
-    var packed_methods: std.ArrayListUnmanaged(u8) = try .initCapacity(self.gpa, packed_method_len + 1);
+    var packed_methods: std.ArrayListUnmanaged(u8) = try .initCapacity(self.gpa, packed_method_count + 1);
     errdefer packed_fields.deinit(self.gpa);
     for (methods.items) |method| {
         packed_methods.appendSliceAssumeCapacity(method.node.function.name);
         packed_methods.appendAssumeCapacity(0);
     }
-
+    const functions = try methods.toOwnedSlice(self.gpa);
     const schema = try self.gpa.create(Object.Schema);
     schema.* = .{
+        .fields_count = packed_field_count,
         .fields = try packed_fields.toOwnedSliceSentinel(self.gpa, 0),
         .methods = try packed_methods.toOwnedSliceSentinel(self.gpa, 0),
+        .functions = undefined,
     };
     try self.objects.put(self.gpa, name.span, schema);
 
-    return Ast.Object.create(self.gpa, name.span, fields, try methods.toOwnedSlice(self.gpa));
+    return Ast.Object.create(self.gpa, name.span, fields, functions);
 }
 
 fn statement(self: *Parser) Errors!Statement {
@@ -420,7 +425,7 @@ fn dot(self: *Parser) Errors!Expression {
             return try self.finishObjectCall(root, field_tkn);
         }
 
-        const field = try Ast.Literal.create(.{ .string = try self.gpa.dupe(u8, field_tkn.span) }, self.peek());
+        const field = try Ast.Literal.create(self.gc.allocString(field_tkn.span), self.peek());
         const prop_assignment: ?Expression = if (self.match(.assign)) try self.expression() else null;
         return try Ast.FieldAccess.create(self.gpa, root, field, prop_assignment, self.previous());
     }
@@ -432,7 +437,7 @@ fn finishObjectCall(self: *Parser, root: Expression, name: TokenData) Errors!Exp
     log.debug("TODO: Add check for defined methods on objects.", .{});
     const src = self.previous();
 
-    const method = try Ast.Literal.create(.{ .string = try self.gpa.dupe(u8, name.span) }, self.peek());
+    const method = try Ast.Literal.create(self.gc.allocString(name.span), self.peek());
 
     var args = std.ArrayListUnmanaged(Expression){};
     if (!self.check(.right_paren)) {
@@ -496,9 +501,10 @@ fn primary(self: *Parser) Errors!Expression {
 
     if (self.match(.string)) {
         const value = self.previous().span;
-        const str = try self.gpa.alloc(u8, value.len - 2);
+        const str_val = self.gc.allocStringCount(@truncate(value.len - 2));
+        const str = try Value.asString(str_val, self.gc);
         @memcpy(str, value[1 .. value.len - 1]);
-        return Ast.Literal.create(.{ .string = str }, self.previous());
+        return Ast.Literal.create(str_val, self.previous());
     }
 
     if (self.match(.obj_self)) {

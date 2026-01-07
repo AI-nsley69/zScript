@@ -27,7 +27,7 @@ pub const Error = error{
 
 const CompilerFrame = struct {
     name: []const u8,
-    ip: usize = 0,
+    ip: u64 = 0,
     instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
     reg_idx: u8 = 1,
 };
@@ -56,7 +56,7 @@ gc: *Gc,
 ast: Ast.Program,
 
 comp_frames: std.ArrayListUnmanaged(CompilerFrame) = std.ArrayListUnmanaged(CompilerFrame){},
-frame_idx: usize = 0,
+frame_idx: u64 = 0,
 
 variables: std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)) = std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)){},
 functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
@@ -319,16 +319,26 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
         try functions.append(self.gpa, try self.compileObjectFrame(node));
     }
 
+    // Create a new schema with the compiled functions
+    const old_schema = self.ast.objects.get(target.name).?;
+    const new_schema = try self.gpa.create(Object.Schema);
+    new_schema.* = .{
+        .fields_count = old_schema.fields_count,
+        .fields = old_schema.fields,
+        .methods = old_schema.methods,
+        .functions = (try functions.toOwnedSlice(self.gc.gpa)).ptr,
+    };
+
+    // Create the object
     const obj = try self.gc.gpa.create(Object);
     obj.* = .{
         .fields = (try field_values.toOwnedSlice(self.gc.gpa)).ptr,
-        .functions = (try functions.toOwnedSlice(self.gc.gpa)).ptr,
-        .schema = self.ast.objects.get(target.name).?,
+        .schema = new_schema,
     };
 
-    const obj_val: Value = .{ .object = obj };
+    const obj_val: Value = self.gc.allocObject(obj);
     try self.objects.put(self.gc.gpa, target.name, obj_val);
-    try self.gc.allocated.append(self.gc.gpa, obj_val);
+
     // @panic("Not implemented");
     return 0;
 }
@@ -529,13 +539,13 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
             try out.writeAll(&.{ @intFromEnum(OpCodes.load_int), dst });
             try out.writeInt(u64, @bitCast(val.int), .big);
         },
-        .string => {
-            const str = try self.gc.alloc(.string, val.string.len);
-            @memcpy(str.string, val.string);
-            try self.constants.append(self.gpa, str);
-            const const_idx = self.constants.items.len - 1;
-            try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
-        },
+        // .string => {
+        //     const str = try self.gc.alloc(.string, val.string.len);
+        //     @memcpy(str.string, val.string);
+        //     try self.constants.append(self.gpa, str);
+        //     const const_idx = self.constants.items.len - 1;
+        //     try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
+        // },
         else => unreachable,
     }
     return dst;

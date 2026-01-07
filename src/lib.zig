@@ -48,9 +48,9 @@ const ParseResult = struct {
     err: std.MultiArrayList(Lexer.Token),
 };
 
-pub fn parse(gpa: Allocator, out: *Writer, tokens: std.MultiArrayList(Lexer.Token), opt: runOpts) !ParseResult {
+pub fn parse(gpa: Allocator, out: *Writer, gc: *Gc, tokens: std.MultiArrayList(Lexer.Token), opt: runOpts) !ParseResult {
     var parser = Parser{};
-    var parsed = try parser.parse(gpa, tokens);
+    var parsed = try parser.parse(gpa, gc, tokens);
     errdefer parsed.arena.deinit();
 
     // var had_err: bool = false;
@@ -117,16 +117,17 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
     const tokens, var lexer = try tokenize(gpa, writer, src, opt);
     defer lexer.deinit();
 
+    var gc = try Gc.init(gpa);
+    defer gc.deinit(gpa);
+
     // Tokens -> Ast
-    const parsed = try parse(gpa, writer, tokens, opt);
+    const parsed = try parse(gpa, writer, gc, tokens, opt);
     defer parsed.data.arena.deinit();
     result.parse_err = parsed.err;
     if (parsed.err.len > 0) {
         return result;
     }
 
-    var gc = try Gc.init(gpa);
-    defer gc.deinit();
     // Ast -> Bytecode
     var compiled = try compile(gpa, writer, gc, parsed.data, opt);
     defer if (compiled.data != null) compiled.data.?.deinit(gpa);
