@@ -26,7 +26,7 @@ pub fn init(gpa: Allocator) !*Gc {
     const gc = try gpa.create(Gc);
     // Create the heap
     const allocator = std.heap.page_allocator;
-    const heap = try allocator.alloc(u8, min_heap_size);
+    const heap = try allocator.alignedAlloc(u8, std.mem.Alignment.of(Val.BoxedHeader), min_heap_size);
     gc.* = .{
         .gpa = allocator,
         .heap = heap,
@@ -41,53 +41,53 @@ pub fn deinit(self: *Gc, gpa: Allocator) void {
     gpa.destroy(self);
 }
 
-pub fn markRoots(self: *Gc, vm: *Vm) !void {
-    const tr = tracy.trace(@src());
-    defer tr.end();
-    for (1..vm.metadata().reg_size) |i| {
-        const value = vm.registers.items[i];
-        try self.markValue(value);
-    }
+// pub fn markRoots(self: *Gc, vm: *Vm) !void {
+//     const tr = tracy.trace(@src());
+//     defer tr.end();
+//     for (1..vm.metadata().reg_size) |i| {
+//         const value = vm.registers.items[i];
+//         try self.markValue(value);
+//     }
 
-    log.debug("TODO: Mark registers & params in stack.", .{});
-    for (vm.reg_stack.items) |reg| {
-        try self.markValue(reg);
-    }
+//     log.debug("TODO: Mark registers & params in stack.", .{});
+//     for (vm.reg_stack.items) |reg| {
+//         try self.markValue(reg);
+//     }
 
-    for (vm.param_stack.items) |param| {
-        try self.markValue(param);
-    }
+//     for (vm.param_stack.items) |param| {
+//         try self.markValue(param);
+//     }
 
-    for (vm.constants) |constant| {
-        try self.markValue(constant);
-    }
-    log.debug("Marked {d} roots.", .{self.marked.capacity()});
-}
+//     for (vm.constants) |constant| {
+//         try self.markValue(constant);
+//     }
+//     log.debug("Marked {d} roots.", .{self.marked.capacity()});
+// }
 
-fn markValue(self: *Gc, value: Value) !void {
-    switch (value) {
-        // No heap allocations done for these values
-        .int, .float, .boolean => {},
-        .string => try self.marked.put(@intFromPtr(value.string.ptr), undefined),
-        .object => {
-            // Mark the fields and their values
-            var field_ptr: [*:0]const u8 = value.object.schema.fields;
-            // Calculate field len
-            var field_len: u64 = 0;
-            while (field_ptr[0] != 0) {
-                const field = std.mem.span(field_ptr);
-                field_ptr += field.len + 1;
-                field_len += 1;
-            }
-            // Mark each field
-            for (value.object.fields[0..field_len]) |field| {
-                try self.markValue(field);
-            }
-            // Mark self as used
-            try self.marked.put(@intFromPtr(value.object), undefined);
-        },
-    }
-}
+// fn markValue(self: *Gc, value: Value) !void {
+//     switch (value) {
+//         // No heap allocations done for these values
+//         .int, .float, .boolean => {},
+//         .string => try self.marked.put(@intFromPtr(value.string.ptr), undefined),
+//         .object => {
+//             // Mark the fields and their values
+//             var field_ptr: [*:0]const u8 = value.object.schema.fields;
+//             // Calculate field len
+//             var field_len: u64 = 0;
+//             while (field_ptr[0] != 0) {
+//                 const field = std.mem.span(field_ptr);
+//                 field_ptr += field.len + 1;
+//                 field_len += 1;
+//             }
+//             // Mark each field
+//             for (value.object.fields[0..field_len]) |field| {
+//                 try self.markValue(field);
+//             }
+//             // Mark self as used
+//             try self.marked.put(@intFromPtr(value.object), undefined);
+//         },
+//     }
+// }
 
 // pub fn sweep(self: *Gc) !void {
 //     const tr = tracy.trace(@src());
@@ -139,9 +139,11 @@ fn markValue(self: *Gc, value: Value) !void {
 // }
 
 fn allocHeader(self: *Gc, header: Val.BoxedHeader) *Val.BoxedHeader {
+    log.debug("TODO: Implement alloc check, move & collect", .{});
     // Get pointer
+    self.cursor = std.mem.Alignment.of(Val.BoxedHeader).forward(self.cursor);
     const ptr = self.heap[self.cursor..].ptr;
-    const header_ptr: *Val.BoxedHeader align(8) = @ptrCast(@alignCast(ptr));
+    const header_ptr: *Val.BoxedHeader = @ptrCast(@alignCast(ptr));
     header_ptr.* = header;
     // Increment cursor
     self.cursor += @sizeOf(Val.BoxedHeader);
@@ -157,7 +159,7 @@ pub fn allocObject(self: *Gc, object: *Val.Object) Value {
     const header_ptr = self.allocHeader(header);
 
     const heap_ptr = self.heap[self.cursor..].ptr;
-    const values: [*]Value align(8) = @ptrCast(@alignCast(heap_ptr));
+    const values: [*]Value = @ptrCast(@alignCast(heap_ptr));
     const offset = object.schema.fields_count;
     @memcpy(values[self.cursor .. self.cursor + offset], object.fields);
     self.cursor += @sizeOf(Value) * offset;

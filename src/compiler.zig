@@ -45,6 +45,7 @@ pub const CompilerOutput = struct {
             gpa.free(frame.body);
         }
         gpa.free(self.frames);
+        gpa.free(self.constants);
         self.objects.deinit(gpa);
     }
 };
@@ -539,14 +540,16 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
             try out.writeAll(&.{ @intFromEnum(OpCodes.load_int), dst });
             try out.writeInt(u64, @bitCast(val.int), .big);
         },
-        // .string => {
-        //     const str = try self.gc.alloc(.string, val.string.len);
-        //     @memcpy(str.string, val.string);
-        //     try self.constants.append(self.gpa, str);
-        //     const const_idx = self.constants.items.len - 1;
-        //     try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
-        // },
-        else => unreachable,
+        .boxed => {
+            switch (val.boxed.kind) {
+                .string => {
+                    try self.constants.append(self.gpa, val);
+                    const const_idx = self.constants.items.len - 1;
+                    try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
+                },
+                else => unreachable,
+            }
+        },
     }
     return dst;
 }

@@ -71,8 +71,6 @@ pub fn deinit(self: *Vm) void {
     self.reg_stack.deinit(self.gc.gpa);
     self.call_stack.deinit(self.gc.gpa);
     self.param_stack.deinit(self.gc.gpa);
-
-    self.gc.gpa.free(self.constants);
 }
 
 pub fn metadata(self: *Vm) *const Function {
