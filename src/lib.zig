@@ -99,14 +99,14 @@ pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: 
 }
 
 pub const Result = struct {
-    tokenize: TokenizerResult,
-    parse: ParseResult,
-    compile: ?CompilerResult = null,
+    parse_err: std.MultiArrayList(Lexer.Token),
+    compile_err: ?[]u8 = null,
+    runtime_err: ?[]u8 = null,
     value: ?Value = null,
 
     pub fn deinit(self: Result, gpa: Allocator) void {
-        if (self.compile != null and self.compile.?.err != null) {
-            gpa.free(self.compile.?.err.?);
+        if (self.compile_err != null) {
+            gpa.free(self.compile_err.?);
         }
     }
 };
@@ -116,12 +116,11 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
     // Source -> Tokens
     const tokens, var lexer = try tokenize(gpa, writer, src, opt);
     defer lexer.deinit();
-    result.tokenize = .{ tokens, lexer };
 
     // Tokens -> Ast
     const parsed = try parse(gpa, writer, tokens, opt);
     defer parsed.data.arena.deinit();
-    result.parse = parsed;
+    result.parse_err = parsed.err;
     if (parsed.err.len > 0) {
         return result;
     }
@@ -131,7 +130,7 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
     // Ast -> Bytecode
     var compiled = try compile(gpa, writer, gc, parsed.data, opt);
     defer if (compiled.data != null) compiled.data.?.deinit(gpa);
-    result.compile = compiled;
+    result.compile_err = compiled.err;
     if (compiled.err != null) {
         return result;
     }

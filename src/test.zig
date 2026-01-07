@@ -130,9 +130,7 @@ test "Undefined variable" {
     const file = "./tests/undefined_variable.zs";
     const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
 
-    try expect(res.compile != null);
-    try expect(res.compile.?.err != null);
-    try expect(res.compile.?.err.?.len > 0);
+    try expect(res.compile_err != null);
     // Cleanup
     res.deinit(gpa);
     try writer.flush();
@@ -150,9 +148,7 @@ test "Constant Assignment" {
     const file = "./tests/const_assignment.zs";
     const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
 
-    try expect(res.compile != null);
-    try expect(res.compile.?.err != null);
-    try expect(res.compile.?.err.?.len > 0);
+    try expect(res.compile_err != null);
     // Cleanup
     res.deinit(gpa);
     try writer.flush();
