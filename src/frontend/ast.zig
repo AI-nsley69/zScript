@@ -1,11 +1,11 @@
 const std = @import("std");
-const Runtime = @import("vm.zig");
-const Lexer = @import("lexer.zig");
-const Parser = @import("parser.zig");
-const val = @import("value.zig");
+const zs = @import("../lib.zig");
 
-const Value = val.Value;
-const ObjectValue = val.Object;
+const Vm = zs.Runtime.Vm;
+const Lexer = zs.Frontend.Lexer;
+const Parser = zs.Frontend.Parser;
+const Value = zs.Runtime.Value.Value;
+const ObjectValue = zs.Runtime.Value.Object;
 
 const TokenType = Lexer.TokenType;
 const TokenData = Lexer.TokenData;
@@ -106,9 +106,9 @@ pub const Call = struct {
 
 pub const NativeCall = struct {
     args: []Expression,
-    idx: usize,
+    idx: u64,
 
-    pub fn create(gpa: std.mem.Allocator, args: []Expression, idx: usize, src: TokenData) !Expression {
+    pub fn create(gpa: std.mem.Allocator, args: []Expression, idx: u64, src: TokenData) !Expression {
         const call = try gpa.create(NativeCall);
         call.* = .{
             .args = args,

@@ -1,15 +1,16 @@
 const std = @import("std");
-const Lexer = @import("lexer.zig");
-const Bytecode = @import("bytecode.zig");
-const Gc = @import("gc.zig");
-const Vm = @import("vm.zig");
-const Ast = @import("ast.zig");
-const Val = @import("value.zig");
+const zs = @import("../lib.zig");
 const tracy = @import("tracy");
 
 const log = std.log.scoped(.compiler);
 
-const Value = Val.Value;
+const Lexer = zs.Frontend.Lexer;
+const Bytecode = zs.Backend.Bytecode;
+const Gc = zs.Runtime.Gc;
+const Vm = zs.Runtime.Vm;
+const Ast = zs.Frontend.Ast;
+const Val = zs.Runtime.Value;
+const Value = zs.Runtime.Value.Value;
 const Object = Val.Object;
 
 const TokenType = Lexer.TokenType;
@@ -27,12 +28,12 @@ pub const Error = error{
 
 const CompilerFrame = struct {
     name: []const u8,
-    ip: usize = 0,
+    ip: u64 = 0,
     instructions: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8){},
     reg_idx: u8 = 1,
 };
 
-const Errors = (Error || std.mem.Allocator.Error);
+const Errors = (Error || std.mem.Allocator.Error || Gc.Error || Val.ConvertError);
 
 pub const CompilerOutput = struct {
     const Self = @This();
@@ -45,6 +46,7 @@ pub const CompilerOutput = struct {
             gpa.free(frame.body);
         }
         gpa.free(self.frames);
+        gpa.free(self.constants);
         self.objects.deinit(gpa);
     }
 };
@@ -56,7 +58,7 @@ gc: *Gc,
 ast: Ast.Program,
 
 comp_frames: std.ArrayListUnmanaged(CompilerFrame) = std.ArrayListUnmanaged(CompilerFrame){},
-frame_idx: usize = 0,
+frame_idx: u64 = 0,
 
 variables: std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)) = std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)){},
 functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
@@ -310,7 +312,7 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
         const field_expression = next.?.value_ptr;
         log.debug("TODO: Uninitialized fields as null values.", .{});
         const value: Value = if (field_expression.* != null) try eval(field_expression.*.?) else .{ .int = 0 };
-        try field_values.append(self.gc.gpa, value);
+        try field_values.append(self.gpa, value);
     }
 
     var functions = std.ArrayListUnmanaged(Bytecode.Function){};
@@ -319,16 +321,24 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
         try functions.append(self.gpa, try self.compileObjectFrame(node));
     }
 
-    const obj = try self.gc.gpa.create(Object);
-    obj.* = .{
-        .fields = (try field_values.toOwnedSlice(self.gc.gpa)).ptr,
-        .functions = (try functions.toOwnedSlice(self.gc.gpa)).ptr,
-        .schema = self.ast.objects.get(target.name).?,
+    // Create a new schema with the compiled functions
+    const old_schema = self.ast.objects.get(target.name).?;
+    const new_schema = try self.gpa.create(Object.Schema);
+    new_schema.* = .{
+        .fields_count = old_schema.fields_count,
+        .fields = old_schema.fields,
+        .methods = old_schema.methods,
+        .functions = (try functions.toOwnedSlice(self.gpa)).ptr,
     };
 
-    const obj_val: Value = .{ .object = obj };
-    try self.objects.put(self.gc.gpa, target.name, obj_val);
-    try self.gc.allocated.append(self.gc.gpa, obj_val);
+    const fields = (try field_values.toOwnedSlice(self.gpa));
+    const obj: Value = try self.gc.allocObject(.{
+        .fields = fields.ptr,
+        .schema = new_schema,
+    });
+    defer self.gpa.free(fields);
+    try self.objects.put(self.gpa, target.name, obj);
+
     // @panic("Not implemented");
     return 0;
 }
@@ -529,14 +539,16 @@ fn literal(self: *Compiler, val: Value, dst_reg: ?u8) Errors!u8 {
             try out.writeAll(&.{ @intFromEnum(OpCodes.load_int), dst });
             try out.writeInt(u64, @bitCast(val.int), .big);
         },
-        .string => {
-            const str = try self.gc.alloc(.string, val.string.len);
-            @memcpy(str.string, val.string);
-            try self.constants.append(self.gpa, str);
-            const const_idx = self.constants.items.len - 1;
-            try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
+        .boxed => {
+            switch (val.boxed.kind) {
+                .string => {
+                    try self.constants.append(self.gpa, val);
+                    const const_idx = self.constants.items.len - 1;
+                    try out.writeAll(&.{ @intFromEnum(OpCodes.load_const), dst, @truncate(const_idx) });
+                },
+                else => unreachable,
+            }
         },
-        else => unreachable,
     }
     return dst;
 }

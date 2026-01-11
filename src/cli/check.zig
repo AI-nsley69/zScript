@@ -1,5 +1,6 @@
 const std = @import("std");
 const lib = @import("../lib.zig");
+const Gc = @import("../runtime/gc.zig");
 const utils = @import("../utils.zig");
 const zli = @import("zli");
 
@@ -47,9 +48,12 @@ fn check(ctx: zli.CommandContext) !void {
     };
     defer gpa.free(contents);
 
+    var gc = try Gc.init(gpa);
+    defer gc.deinit(gpa);
+
     const tokens, var lexer = try lib.tokenize(gpa, ctx.writer, contents, .{});
     defer lexer.deinit();
 
-    const parsed = try lib.parse(gpa, ctx.writer, lexer, tokens, .{ .file = ctx.positional_args[0] });
-    defer parsed.arena.deinit();
+    const parsed = try lib.parse(gpa, ctx.writer, gc, tokens, .{ .file = ctx.positional_args[0] });
+    defer parsed.data.arena.deinit();
 }

@@ -49,8 +49,8 @@ pub const TokenData = struct {
 };
 
 pub const TokenInfo = struct {
-    line: usize,
-    pos: usize,
+    line: u64,
+    pos: u64,
 };
 
 pub const Token = struct {
@@ -63,10 +63,10 @@ const Lexer = @This();
 gpa: std.mem.Allocator,
 
 buf: []const u8,
-current: usize = 0,
+current: u64 = 0,
 
-line: usize = 1,
-line_pos: usize = 0,
+line: u64 = 1,
+line_pos: u64 = 0,
 
 tokens: std.MultiArrayList(Token) = std.MultiArrayList(Token){},
 
@@ -219,7 +219,7 @@ fn scanToken(self: *Lexer) TokenData {
     }
 }
 
-fn takeWhile(self: *Lexer, comptime prec: anytype) usize {
+fn takeWhile(self: *Lexer, comptime prec: anytype) u64 {
     const start = self.current - 1;
     while (prec(self.peek())) {
         _ = self.advance();
@@ -246,7 +246,7 @@ fn trimWhitespace(self: *Lexer) void {
     }
 }
 
-fn number(self: *Lexer, start: usize) TokenData {
+fn number(self: *Lexer, start: u64) TokenData {
     _ = self.takeWhile(isDigit);
 
     if (self.peek() == '.' and isDigit(self.peekNext())) {
@@ -274,7 +274,7 @@ const keywords = std.StaticStringMap(TokenType).initComptime(&.{
     &.{ "print", .native_fn },
 });
 
-fn alpha(self: *Lexer, start: usize) TokenData {
+fn alpha(self: *Lexer, start: u64) TokenData {
     const name = self.buf[self.takeWhile(isAlpha)..self.current];
     const op: TokenType = keywords.get(name) orelse .identifier;
     return self.makeToken(op, start);
@@ -300,7 +300,7 @@ fn makeTokenInfo(self: *Lexer) TokenInfo {
     return .{ .line = self.line, .pos = self.current - self.line_pos };
 }
 
-fn makeToken(self: *Lexer, tokenType: TokenType, start: usize) TokenData {
+fn makeToken(self: *Lexer, tokenType: TokenType, start: u64) TokenData {
     return .{ .tag = tokenType, .span = self.buf[start..self.current] };
 }
 

@@ -1,12 +1,15 @@
 const std = @import("std");
-const Bytecode = @import("bytecode.zig");
-const Vm = @import("vm.zig");
-const Compiler = @import("compiler.zig");
-const types = @import("ast.zig");
-const Lexer = @import("lexer.zig");
-const Value = @import("value.zig").Value;
+const Bytecode = @import("backend/bytecode.zig");
+const Vm = @import("runtime/vm.zig");
+const Compiler = @import("backend/compiler.zig");
+const types = @import("frontend/ast.zig");
+const Lexer = @import("frontend/lexer.zig");
+const Val = @import("runtime/value.zig");
+const Gc = @import("runtime/gc.zig");
 
 const TokenType = Lexer.TokenType;
+
+const Value = Val.Value;
 
 const Writer = std.io.Writer;
 
@@ -123,28 +126,37 @@ pub fn disassemble(output: CompilerOutput, writer: *Writer) !void {
         while (true) {
             disassembleNextInstruction(writer, &instructions) catch |err| switch (err) {
                 error.EndOfStream => break,
-                else => |e| return e,
+                else => |e| {
+                    try writer.flush();
+                    return e;
+                },
             };
         }
     }
+    try writer.flush();
 }
 
-fn createIndent(gpa: std.mem.Allocator, indent_step: usize) ![]u8 {
+fn createIndent(gpa: std.mem.Allocator, indent_step: u64) ![]u8 {
     const indent_msg = try gpa.alloc(u8, indent_step);
     errdefer gpa.free(indent_msg);
     @memset(indent_msg, ' ');
     return indent_msg;
 }
 
-const Errors = (std.mem.Allocator.Error || std.io.Writer.Error);
+const Errors = (std.mem.Allocator.Error || std.io.Writer.Error || Val.ConvertError || Gc.Error);
 
 pub const Ast = struct {
     const Self = @This();
     writer: *std.io.Writer,
     gpa: std.mem.Allocator,
+    gc: *Gc = undefined,
     const indent_step = 2;
 
     pub fn print(self: *Self, input: Program) !void {
+        const gc = try Gc.init(self.gpa);
+        self.gc = gc;
+        defer gc.deinit(self.gpa);
+
         const indent_msg = try createIndent(self.gpa, indent_step);
         defer self.gpa.free(indent_msg);
 
@@ -153,9 +165,11 @@ pub const Ast = struct {
         for (list) |stmt| {
             try self.printStatement(stmt, indent_step);
         }
+
+        try self.writer.flush();
     }
 
-    fn printStatement(self: *Self, stmt: Statement, indent: usize) !void {
+    fn printStatement(self: *Self, stmt: Statement, indent: u64) !void {
         const indent_msg = try createIndent(self.gpa, indent);
         defer self.gpa.free(indent_msg);
         const node = stmt.node;
@@ -199,7 +213,7 @@ pub const Ast = struct {
         }
     }
 
-    fn printExpressionHelper(self: *Self, expr: Expression, indent: usize) Errors!void {
+    fn printExpressionHelper(self: *Self, expr: Expression, indent: u64) Errors!void {
         const node = expr.node;
         return switch (node) {
             .infix => try self.printInfix(node.infix, indent),
@@ -213,7 +227,7 @@ pub const Ast = struct {
         };
     }
 
-    fn printInfix(self: *Self, infix: *Infix, indent: usize) !void {
+    fn printInfix(self: *Self, infix: *Infix, indent: u64) !void {
         const indent_msg = try createIndent(self.gpa, indent);
         defer self.gpa.free(indent_msg);
         try self.writer.print("{s}infix:\n", .{indent_msg});
@@ -228,7 +242,7 @@ pub const Ast = struct {
         try self.printExpressionHelper(rhs, indent + indent_step);
     }
 
-    fn printUnary(self: *Self, unary: *Unary, indent: usize) !void {
+    fn printUnary(self: *Self, unary: *Unary, indent: u64) !void {
         const indent_msg = try createIndent(self.gpa, indent);
         defer self.gpa.free(indent_msg);
         try self.writer.print("{s}unary:\n", .{indent_msg});
@@ -240,7 +254,7 @@ pub const Ast = struct {
         try self.printExpressionHelper(rhs, indent + indent_step);
     }
 
-    fn printLiteral(self: *Self, value: Value, indent: usize) !void {
+    fn printLiteral(self: *Self, value: Value, indent: u64) !void {
         const indent_msg = try createIndent(self.gpa, indent);
         defer self.gpa.free(indent_msg);
 
@@ -248,15 +262,19 @@ pub const Ast = struct {
             .int => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.int }),
             .float => try self.writer.print("{s}lit: {d}\n", .{ indent_msg, value.float }),
             .boolean => try self.writer.print("{s}lit: {any}\n", .{ indent_msg, value.boolean }),
-            .string => try self.writer.print("{s}str: {s}\n", .{ indent_msg, value.string }),
-            .object => {
-                std.log.debug("Not implemented objs yet", .{});
-                unreachable;
+            .boxed => {
+                switch (value.boxed.kind) {
+                    .string => try self.writer.print("{s}boxed: {s}\n", .{ indent_msg, try Value.asString(value, self.gc) }),
+                    else => {
+                        std.log.debug("Not implemented objs yet", .{});
+                        unreachable;
+                    },
+                }
             },
         };
     }
 
-    fn printVariable(self: *Self, variable: *Variable, indent: usize) !void {
+    fn printVariable(self: *Self, variable: *Variable, indent: u64) !void {
         var indent_msg = try createIndent(self.gpa, indent);
         defer self.gpa.free(indent_msg);
 
@@ -271,7 +289,7 @@ pub const Ast = struct {
         }
     }
 
-    fn printOperand(self: *Self, op: TokenType, indent: usize) !void {
+    fn printOperand(self: *Self, op: TokenType, indent: u64) !void {
         const indent_msg = try self.gpa.alloc(u8, indent);
         defer self.gpa.free(indent_msg);
         @memset(indent_msg, ' ');

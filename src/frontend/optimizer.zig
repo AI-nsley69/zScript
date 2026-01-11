@@ -1,8 +1,10 @@
 const std = @import("std");
-const Ast = @import("ast.zig");
-const Compiler = @import("compiler.zig");
-const Vm = @import("vm.zig");
-const Value = @import("value.zig").Value;
+const zs = @import("../lib.zig");
+
+const Ast = zs.Frontend.Ast;
+const Compiler = zs.Backend.Compiler;
+const Vm = zs.Runtime.Vm;
+const Value = zs.Runtime.Value.Value;
 
 const Program = Ast.Program;
 const Statement = Ast.Statement;
@@ -99,8 +101,7 @@ fn isFoldable(self: *Optimizer, expr: Expression) bool {
                 .boolean => false,
                 .float => true,
                 .int => true,
-                .string => false,
-                .object => false,
+                .boxed => false,
             };
         },
         else => false,
@@ -116,7 +117,7 @@ fn constantFold(self: *Optimizer, expr: Expression) !Expression {
             const infix = expr.node.infix.*;
             const lhs = try self.constantFold(infix.lhs);
             const rhs = try self.constantFold(infix.rhs);
-            
+
             return try Ast.Infix.create(self.gpa, infix.op, lhs, rhs, expr.src);
         },
 

@@ -72,10 +72,22 @@ fn run(ctx: zli.CommandContext) !void {
     };
     defer gpa.free(contents);
 
-    _ = try lib.run(ctx.writer, gpa, contents, .{
+    var res = try lib.run(ctx.writer, gpa, contents, .{
         .file = ctx.positional_args[0],
         .print_asm = ctx.flag("print-bytecode", bool),
         .print_ast = ctx.flag("print-ast", bool),
         .do_not_optimize = ctx.flag("disable-optimization", bool),
     });
+    defer res.deinit(gpa);
+
+    if (res.parse_err.len > 0) {
+        var next_err = res.parse_err.pop();
+        while (next_err != null) : (next_err = res.parse_err.pop()) {
+            try utils.printParseError(gpa, stderr_writer, res.lexer, next_err.?, ctx.positional_args[0]);
+        }
+    }
+
+    if (res.compile_err != null) {
+        try utils.printCompileErr(stderr_writer, res.compile_err.?);
+    }
 }

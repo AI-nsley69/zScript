@@ -1,14 +1,20 @@
 const std = @import("std");
-const Lexer = @import("lexer.zig");
-const Ast = @import("ast.zig");
-const Parser = @import("parser.zig");
-const Optimizer = @import("optimizer.zig");
-const Compiler = @import("compiler.zig");
-const Gc = @import("gc.zig");
-const Vm = @import("vm.zig");
-const Debug = @import("debug.zig");
+pub const Frontend = @import("frontend/frontend.zig");
+pub const Backend = @import("backend/backend.zig");
+pub const Runtime = @import("runtime/runtime.zig");
+pub const Debug = @import("debug.zig");
 const utils = @import("utils.zig");
-const Value = @import("value.zig").Value;
+
+const Lexer = Frontend.Lexer;
+const Ast = Frontend.Ast;
+const Parser = Frontend.Parser;
+const Optimizer = Frontend.Optimizer;
+
+const Compiler = Backend.Compiler;
+
+const Gc = Runtime.Gc;
+const Vm = Runtime.Vm;
+const Value = Runtime.Value.Value;
 
 const Allocator = std.mem.Allocator;
 const Writer = std.io.Writer;
@@ -48,19 +54,10 @@ const ParseResult = struct {
     err: std.MultiArrayList(Lexer.Token),
 };
 
-pub fn parse(gpa: Allocator, out: *Writer, tokens: std.MultiArrayList(Lexer.Token), opt: runOpts) !ParseResult {
+pub fn parse(gpa: Allocator, out: *Writer, gc: *Gc, tokens: std.MultiArrayList(Lexer.Token), opt: runOpts) !ParseResult {
     var parser = Parser{};
-    var parsed = try parser.parse(gpa, tokens);
+    var parsed = try parser.parse(gpa, gc, tokens);
     errdefer parsed.arena.deinit();
-
-    // var had_err: bool = false;
-    // var next_error = parser.errors.pop();
-    // while (next_error != null) : (next_error = parser.errors.pop()) {
-    //     had_err = true;
-    //     var err_writer = std.fs.File.stderr().writer(&.{}).interface;
-    //     try utils.printParseError(gpa, &err_writer, lexer, next_error.?, opt.file);
-    // }
-    // if (had_err) return error.ParseError;
 
     if (!opt.do_not_optimize) {
         var optimizer = Optimizer{};
@@ -84,10 +81,6 @@ pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: 
     var compiler = Compiler{ .gpa = gpa, .gc = gc, .ast = parsed };
     const compiled = compiler.compile() catch {
         return .{ .data = null, .err = compiler.err_msg };
-        // var stderr = std.fs.File.stderr().writer(&.{}).interface;
-        // try utils.printCompileErr(&stderr, );
-        // gpa.free(compiler.err_msg.?); // Free the message after writing it
-        // return err;
     };
     errdefer compiled.deinit(gpa);
 
@@ -100,6 +93,7 @@ pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: 
 
 pub const Result = struct {
     parse_err: std.MultiArrayList(Lexer.Token),
+    lexer: Lexer,
     compile_err: ?[]u8 = null,
     runtime_err: ?[]u8 = null,
     value: ?Value = null,
@@ -115,18 +109,20 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
     var result: Result = undefined;
     // Source -> Tokens
     const tokens, var lexer = try tokenize(gpa, writer, src, opt);
+    result.lexer = lexer;
     defer lexer.deinit();
 
+    var gc = try Gc.init(gpa);
+    defer gc.deinit(gpa);
+
     // Tokens -> Ast
-    const parsed = try parse(gpa, writer, tokens, opt);
+    const parsed = try parse(gpa, writer, gc, tokens, opt);
     defer parsed.data.arena.deinit();
     result.parse_err = parsed.err;
     if (parsed.err.len > 0) {
         return result;
     }
 
-    var gc = try Gc.init(gpa);
-    defer gc.deinit();
     // Ast -> Bytecode
     var compiled = try compile(gpa, writer, gc, parsed.data, opt);
     defer if (compiled.data != null) compiled.data.?.deinit(gpa);
@@ -137,6 +133,7 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
 
     // Bytecode execution
     var vm = try Vm.init(gc, compiled.data.?);
+    gc.vm = vm; // Set the vm struct for collection
     defer vm.deinit();
     vm.run() catch |err| switch (err) {
         error.EndOfStream => {},
