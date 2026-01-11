@@ -1,10 +1,10 @@
 const std = @import("std");
-const Lexer = @import("lexer.zig");
+const Lexer = @import("../frontend/lexer.zig");
 const Bytecode = @import("bytecode.zig");
-const Gc = @import("gc.zig");
-const Vm = @import("vm.zig");
-const Ast = @import("ast.zig");
-const Val = @import("value.zig");
+const Gc = @import("../runtime/gc.zig");
+const Vm = @import("../runtime/vm.zig");
+const Ast = @import("../frontend/ast.zig");
+const Val = @import("../runtime/value.zig");
 const tracy = @import("tracy");
 
 const log = std.log.scoped(.compiler);

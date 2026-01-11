@@ -1,10 +1,10 @@
 const std = @import("std");
 const Ast = @import("ast.zig");
 const Lexer = @import("lexer.zig");
-const Vm = @import("vm.zig");
-const Gc = @import("gc.zig");
-const Val = @import("value.zig");
-const Native = @import("native.zig");
+const Vm = @import("../runtime/vm.zig");
+const Gc = @import("../runtime/gc.zig");
+const Val = @import("../runtime/value.zig");
+const Native = @import("../runtime/native.zig");
 
 const tracy = @import("tracy");
 

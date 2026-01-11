@@ -1,8 +1,8 @@
 const std = @import("std");
-const Runtime = @import("vm.zig");
+const Runtime = @import("../runtime/vm.zig");
 const Lexer = @import("lexer.zig");
 const Parser = @import("parser.zig");
-const val = @import("value.zig");
+const val = @import("../runtime/value.zig");
 
 const Value = val.Value;
 const ObjectValue = val.Object;

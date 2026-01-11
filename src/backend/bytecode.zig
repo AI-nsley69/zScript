@@ -1,5 +1,5 @@
 const std = @import("std");
-const Value = @import("value.zig").Value;
+const Value = @import("../runtime/value.zig").Value;
 
 pub const OpCodes = enum(u8) {
     @"return",

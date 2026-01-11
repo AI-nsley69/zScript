@@ -1,6 +1,6 @@
 const std = @import("std");
 const lib = @import("../lib.zig");
-const Gc = @import("../gc.zig");
+const Gc = @import("../runtime/gc.zig");
 const utils = @import("../utils.zig");
 const zli = @import("zli");
 

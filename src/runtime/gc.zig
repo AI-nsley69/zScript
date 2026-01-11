@@ -1,5 +1,5 @@
 const std = @import("std");
-const Bytecode = @import("bytecode.zig");
+const Bytecode = @import("../backend/bytecode.zig");
 const Vm = @import("vm.zig");
 const Val = @import("value.zig");
 

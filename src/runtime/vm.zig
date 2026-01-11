@@ -1,8 +1,8 @@
 const std = @import("std");
-const Bytecode = @import("bytecode.zig");
-const Debug = @import("debug.zig");
-const Compiler = @import("compiler.zig");
-const Gc = @import("gc.zig");
+const Bytecode = @import("../backend/bytecode.zig");
+const Debug = @import("../debug.zig");
+const Compiler = @import("../backend/compiler.zig");
+const Gc = @import("../runtime/gc.zig");
 const tracy = @import("tracy");
 
 const Value = @import("value.zig").Value;

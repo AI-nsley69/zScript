@@ -1,8 +1,8 @@
 const std = @import("std");
 const Ast = @import("ast.zig");
-const Compiler = @import("compiler.zig");
-const Vm = @import("vm.zig");
-const Value = @import("value.zig").Value;
+const Compiler = @import("../backend/compiler.zig");
+const Vm = @import("../runtime/vm.zig");
+const Value = @import("../runtime/value.zig").Value;
 
 const Program = Ast.Program;
 const Statement = Ast.Statement;

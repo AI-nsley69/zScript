@@ -1,5 +1,5 @@
 const std = @import("std");
-const Lexer = @import("lexer.zig");
+const Lexer = @import("frontend/lexer.zig");
 const ansi = @import("ansi_term");
 const format = ansi.format;
 

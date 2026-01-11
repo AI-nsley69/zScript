@@ -1,11 +1,11 @@
 const std = @import("std");
-const Bytecode = @import("bytecode.zig");
-const Vm = @import("vm.zig");
-const Compiler = @import("compiler.zig");
-const types = @import("ast.zig");
-const Lexer = @import("lexer.zig");
-const Val = @import("value.zig");
-const Gc = @import("gc.zig");
+const Bytecode = @import("backend/bytecode.zig");
+const Vm = @import("runtime/vm.zig");
+const Compiler = @import("backend/compiler.zig");
+const types = @import("frontend/ast.zig");
+const Lexer = @import("frontend/lexer.zig");
+const Val = @import("runtime/value.zig");
+const Gc = @import("runtime/gc.zig");
 
 const TokenType = Lexer.TokenType;
 
