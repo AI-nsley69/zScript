@@ -139,7 +139,7 @@ fn createIndent(gpa: std.mem.Allocator, indent_step: u64) ![]u8 {
     return indent_msg;
 }
 
-const Errors = (std.mem.Allocator.Error || std.io.Writer.Error || Val.ConvertError);
+const Errors = (std.mem.Allocator.Error || std.io.Writer.Error || Val.ConvertError || Gc.Error);
 
 pub const Ast = struct {
     const Self = @This();

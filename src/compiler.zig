@@ -32,7 +32,7 @@ const CompilerFrame = struct {
     reg_idx: u8 = 1,
 };
 
-const Errors = (Error || std.mem.Allocator.Error);
+const Errors = (Error || std.mem.Allocator.Error || Gc.Error || Val.ConvertError);
 
 pub const CompilerOutput = struct {
     const Self = @This();
@@ -331,7 +331,7 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
     };
 
     const fields = (try field_values.toOwnedSlice(self.gpa));
-    const obj: Value = self.gc.allocObject(.{
+    const obj: Value = try self.gc.allocObject(.{
         .fields = fields.ptr,
         .schema = new_schema,
     });

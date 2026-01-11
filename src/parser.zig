@@ -42,7 +42,7 @@ pub const Error = error{
     InvalidArguments,
 };
 
-const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || Native.Error || Val.ConvertError);
+const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || Native.Error || Val.ConvertError || Gc.Error);
 
 const Parser = @This();
 
@@ -427,7 +427,7 @@ fn dot(self: *Parser) Errors!Expression {
             return try self.finishObjectCall(root, field_tkn);
         }
 
-        const field = try Ast.Literal.create(self.gc.allocString(field_tkn.span), self.peek());
+        const field = try Ast.Literal.create(try self.gc.allocString(field_tkn.span), self.peek());
         const prop_assignment: ?Expression = if (self.match(.assign)) try self.expression() else null;
         return try Ast.FieldAccess.create(self.gpa, root, field, prop_assignment, self.previous());
     }
@@ -439,7 +439,7 @@ fn finishObjectCall(self: *Parser, root: Expression, name: TokenData) Errors!Exp
     log.debug("TODO: Add check for defined methods on objects.", .{});
     const src = self.previous();
 
-    const method = try Ast.Literal.create(self.gc.allocString(name.span), self.peek());
+    const method = try Ast.Literal.create(try self.gc.allocString(name.span), self.peek());
 
     var args = std.ArrayListUnmanaged(Expression){};
     if (!self.check(.right_paren)) {
@@ -503,7 +503,7 @@ fn primary(self: *Parser) Errors!Expression {
 
     if (self.match(.string)) {
         const value = self.previous().span;
-        const str_val = self.gc.allocStringCount(@truncate(value.len - 2));
+        const str_val = try self.gc.allocStringCount(@truncate(value.len - 2));
         const str = try Value.asString(str_val, self.gc);
         @memcpy(str, value[1 .. value.len - 1]);
         return Ast.Literal.create(str_val, self.previous());

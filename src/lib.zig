@@ -138,6 +138,7 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
 
     // Bytecode execution
     var vm = try Vm.init(gc, compiled.data.?);
+    gc.vm = vm; // Set the vm struct for collection
     defer vm.deinit();
     vm.run() catch |err| switch (err) {
         error.EndOfStream => {},

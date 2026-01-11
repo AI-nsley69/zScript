@@ -12,14 +12,22 @@ const Allocator = std.mem.Allocator;
 
 const log = std.log.scoped(.gc);
 
+pub const Error = error{
+    MaxHeapSizeReached,
+};
+
+const Errors = (Error || std.mem.Allocator.Error || Val.ConvertError);
+
 const min_heap_size = 1 << 20; // Initialize heap to 1MiB
 const max_heap_size = 2 << 30; // Set max heap size to 2 GiB
+const heap_size_multiplier = 2;
 
 const Gc = @This();
 
 gpa: Allocator,
 cursor: u64 = 0,
 heap: []u8,
+vm: ?Vm = null,
 
 pub fn init(gpa: Allocator) !*Gc {
     // Init itself as a pointer
@@ -36,116 +44,99 @@ pub fn init(gpa: Allocator) !*Gc {
 }
 
 pub fn deinit(self: *Gc, gpa: Allocator) void {
+    log.debug("Final heap size: {d}b", .{self.cursor});
     log.debug("TODO: Discard object schema & functions", .{});
     self.gpa.free(self.heap);
     gpa.destroy(self);
 }
 
-// pub fn markRoots(self: *Gc, vm: *Vm) !void {
-//     const tr = tracy.trace(@src());
-//     defer tr.end();
-//     for (1..vm.metadata().reg_size) |i| {
-//         const value = vm.registers.items[i];
-//         try self.markValue(value);
-//     }
+// fn next(self: *Gc) ?*Val.BoxedHeader {
+//     if (self.cursor >= self.heap.len) return null;
+//     const offset = @sizeOf(Val.BoxedHeader);
+//     const ptr = self.heap[self.cursor .. self.cursor + offset].ptr;
+//     const header_ptr: *Val.BoxedHeader = @ptrCast(@alignCast(ptr));
 
-//     log.debug("TODO: Mark registers & params in stack.", .{});
-//     for (vm.reg_stack.items) |reg| {
-//         try self.markValue(reg);
-//     }
-
-//     for (vm.param_stack.items) |param| {
-//         try self.markValue(param);
-//     }
-
-//     for (vm.constants) |constant| {
-//         try self.markValue(constant);
-//     }
-//     log.debug("Marked {d} roots.", .{self.marked.capacity()});
+//     return header_ptr;
 // }
 
-// fn markValue(self: *Gc, value: Value) !void {
-//     switch (value) {
-//         // No heap allocations done for these values
-//         .int, .float, .boolean => {},
-//         .string => try self.marked.put(@intFromPtr(value.string.ptr), undefined),
-//         .object => {
-//             // Mark the fields and their values
-//             var field_ptr: [*:0]const u8 = value.object.schema.fields;
-//             // Calculate field len
-//             var field_len: u64 = 0;
-//             while (field_ptr[0] != 0) {
-//                 const field = std.mem.span(field_ptr);
-//                 field_ptr += field.len + 1;
-//                 field_len += 1;
-//             }
-//             // Mark each field
-//             for (value.object.fields[0..field_len]) |field| {
-//                 try self.markValue(field);
-//             }
-//             // Mark self as used
-//             try self.marked.put(@intFromPtr(value.object), undefined);
-//         },
-//     }
-// }
+fn collectValueList(self: *Gc, list: std.ArrayListUnmanaged(Value)) Errors!void {
+    for (0..list.items.len) |idx| {
+        const item = list.items[idx];
+        if (item != .boxed) continue;
+        if (item.boxed.kind != .moved) {
+            try self.move(item.boxed);
+        }
+        const header_ptr: *Val.BoxedHeader = @ptrFromInt(item.boxed.ptr_or_size);
+        list.items[idx].boxed = header_ptr;
+    }
+}
 
-// pub fn sweep(self: *Gc) !void {
-//     const tr = tracy.trace(@src());
-//     defer tr.end();
-//     // If there's nothing on the heap, then exit.
-//     if (self.allocated.items.len < 1) return;
+fn collect(self: *Gc) Errors!void {
+    const current_heap = self.heap;
+    const current_size = current_heap.len;
+    const new_heap = try self.gpa.alignedAlloc(u8, std.mem.Alignment.of(Val.BoxedHeader), current_size * heap_size_multiplier);
+    // VM should be set after parsing + compilation, just double the current heap size and copy it to the new heap
+    log.debug("Handle collection when doing parsing / compiling", .{});
+    if (self.vm == null) {
+        @memcpy(new_heap[0..current_size], self.heap);
+        self.heap = new_heap;
+        self.gpa.free(current_heap);
+        return;
+    }
+    // If not, we need to collect the garbage
+    self.cursor = 0;
+    self.heap = new_heap;
 
-//     var idx_to_remove = std.ArrayListUnmanaged(u64){};
-//     defer idx_to_remove.deinit(self.gpa);
+    log.debug("Handle collection for call stack, etc", .{});
+    try self.collectValueList(self.vm.?.registers);
+    try self.collectValueList(self.vm.?.reg_stack);
+    try self.collectValueList(self.vm.?.param_stack);
+    log.debug("Collected {d} bytes", .{current_size - self.cursor});
+    self.alignCursor();
+}
 
-//     for (0..self.allocated.items.len) |i| {
-//         const elem = self.allocated.items[i];
+fn move(self: *Gc, header: *Val.BoxedHeader) Errors!void {
+    const new_header: *Val.BoxedHeader = val: switch (header.kind) {
+        .object => {
+            const val: Value = .{ .boxed = header };
+            const obj = try val.asObj();
 
-//         const ptr = switch (elem) {
-//             .boolean, .float, .int => unreachable,
-//             .string => @intFromPtr(elem.string.ptr),
-//             .object => @intFromPtr(elem.object),
-//         };
-//         if (self.marked.contains(ptr)) continue;
-//         try idx_to_remove.append(self.gpa, i);
-//     }
+            const fields: []Value = obj.fields[0..obj.schema.fields_count];
+            for (0..obj.schema.fields_count) |idx| {
+                const item = obj.fields[idx];
+                if (item != .boxed) continue;
 
-//     // Deallocate found indexes
-//     var freed_bytes: u64 = 0;
-//     for (idx_to_remove.items) |elem| {
-//         freed_bytes += self.free(self.allocated.items[elem], elem);
-//         _ = self.allocated.swapRemove(elem);
-//     }
+                try self.move(item.boxed);
+                const new_field: *Val.BoxedHeader = @ptrFromInt(item.boxed.ptr_or_size);
+                fields[idx] = .{ .boxed = new_field };
+            }
 
-//     self.allocated_bytes -= freed_bytes;
-//     if (self.allocated_bytes >= self.size_threshold) self.size_threshold *= 2;
-//     self.marked.clearRetainingCapacity();
-// }
+            const new_val = try self.allocObject(obj);
+            break :val new_val.boxed;
+        },
+        .string => {
+            const val: Value = .{ .boxed = header };
+            const str = try val.asString(self);
+            const new_val = try self.allocString(str);
+            break :val new_val.boxed;
+        },
+        .moved => break :val header,
+    };
 
-// pub fn alloc(self: *Gc, value_type: ValueType, count: u64, alignt) !Value {
-//     const ptr = self.heap[self.cursor..].ptr;
-//     const val: Value = val: switch (value_type) {
-//         // Non-heap items do not need to allocated
-//         .int, .float, .boolean => unreachable,
-//         // Items on the heapl
-//         .string => {
-//             const str = try self.gpa.alloc(u8, count);
-//             self.allocated_bytes += count;
-//             break :val .{ .string = str };
-//         },
-//         .object => unreachable,
-//     };
-//     return val;
-// }
+    header.* = .{ .kind = .moved, .ptr_or_size = @intCast(@intFromPtr(new_header)) };
+}
 
 fn alignCursor(self: *Gc) void {
     self.cursor = std.mem.Alignment.of(Val.BoxedHeader).forward(self.cursor);
 }
 
-fn allocHeader(self: *Gc, header: Val.BoxedHeader) *Val.BoxedHeader {
-    log.debug("TODO: Implement alloc check, move & collect", .{});
-    // Get pointer
+fn allocHeader(self: *Gc, header: Val.BoxedHeader) Errors!*Val.BoxedHeader {
     self.alignCursor();
+    const size = @sizeOf(Val.BoxedHeader);
+    if (self.cursor + size >= self.heap.len) {
+        try self.collect();
+    }
+    // Get pointer
     const ptr = self.heap[self.cursor..].ptr;
     const header_ptr: *Val.BoxedHeader = @ptrCast(@alignCast(ptr));
     header_ptr.* = header;
@@ -155,34 +146,44 @@ fn allocHeader(self: *Gc, header: Val.BoxedHeader) *Val.BoxedHeader {
     return header_ptr;
 }
 
-pub fn allocObject(self: *Gc, object: Val.Object) Value {
+pub fn allocObject(self: *Gc, object: Val.Object) Errors!Value {
     const header: Val.BoxedHeader = .{
         .kind = .object,
         .ptr_or_size = @intCast(@intFromPtr(object.schema)),
     };
-    const header_ptr = self.allocHeader(header);
+    const header_ptr = try self.allocHeader(header);
 
     self.alignCursor();
+    const offset = object.schema.fields_count;
+    const size = @sizeOf(Value) * offset;
+    if (self.cursor + size >= self.heap.len) {
+        try self.collect();
+    }
+
     const heap_ptr = self.heap[self.cursor..].ptr;
     const values: [*]Value = @ptrCast(@alignCast(heap_ptr));
-    const offset = object.schema.fields_count;
     @memcpy(values[0..offset], object.fields);
-    self.cursor += @sizeOf(Value) * offset;
+
+    self.cursor += size;
 
     return .{
         .boxed = header_ptr,
     };
 }
 
-pub fn allocString(self: *Gc, string: []const u8) Value {
+pub fn allocString(self: *Gc, string: []const u8) Errors!Value {
     const header: Val.BoxedHeader = .{
         .kind = .string,
         .ptr_or_size = @truncate(string.len),
     };
-    const header_ptr = self.allocHeader(header);
+    const header_ptr = try self.allocHeader(header);
 
     self.alignCursor();
     const offset = string.len;
+    if (self.cursor + offset >= self.heap.len) {
+        try self.collect();
+    }
+
     @memcpy(self.heap[self.cursor .. self.cursor + offset], string);
     self.cursor += offset;
     return .{
@@ -190,14 +191,18 @@ pub fn allocString(self: *Gc, string: []const u8) Value {
     };
 }
 
-pub fn allocStringCount(self: *Gc, count: u62) Value {
+pub fn allocStringCount(self: *Gc, count: u62) Errors!Value {
     const header: Val.BoxedHeader = .{
         .kind = .string,
         .ptr_or_size = count,
     };
-    const header_ptr = self.allocHeader(header);
+    const header_ptr = try self.allocHeader(header);
 
     self.alignCursor();
+    if (self.cursor + count >= self.heap.len) {
+        try self.collect();
+    }
+
     self.cursor += count;
 
     return .{

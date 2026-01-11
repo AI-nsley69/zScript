@@ -88,7 +88,7 @@ pub const Value = union(ValueType) {
             .int => {
                 const num = try Value.asInt(value);
                 const count = std.fmt.count("{d}", .{num});
-                const val = gc.allocStringCount(@intCast(count));
+                const val = try gc.allocStringCount(@intCast(count));
                 const str: []u8 = try Value.asString(val, gc);
                 _ = try std.fmt.bufPrint(str, "{d}", .{num});
                 return str;
@@ -96,7 +96,7 @@ pub const Value = union(ValueType) {
             .float => {
                 const num = try Value.asFloat(value);
                 const count = std.fmt.count("{d}", .{num});
-                const val = gc.allocStringCount(@intCast(count));
+                const val = try gc.allocStringCount(@intCast(count));
                 const str: []u8 = try Value.asString(val, gc);
                 _ = try std.fmt.bufPrint(str, "{d}", .{num});
                 return str;
@@ -104,7 +104,7 @@ pub const Value = union(ValueType) {
             .boolean => {
                 const boolean = try Value.asBool(value);
                 const count = std.fmt.count("{}", .{boolean});
-                const val = gc.allocStringCount(@intCast(count));
+                const val = try gc.allocStringCount(@intCast(count));
                 const str: []u8 = try Value.asString(val, gc);
                 _ = try std.fmt.bufPrint(str, "{}", .{boolean});
                 return str;

@@ -144,7 +144,7 @@ pub fn run(self: *Vm) !void {
                         .string => {
                             const fst_str = try Value.asString(fst, self.gc);
                             const snd_str = try Value.asString(snd, self.gc);
-                            const new_val = self.gc.allocStringCount(@intCast(fst_str.len + snd_str.len));
+                            const new_val = try self.gc.allocStringCount(@intCast(fst_str.len + snd_str.len));
                             const str: []u8 = try Value.asString(new_val, self.gc);
                             @memcpy(str[0..fst_str.len], fst_str);
                             @memcpy(str[fst_str.len..], snd_str);
