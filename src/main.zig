@@ -15,14 +15,15 @@ pub fn main() !void {
     const gpa = std.heap.smp_allocator;
 
     var file = std.fs.File.stdout();
-    var writer = file.writerStreaming(&.{}).interface;
+    var writer = file.writerStreaming(&.{});
+    const out = &writer.interface;
 
-    var root = try cli.build(&writer, gpa);
+    var root = try cli.build(out, gpa);
     defer root.deinit();
 
     try root.execute(.{});
     // Flush the writer
-    try writer.flush();
+    try out.flush();
 
     return;
 }

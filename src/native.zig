@@ -32,15 +32,17 @@ pub fn nameToIdx(name: []const u8) u8 {
 
 fn print(ctx: Context, gc: *Gc) void {
     var out_buf: [1024]u8 = undefined;
-    var out = std.fs.File.stdout().writer(&out_buf).interface;
+    var out = std.fs.File.stdout().writer(&out_buf);
+    var writer = &out.interface;
+
     const value = ctx.params[0];
     switch (value) {
-        .int => out.print("{d}\n", .{value.int}) catch {},
-        .float => out.print("{d}\n", .{value.float}) catch {},
-        .boolean => out.print("{any}\n", .{value.boolean}) catch {},
+        .int => writer.print("{d}\n", .{value.int}) catch {},
+        .float => writer.print("{d}\n", .{value.float}) catch {},
+        .boolean => writer.print("{any}\n", .{value.boolean}) catch {},
         .boxed => {
             switch (value.boxed.kind) {
-                .string => out.print("{s}\n", .{Value.asString(value, gc) catch "N/A"}) catch {},
+                .string => writer.print("{s}\n", .{Value.asString(value, gc) catch "N/A"}) catch {},
                 else => {
                     std.log.debug("Unhandled value type!", .{});
                     unreachable;
@@ -48,7 +50,7 @@ fn print(ctx: Context, gc: *Gc) void {
             }
         },
     }
-    out.flush() catch {};
+    writer.flush() catch {};
 }
 
 pub const printFn: NativeFn = .{ .params = 1, .run = &print };

@@ -126,10 +126,14 @@ pub fn disassemble(output: CompilerOutput, writer: *Writer) !void {
         while (true) {
             disassembleNextInstruction(writer, &instructions) catch |err| switch (err) {
                 error.EndOfStream => break,
-                else => |e| return e,
+                else => |e| {
+                    try writer.flush();
+                    return e;
+                },
             };
         }
     }
+    try writer.flush();
 }
 
 fn createIndent(gpa: std.mem.Allocator, indent_step: u64) ![]u8 {
@@ -161,6 +165,8 @@ pub const Ast = struct {
         for (list) |stmt| {
             try self.printStatement(stmt, indent_step);
         }
+
+        try self.writer.flush();
     }
 
     fn printStatement(self: *Self, stmt: Statement, indent: u64) !void {

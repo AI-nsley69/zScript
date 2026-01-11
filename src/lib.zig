@@ -53,15 +53,6 @@ pub fn parse(gpa: Allocator, out: *Writer, gc: *Gc, tokens: std.MultiArrayList(L
     var parsed = try parser.parse(gpa, gc, tokens);
     errdefer parsed.arena.deinit();
 
-    // var had_err: bool = false;
-    // var next_error = parser.errors.pop();
-    // while (next_error != null) : (next_error = parser.errors.pop()) {
-    //     had_err = true;
-    //     var err_writer = std.fs.File.stderr().writer(&.{}).interface;
-    //     try utils.printParseError(gpa, &err_writer, lexer, next_error.?, opt.file);
-    // }
-    // if (had_err) return error.ParseError;
-
     if (!opt.do_not_optimize) {
         var optimizer = Optimizer{};
         parsed = try optimizer.optimizeAst(gpa, parsed);
@@ -84,10 +75,6 @@ pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: 
     var compiler = Compiler{ .gpa = gpa, .gc = gc, .ast = parsed };
     const compiled = compiler.compile() catch {
         return .{ .data = null, .err = compiler.err_msg };
-        // var stderr = std.fs.File.stderr().writer(&.{}).interface;
-        // try utils.printCompileErr(&stderr, );
-        // gpa.free(compiler.err_msg.?); // Free the message after writing it
-        // return err;
     };
     errdefer compiled.deinit(gpa);
 
@@ -100,6 +87,7 @@ pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: 
 
 pub const Result = struct {
     parse_err: std.MultiArrayList(Lexer.Token),
+    lexer: Lexer,
     compile_err: ?[]u8 = null,
     runtime_err: ?[]u8 = null,
     value: ?Value = null,
@@ -115,6 +103,7 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
     var result: Result = undefined;
     // Source -> Tokens
     const tokens, var lexer = try tokenize(gpa, writer, src, opt);
+    result.lexer = lexer;
     defer lexer.deinit();
 
     var gc = try Gc.init(gpa);
