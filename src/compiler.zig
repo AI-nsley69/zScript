@@ -311,7 +311,7 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
         const field_expression = next.?.value_ptr;
         log.debug("TODO: Uninitialized fields as null values.", .{});
         const value: Value = if (field_expression.* != null) try eval(field_expression.*.?) else .{ .int = 0 };
-        try field_values.append(self.gc.gpa, value);
+        try field_values.append(self.gpa, value);
     }
 
     var functions = std.ArrayListUnmanaged(Bytecode.Function){};
@@ -327,18 +327,16 @@ fn object(self: *Compiler, target: *Ast.Object) Errors!u8 {
         .fields_count = old_schema.fields_count,
         .fields = old_schema.fields,
         .methods = old_schema.methods,
-        .functions = (try functions.toOwnedSlice(self.gc.gpa)).ptr,
+        .functions = (try functions.toOwnedSlice(self.gpa)).ptr,
     };
 
-    // Create the object
-    const obj = try self.gc.gpa.create(Object);
-    obj.* = .{
-        .fields = (try field_values.toOwnedSlice(self.gc.gpa)).ptr,
+    const fields = (try field_values.toOwnedSlice(self.gpa));
+    const obj: Value = self.gc.allocObject(.{
+        .fields = fields.ptr,
         .schema = new_schema,
-    };
-
-    const obj_val: Value = self.gc.allocObject(obj);
-    try self.objects.put(self.gc.gpa, target.name, obj_val);
+    });
+    defer self.gpa.free(fields);
+    try self.objects.put(self.gpa, target.name, obj);
 
     // @panic("Not implemented");
     return 0;

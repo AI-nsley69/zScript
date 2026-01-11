@@ -165,7 +165,7 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
     if (self.previous().tag != .right_bracket) {
         try self.reportError("Expected '}' after object declaration.");
     }
-
+    // Create packed fields
     var packed_field_count: u64 = 0;
     for (fields.keys()) |key| {
         packed_field_count += key.len + 1;
@@ -176,7 +176,7 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         packed_fields.appendSliceAssumeCapacity(key);
         packed_fields.appendAssumeCapacity(0);
     }
-
+    // Create packed methods
     var packed_method_count: u64 = 0;
     for (methods.items) |method| {
         packed_method_count += method.node.function.name.len + 1;
@@ -187,7 +187,9 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         packed_methods.appendSliceAssumeCapacity(method.node.function.name);
         packed_methods.appendAssumeCapacity(0);
     }
+
     const functions = try methods.toOwnedSlice(self.gpa);
+
     const schema = try self.gpa.create(Object.Schema);
     schema.* = .{
         .fields_count = packed_field_count,

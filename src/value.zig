@@ -126,12 +126,6 @@ pub const Value = union(ValueType) {
         };
     }
 
-    pub fn asObj(value: Value) !Object {
-        if (value != .boxed) return Error.InvalidType;
-        if (value.boxed.kind != .object) return Error.InvalidType;
-        return Value.unboxObject(value.boxed);
-    }
-
     // Value unboxing
     fn unboxString(header: *BoxedHeader) []u8 {
         std.debug.assert(header.kind == .string);
@@ -139,6 +133,13 @@ pub const Value = union(ValueType) {
         var ptr: [*]u8 = @ptrCast(header[1..1]);
         return ptr[0..size];
     }
+
+    pub fn asObj(value: Value) !Object {
+        if (value != .boxed) return Error.InvalidType;
+        if (value.boxed.kind != .object) return Error.InvalidType;
+        return Value.unboxObject(value.boxed);
+    }
+
     fn unboxObject(header: *BoxedHeader) Object {
         std.debug.assert(header.kind == .object);
         const schema: *const Object.Schema = @ptrFromInt(header.ptr_or_size);

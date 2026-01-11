@@ -18,7 +18,7 @@ const max_heap_size = 2 << 30; // Set max heap size to 2 GiB
 const Gc = @This();
 
 gpa: Allocator,
-cursor: u64,
+cursor: u64 = 0,
 heap: []u8,
 
 pub fn init(gpa: Allocator) !*Gc {
@@ -30,7 +30,6 @@ pub fn init(gpa: Allocator) !*Gc {
     gc.* = .{
         .gpa = allocator,
         .heap = heap,
-        .cursor = 0,
     };
 
     return gc;
@@ -155,7 +154,7 @@ fn allocHeader(self: *Gc, header: Val.BoxedHeader) *Val.BoxedHeader {
     return header_ptr;
 }
 
-pub fn allocObject(self: *Gc, object: *Val.Object) Value {
+pub fn allocObject(self: *Gc, object: Val.Object) Value {
     const header: Val.BoxedHeader = .{
         .kind = .object,
         .ptr_or_size = @intCast(@intFromPtr(object.schema)),
@@ -166,7 +165,7 @@ pub fn allocObject(self: *Gc, object: *Val.Object) Value {
     const heap_ptr = self.heap[self.cursor..].ptr;
     const values: [*]Value = @ptrCast(@alignCast(heap_ptr));
     const offset = object.schema.fields_count;
-    @memcpy(values[self.cursor .. self.cursor + offset], object.fields);
+    @memcpy(values[0..offset], object.fields);
     self.cursor += @sizeOf(Value) * offset;
 
     return .{
@@ -197,6 +196,7 @@ pub fn allocStringCount(self: *Gc, count: u62) Value {
     };
     const header_ptr = self.allocHeader(header);
 
+    self.alignCursor();
     self.cursor += count;
 
     return .{

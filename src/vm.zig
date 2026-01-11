@@ -98,7 +98,7 @@ fn readInt(self: *Vm, comptime T: type) T {
 
 fn nextOp(self: *Vm) !OpCodes {
     const op: OpCodes = @enumFromInt(try self.next());
-    // std.debug.sprint("Next op: {s}\n", .{@tagName(op)});
+    // std.debug.print("Next op: {s}\n", .{@tagName(op)});
     return op;
 }
 
