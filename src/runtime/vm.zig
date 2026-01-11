@@ -1,13 +1,15 @@
 const std = @import("std");
-const Bytecode = @import("../backend/bytecode.zig");
-const Debug = @import("../debug.zig");
-const Compiler = @import("../backend/compiler.zig");
-const Gc = @import("../runtime/gc.zig");
+const zs = @import("../lib.zig");
 const tracy = @import("tracy");
 
-const Value = @import("value.zig").Value;
-const Native = @import("native.zig");
-const ValueType = @import("value.zig").ValueType;
+const Bytecode = zs.Backend.Bytecode;
+const Debug = zs.Debug;
+const Compiler = zs.Backend.Compiler;
+const Gc = zs.Runtime.Gc;
+
+const Value = zs.Runtime.Value.Value;
+const Native = zs.Runtime.Native;
+const ValueType = zs.Runtime.Value.ValueType;
 
 const OpCodes = Bytecode.OpCodes;
 const Function = Bytecode.Function;

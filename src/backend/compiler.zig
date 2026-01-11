@@ -1,15 +1,16 @@
 const std = @import("std");
-const Lexer = @import("../frontend/lexer.zig");
-const Bytecode = @import("bytecode.zig");
-const Gc = @import("../runtime/gc.zig");
-const Vm = @import("../runtime/vm.zig");
-const Ast = @import("../frontend/ast.zig");
-const Val = @import("../runtime/value.zig");
+const zs = @import("../lib.zig");
 const tracy = @import("tracy");
 
 const log = std.log.scoped(.compiler);
 
-const Value = Val.Value;
+const Lexer = zs.Frontend.Lexer;
+const Bytecode = zs.Backend.Bytecode;
+const Gc = zs.Runtime.Gc;
+const Vm = zs.Runtime.Vm;
+const Ast = zs.Frontend.Ast;
+const Val = zs.Runtime.Value;
+const Value = zs.Runtime.Value.Value;
 const Object = Val.Object;
 
 const TokenType = Lexer.TokenType;

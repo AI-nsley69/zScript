@@ -1,6 +1,8 @@
 const std = @import("std");
-const Value = @import("value.zig").Value;
-const Gc = @import("gc.zig");
+const zs = @import("../lib.zig");
+
+const Value = zs.Runtime.Value.Value;
+const Gc = zs.Runtime.Gc;
 
 pub const Error = error{
     UnknownFunction,

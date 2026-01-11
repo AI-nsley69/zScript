@@ -1,12 +1,13 @@
 const std = @import("std");
-const Ast = @import("ast.zig");
-const Lexer = @import("lexer.zig");
-const Vm = @import("../runtime/vm.zig");
-const Gc = @import("../runtime/gc.zig");
-const Val = @import("../runtime/value.zig");
-const Native = @import("../runtime/native.zig");
-
+const zs = @import("../lib.zig");
 const tracy = @import("tracy");
+
+const Ast = zs.Frontend.Ast;
+const Lexer = zs.Frontend.Lexer;
+const Vm = zs.Runtime.Vm;
+const Gc = zs.Runtime.Gc;
+const Val = zs.Runtime.Value;
+const Native = zs.Runtime.Native;
 
 const Object = Val.Object;
 const Value = Val.Value;
@@ -14,7 +15,6 @@ const ValueType = Val.ValueType;
 
 const Expression = Ast.Expression;
 const ExpressionValue = Ast.ExpressionValue;
-const Infix = Ast.Infix.create;
 const Statement = Ast.Statement;
 const Program = Ast.Program;
 const Token = Lexer.Token;

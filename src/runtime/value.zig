@@ -1,6 +1,8 @@
 const std = @import("std");
-const Gc = @import("../runtime/gc.zig");
-const Bytecode = @import("../backend/bytecode.zig");
+const zs = @import("../lib.zig");
+
+const Gc = zs.Runtime.Gc;
+const Bytecode = zs.Backend.Bytecode;
 
 pub const Error = error{
     InvalidType,

@@ -1,14 +1,20 @@
 const std = @import("std");
-const Lexer = @import("frontend/lexer.zig");
-const Ast = @import("frontend/ast.zig");
-const Parser = @import("frontend/parser.zig");
-const Optimizer = @import("frontend/optimizer.zig");
-const Compiler = @import("backend/compiler.zig");
-const Gc = @import("runtime/gc.zig");
-const Vm = @import("runtime/vm.zig");
-const Debug = @import("debug.zig");
+pub const Frontend = @import("frontend/frontend.zig");
+pub const Backend = @import("backend/backend.zig");
+pub const Runtime = @import("runtime/runtime.zig");
+pub const Debug = @import("debug.zig");
 const utils = @import("utils.zig");
-const Value = @import("runtime/value.zig").Value;
+
+const Lexer = Frontend.Lexer;
+const Ast = Frontend.Ast;
+const Parser = Frontend.Parser;
+const Optimizer = Frontend.Optimizer;
+
+const Compiler = Backend.Compiler;
+
+const Gc = Runtime.Gc;
+const Vm = Runtime.Vm;
+const Value = Runtime.Value.Value;
 
 const Allocator = std.mem.Allocator;
 const Writer = std.io.Writer;

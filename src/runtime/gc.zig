@@ -1,9 +1,10 @@
 const std = @import("std");
-const Bytecode = @import("../backend/bytecode.zig");
-const Vm = @import("vm.zig");
-const Val = @import("value.zig");
-
+const zs = @import("../lib.zig");
 const tracy = @import("tracy");
+
+const Bytecode = zs.Backend.Bytecode;
+const Vm = zs.Runtime.Vm;
+const Val = zs.Runtime.Value;
 
 const Value = Val.Value;
 const ValueType = Val.ValueType;
@@ -47,6 +48,7 @@ pub fn init(gpa: Allocator) !*Gc {
 pub fn deinit(self: *Gc, gpa: Allocator) void {
     log.debug("Final heap size: {d}b", .{self.cursor});
     log.debug("TODO: Discard object schema & functions", .{});
+
     self.gpa.free(self.heap);
     gpa.destroy(self);
 }
