@@ -93,7 +93,7 @@ fn collect(self: *Gc) Errors!void {
     try self.collectValueList(self.vm.?.reg_stack);
     try self.collectValueList(self.vm.?.param_stack);
     log.debug("Collected {d} bytes", .{current_cursor - self.cursor});
-    log.debug("TODO: Maybe shrink heap if usage is low");
+    log.debug("TODO: Maybe shrink heap if usage is low", .{});
     self.alignCursor();
 }
 
