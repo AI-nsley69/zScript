@@ -18,8 +18,8 @@ pub const Error = error{
 
 const Errors = (Error || std.mem.Allocator.Error || Val.ConvertError);
 
-// const min_heap_size = 1 << 20; // Initialize heap to 1MiB
-const min_heap_size = 400;
+const min_heap_size = 1 << 20; // Initialize heap to 1MiB
+// const min_heap_size = 400;
 const max_heap_size = 2 << 30; // Set max heap size to 2 GiB
 const heap_size_multiplier = 2;
 
