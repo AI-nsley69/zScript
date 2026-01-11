@@ -74,6 +74,7 @@ fn collectValueList(self: *Gc, list: std.ArrayListUnmanaged(Value)) Errors!void 
 fn collect(self: *Gc) Errors!void {
     const current_heap = self.heap;
     const current_size = current_heap.len;
+    const current_cursor = self.cursor;
     const new_heap = try self.gpa.alignedAlloc(u8, std.mem.Alignment.of(Val.BoxedHeader), current_size * heap_size_multiplier);
     // VM should be set after parsing + compilation, just double the current heap size and copy it to the new heap
     log.debug("Handle collection when doing parsing / compiling", .{});
@@ -91,7 +92,7 @@ fn collect(self: *Gc) Errors!void {
     try self.collectValueList(self.vm.?.registers);
     try self.collectValueList(self.vm.?.reg_stack);
     try self.collectValueList(self.vm.?.param_stack);
-    log.debug("Collected {d} bytes", .{current_size - self.cursor});
+    log.debug("Collected {d} bytes", .{current_cursor - self.cursor});
     log.debug("TODO: Maybe shrink heap if usage is low");
     self.alignCursor();
 }
