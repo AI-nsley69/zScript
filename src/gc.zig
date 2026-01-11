@@ -36,6 +36,7 @@ pub fn init(gpa: Allocator) !*Gc {
 }
 
 pub fn deinit(self: *Gc, gpa: Allocator) void {
+    log.debug("TODO: Discard object schema & functions", .{});
     self.gpa.free(self.heap);
     gpa.destroy(self);
 }
