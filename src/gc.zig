@@ -18,7 +18,8 @@ pub const Error = error{
 
 const Errors = (Error || std.mem.Allocator.Error || Val.ConvertError);
 
-const min_heap_size = 1 << 20; // Initialize heap to 1MiB
+// const min_heap_size = 1 << 20; // Initialize heap to 1MiB
+const min_heap_size = 400;
 const max_heap_size = 2 << 30; // Set max heap size to 2 GiB
 const heap_size_multiplier = 2;
 
@@ -71,6 +72,18 @@ fn collectValueList(self: *Gc, list: std.ArrayListUnmanaged(Value)) Errors!void 
     }
 }
 
+fn collectValueSlice(self: *Gc, slice: []Value) Errors!void {
+    for (0..slice.len) |idx| {
+        const item = slice[idx];
+        if (item != .boxed) continue;
+        if (item.boxed.kind != .moved) {
+            try self.move(item.boxed);
+        }
+        const header_ptr: *Val.BoxedHeader = @ptrFromInt(item.boxed.ptr_or_size);
+        slice[idx].boxed = header_ptr;
+    }
+}
+
 fn collect(self: *Gc) Errors!void {
     const current_heap = self.heap;
     const current_size = current_heap.len;
@@ -92,6 +105,7 @@ fn collect(self: *Gc) Errors!void {
     try self.collectValueList(self.vm.?.registers);
     try self.collectValueList(self.vm.?.reg_stack);
     try self.collectValueList(self.vm.?.param_stack);
+    try self.collectValueSlice(self.vm.?.constants);
     log.debug("Collected {d} bytes", .{current_cursor - self.cursor});
     log.debug("TODO: Maybe shrink heap if usage is low", .{});
     self.alignCursor();
