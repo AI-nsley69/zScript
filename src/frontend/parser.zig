@@ -40,6 +40,7 @@ pub const Error = error{
     UnexpectedToken,
     Undefined,
     InvalidArguments,
+    ReservedKeyword,
 };
 
 const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || Native.Error || Val.ConvertError || Gc.Error);
@@ -98,7 +99,18 @@ fn declaration(self: *Parser) Errors!Statement {
     return try self.statement();
 }
 
+fn checkIfNameIsReserved(self: *Parser) !void {
+    const peek_name = self.peek().span;
+    if (zs.Frontend.Lexer.keywords.get(peek_name) != null) {
+        const msg = try std.fmt.allocPrint(self.arena_alloc, "'{s}' is a reserved keyword", .{peek_name});
+        try self.reportError(msg);
+        return Error.ReservedKeyword;
+    }
+}
+
 fn variableDeclaration(self: *Parser) Errors!Expression {
+    try self.checkIfNameIsReserved();
+
     const var_decl = self.previous();
     const name = try self.consume(.identifier, "Expected variable name.");
     _ = try self.consume(.assign, "Expected '=' after variable declaration.");
@@ -110,6 +122,8 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
 }
 
 fn functionDeclaration(self: *Parser) Errors!Statement {
+    try self.checkIfNameIsReserved();
+
     const name = try self.consume(.identifier, "Expected function name.");
     _ = try self.consume(.left_paren, "Expected '(' after function declaration.");
 
@@ -146,6 +160,8 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
 }
 
 fn objectDeclaration(self: *Parser) Errors!Statement {
+    try self.checkIfNameIsReserved();
+
     const name = try self.consume(.identifier, "Expected object name.");
     _ = try self.consume(.left_bracket, "Expected '{' after object declaration.");
 
