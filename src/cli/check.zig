@@ -55,5 +55,5 @@ fn check(ctx: zli.CommandContext) !void {
     defer lexer.deinit();
 
     const parsed = try lib.parse(gpa, ctx.writer, gc, tokens, .{ .file = ctx.positional_args[0] });
-    defer parsed.data.arena.deinit();
+    defer parsed.arena.deinit();
 }

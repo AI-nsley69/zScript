@@ -36,7 +36,7 @@ pub fn optimizeAst(self: *Optimizer, gpa: std.mem.Allocator, program: Program) !
     errdefer arena.deinit();
     defer program.arena.deinit();
 
-    return .{ .arena = arena, .statements = stmts, .variables = try program.variables.clone(self.gpa), .objects = try program.objects.clone(self.gpa) };
+    return .{ .arena = arena, .statements = stmts, .variables = try program.variables.clone(self.gpa), .objects = try program.objects.clone(self.gpa), .errors = undefined };
 }
 
 fn optimizeStatement(self: *Optimizer, stmt: Statement, comptime optimizeExpression: fn (*Optimizer, Expression) Errors!Expression) !Statement {
