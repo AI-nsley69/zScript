@@ -155,3 +155,23 @@ test "Constant Assignment" {
     // Test for potential leaks
     try expectNoLeak(debug_gpa);
 }
+
+test "Reserved keyword as identifier" {
+    var stdout = std.fs.File.stdout();
+    var writer = stdout.writerStreaming(&.{}).interface;
+
+    var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
+    const gpa = debug_gpa.allocator();
+
+    // Test multiple files in a for-loop. Same outcome is expected
+    const files = comptime [_][]const u8{ "./tests/reserved_keywords/function.zs", "./tests/reserved_keywords/object.zs", "./tests/reserved_keywords/variable.zs" };
+    const err_msg = "'print' is a reserved keyword";
+    inline for (files) |file| {
+        const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
+        try expect(res.parse_err.len == 1);
+        try expect(std.mem.eql(u8, res.parse_err[0].data.span, err_msg));
+        defer res.deinit(gpa);
+    }
+    try writer.flush();
+    try expectNoLeak(debug_gpa);
+}
