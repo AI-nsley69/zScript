@@ -87,13 +87,16 @@ pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: 
 }
 
 pub const Result = struct {
-    parse_err: []Lexer.Token,
     lexer: Lexer,
+    parse_err: []Lexer.Token,
     compile_err: ?[]u8 = null,
     runtime_err: ?[]u8 = null,
     value: ?Value = null,
+    // Used for deinit'ing values
+    parse_arena: std.heap.ArenaAllocator,
 
     pub fn deinit(self: Result, gpa: Allocator) void {
+        self.parse_arena.deinit();
         gpa.free(self.parse_err);
         if (self.compile_err != null) {
             gpa.free(self.compile_err.?);
@@ -116,6 +119,7 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
     var result: Result = .{
         .lexer = lexer,
         .parse_err = parsed.errors,
+        .parse_arena = parsed.arena,
     };
     if (result.parse_err.len > 0) {
         return result;
