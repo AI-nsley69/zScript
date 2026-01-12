@@ -305,15 +305,14 @@ fn makeToken(self: *Lexer, tokenType: TokenType, start: u64) TokenData {
 }
 
 pub fn getLineSource(self: *Lexer, info: TokenInfo) []const u8 {
-    var current = info.line;
+    var current = info.line - 1;
     // If next line is just an empty line, return empty string
     if (current >= self.buf.len) return "";
     var c = self.buf[current];
-    const endPos = while (true) {
+    const endPos = while (true) : (c = self.buf[current]) {
         current += 1;
         if (c == '\n' or current == self.buf.len) break current;
-        c = self.buf[current];
     };
 
-    return self.buf[info.line..endPos];
+    return self.buf[info.line - 1 .. endPos];
 }

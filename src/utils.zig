@@ -11,7 +11,6 @@ const Writer = std.io.Writer;
 
 pub fn printParseError(gpa: Allocator, writer: *Writer, lex: Lexer, token: Token, src_file: []const u8) !void {
     var lexer = lex;
-    const data = token.data;
     const info = token.info;
 
     // Print source file with line and position
@@ -36,14 +35,20 @@ pub fn printParseError(gpa: Allocator, writer: *Writer, lex: Lexer, token: Token
     defer gpa.free(source_aligned);
     try writer.writeAll(source_aligned);
 
+    // Append new line if it doesn't exist
+    if (source_aligned[source_aligned.len - 1] != '\n') {
+        try writer.writeAll("\n");
+    }
+
     // Print a pointer to where the error occured
-    const ptr_msg = try gpa.alloc(u8, 2 + line_source.len + 1);
+    const ptr_msg = try gpa.alloc(u8, 2 + line_source.len);
     defer gpa.free(ptr_msg);
     @memset(ptr_msg, ' ');
 
     // Checks to ensure the message doesn't go out of bounds
-    const start_pos = if (info.pos >= data.span.len) (info.pos + 1) - (data.span.len - 1) else info.pos + 1;
-    const end_pos = if (start_pos + (data.span.len) < ptr_msg.len) start_pos + (data.span.len) else start_pos + 1;
+    std.log.debug("TODO: Get proper span of the AST node that errored", .{});
+    const start_pos = info.pos + 1;
+    const end_pos = start_pos + 1;
     @memset(ptr_msg[start_pos..end_pos], '^');
     ptr_msg[ptr_msg.len - 1] = '\n';
 
