@@ -257,7 +257,7 @@ fn number(self: *Lexer, start: u64) TokenData {
     return self.makeToken(.number, start);
 }
 
-const keywords = std.StaticStringMap(TokenType).initComptime(&.{
+pub const keywords = std.StaticStringMap(TokenType).initComptime(&.{
     &.{ "true", .bool },
     &.{ "false", .bool },
     &.{ "mut", .var_declaration },
