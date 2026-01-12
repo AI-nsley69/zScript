@@ -49,12 +49,7 @@ pub fn tokenize(gpa: Allocator, out: *Writer, src: []const u8, opt: runOpts) !To
     return .{ tokens, lexer };
 }
 
-const ParseResult = struct {
-    data: Ast.Program,
-    err: std.MultiArrayList(Lexer.Token),
-};
-
-pub fn parse(gpa: Allocator, out: *Writer, gc: *Gc, tokens: std.MultiArrayList(Lexer.Token), opt: runOpts) !ParseResult {
+pub fn parse(gpa: Allocator, out: *Writer, gc: *Gc, tokens: std.MultiArrayList(Lexer.Token), opt: runOpts) !Ast.Program {
     var parser = Parser{};
     var parsed = try parser.parse(gpa, gc, tokens);
     errdefer parsed.arena.deinit();
@@ -69,12 +64,12 @@ pub fn parse(gpa: Allocator, out: *Writer, gc: *Gc, tokens: std.MultiArrayList(L
         ast.print(parsed) catch {};
     }
 
-    return .{ .data = parsed, .err = parser.errors };
+    return parsed;
 }
 
 const CompilerResult = struct {
     data: ?Compiler.CompilerOutput,
-    err: ?[]u8,
+    err: ?[]u8 = null,
 };
 
 pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: runOpts) !CompilerResult {
@@ -92,13 +87,14 @@ pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: 
 }
 
 pub const Result = struct {
-    parse_err: std.MultiArrayList(Lexer.Token),
+    parse_err: []Lexer.Token,
     lexer: Lexer,
     compile_err: ?[]u8 = null,
     runtime_err: ?[]u8 = null,
     value: ?Value = null,
 
     pub fn deinit(self: Result, gpa: Allocator) void {
+        gpa.free(self.parse_err);
         if (self.compile_err != null) {
             gpa.free(self.compile_err.?);
         }
@@ -106,10 +102,8 @@ pub const Result = struct {
 };
 
 pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpts) !Result {
-    var result: Result = undefined;
     // Source -> Tokens
     const tokens, var lexer = try tokenize(gpa, writer, src, opt);
-    result.lexer = lexer;
     defer lexer.deinit();
 
     var gc = try Gc.init(gpa);
@@ -117,14 +111,18 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
 
     // Tokens -> Ast
     const parsed = try parse(gpa, writer, gc, tokens, opt);
-    defer parsed.data.arena.deinit();
-    result.parse_err = parsed.err;
-    if (parsed.err.len > 0) {
+    errdefer parsed.arena.deinit();
+
+    var result: Result = .{
+        .lexer = lexer,
+        .parse_err = parsed.errors,
+    };
+    if (result.parse_err.len > 0) {
         return result;
     }
 
     // Ast -> Bytecode
-    var compiled = try compile(gpa, writer, gc, parsed.data, opt);
+    var compiled = try compile(gpa, writer, gc, parsed, opt);
     defer if (compiled.data != null) compiled.data.?.deinit(gpa);
     result.compile_err = compiled.err;
     if (compiled.err != null) {

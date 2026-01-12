@@ -46,6 +46,7 @@ const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std
 
 const Parser = @This();
 
+arena_alloc: std.mem.Allocator = undefined,
 gpa: std.mem.Allocator = undefined,
 gc: *Gc = undefined,
 tokens: std.MultiArrayList(Token) = undefined,
@@ -55,36 +56,38 @@ variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnman
 functions: std.StringHashMapUnmanaged(FunctionMetadata) = std.StringHashMapUnmanaged(FunctionMetadata){},
 objects: std.StringHashMapUnmanaged(*const Object.Schema) = std.StringHashMapUnmanaged(*const Object.Schema){},
 
-errors: std.MultiArrayList(Token) = std.MultiArrayList(Token){},
+errors: std.ArrayList(Token) = std.ArrayList(Token){},
 
 current_func: []const u8 = "main",
 
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = TokenData{ .tag = .err, .span = "" } } } };
 
-pub fn parse(self: *Parser, alloc: std.mem.Allocator, gc: *Gc, tokens: std.MultiArrayList(Token)) Errors!Program {
+pub fn parse(self: *Parser, gpa: std.mem.Allocator, gc: *Gc, tokens: std.MultiArrayList(Token)) Errors!Program {
     const tr = tracy.trace(@src());
     defer tr.end();
 
     log.debug("Parsing tokens..", .{});
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    self.gpa = arena.allocator();
+    self.gpa = gpa;
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    self.arena_alloc = arena.allocator();
     self.gc = gc;
     self.tokens = tokens;
     var statements = std.ArrayListUnmanaged(Statement){};
-    while (!self.isEof() and self.errors.items(.data).len < 1) {
+    while (!self.isEof() and self.errors.items.len < 1) {
         // Proceeds with parsing until then, then prints the errors and goes on
         const stmt = self.declaration() catch dummy_stmt;
-        try statements.append(self.gpa, stmt);
+        try statements.append(self.arena_alloc, stmt);
     }
 
     // Tear down functions, since their metadata is no longer needed after parsing
-    self.functions.deinit(self.gpa);
+    self.functions.deinit(self.arena_alloc);
 
     return .{
         .arena = arena,
         .variables = self.variables,
         .statements = statements,
         .objects = self.objects,
+        .errors = try self.errors.toOwnedSlice(gpa),
     };
 }
 
@@ -102,8 +105,8 @@ fn variableDeclaration(self: *Parser) Errors!Expression {
     const init = try self.expression();
     _ = try self.consume(.semi_colon, "Expected ';' after expression.");
     // Add metadata for variable
-    _ = try self.variables.fetchPut(self.gpa, name.span, .{ .scope = self.current_func, .mutable = std.mem.eql(u8, var_decl.span, "mut"), .type = null });
-    return try Ast.Variable.create(self.gpa, init, name.span, var_decl);
+    _ = try self.variables.fetchPut(self.arena_alloc, name.span, .{ .scope = self.current_func, .mutable = std.mem.eql(u8, var_decl.span, "mut"), .type = null });
+    return try Ast.Variable.create(self.arena_alloc, init, name.span, var_decl);
 }
 
 fn functionDeclaration(self: *Parser) Errors!Statement {
@@ -117,10 +120,10 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
     var params = std.ArrayListUnmanaged(*Ast.Variable){};
     while (self.match(.identifier)) {
         const metadata: VariableMetaData = .{ .scope = name.span, .mutable = false, .is_param = true, .type = null };
-        try self.variables.put(self.gpa, self.previous().span, metadata);
-        const param = try Ast.Variable.create(self.gpa, null, self.previous().span, self.previous());
+        try self.variables.put(self.arena_alloc, self.previous().span, metadata);
+        const param = try Ast.Variable.create(self.arena_alloc, null, self.previous().span, self.previous());
 
-        try params.append(self.gpa, param.node.variable);
+        try params.append(self.arena_alloc, param.node.variable);
         _ = self.consume(.comma, "Expected ',' after function parameter") catch {
             // Remove last error since it can either be comma or right paren
             if (self.match(.right_paren)) {
@@ -134,12 +137,12 @@ fn functionDeclaration(self: *Parser) Errors!Statement {
         _ = try self.consume(.right_paren, "Expected ')' after function parameters");
     }
     // Add function metadata
-    try self.functions.put(self.gpa, name.span, .{ .params = params.items.len });
+    try self.functions.put(self.arena_alloc, name.span, .{ .params = params.items.len });
     // Parse function body
     _ = try self.consume(.left_bracket, "Expected '{'");
     const body = try self.block();
 
-    return try Ast.Function.create(self.gpa, name.span, body, try params.toOwnedSlice(self.gpa));
+    return try Ast.Function.create(self.arena_alloc, name.span, body, try params.toOwnedSlice(self.arena_alloc));
 }
 
 fn objectDeclaration(self: *Parser) Errors!Statement {
@@ -152,10 +155,10 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
         if (self.match(.dot)) { // Check for properties
             const field_name = try self.consume(.identifier, "Expected property name");
             const expr = if (self.match(.assign)) try self.expression() else null;
-            try fields.put(self.gpa, field_name.span, expr);
+            try fields.put(self.arena_alloc, field_name.span, expr);
             _ = try self.consume(.comma, "Expected ',' after object field");
         } else if (self.match(.fn_declaration)) { // Check for functions
-            try methods.append(self.gpa, try self.functionDeclaration());
+            try methods.append(self.arena_alloc, try self.functionDeclaration());
         } else {
             // Break if no functions or properties are defined
             break;
@@ -170,8 +173,8 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
     for (fields.keys()) |key| {
         packed_field_count += key.len + 1;
     }
-    var packed_fields: std.ArrayListUnmanaged(u8) = try .initCapacity(self.gpa, packed_field_count + 1);
-    errdefer packed_fields.deinit(self.gpa);
+    var packed_fields: std.ArrayListUnmanaged(u8) = try .initCapacity(self.arena_alloc, packed_field_count + 1);
+    errdefer packed_fields.deinit(self.arena_alloc);
     for (fields.keys()) |key| {
         packed_fields.appendSliceAssumeCapacity(key);
         packed_fields.appendAssumeCapacity(0);
@@ -181,25 +184,25 @@ fn objectDeclaration(self: *Parser) Errors!Statement {
     for (methods.items) |method| {
         packed_method_count += method.node.function.name.len + 1;
     }
-    var packed_methods: std.ArrayListUnmanaged(u8) = try .initCapacity(self.gpa, packed_method_count + 1);
-    errdefer packed_fields.deinit(self.gpa);
+    var packed_methods: std.ArrayListUnmanaged(u8) = try .initCapacity(self.arena_alloc, packed_method_count + 1);
+    errdefer packed_fields.deinit(self.arena_alloc);
     for (methods.items) |method| {
         packed_methods.appendSliceAssumeCapacity(method.node.function.name);
         packed_methods.appendAssumeCapacity(0);
     }
 
-    const functions = try methods.toOwnedSlice(self.gpa);
+    const functions = try methods.toOwnedSlice(self.arena_alloc);
 
-    const schema = try self.gpa.create(Object.Schema);
+    const schema = try self.arena_alloc.create(Object.Schema);
     schema.* = .{
         .fields_count = packed_field_count,
-        .fields = try packed_fields.toOwnedSliceSentinel(self.gpa, 0),
-        .methods = try packed_methods.toOwnedSliceSentinel(self.gpa, 0),
+        .fields = try packed_fields.toOwnedSliceSentinel(self.arena_alloc, 0),
+        .methods = try packed_methods.toOwnedSliceSentinel(self.arena_alloc, 0),
         .functions = undefined,
     };
-    try self.objects.put(self.gpa, name.span, schema);
+    try self.objects.put(self.arena_alloc, name.span, schema);
 
-    return Ast.Object.create(self.gpa, name.span, fields, functions);
+    return Ast.Object.create(self.arena_alloc, name.span, fields, functions);
 }
 
 fn statement(self: *Parser) Errors!Statement {
@@ -223,7 +226,7 @@ fn ifStatement(self: *Parser) Errors!Statement {
     if (self.match(.else_stmt)) {
         otherwise = try self.statement();
     }
-    return try Ast.Conditional.create(self.gpa, condition, body, otherwise);
+    return try Ast.Conditional.create(self.arena_alloc, condition, body, otherwise);
 }
 
 fn returnStatement(self: *Parser) Errors!Statement {
@@ -238,7 +241,7 @@ fn whileStatement(self: *Parser) Errors!Statement {
     _ = try self.consume(.right_paren, "Expected ')' after while-statement.");
     const body = try self.statement();
 
-    return try Ast.Loop.create(self.gpa, null, condition, null, body);
+    return try Ast.Loop.create(self.arena_alloc, null, condition, null, body);
 }
 
 fn forStatement(self: *Parser) Errors!Statement {
@@ -251,19 +254,19 @@ fn forStatement(self: *Parser) Errors!Statement {
     _ = try self.consume(.right_paren, "Expected ')' after for-statement.");
     const body = try self.statement();
 
-    return try Ast.Loop.create(self.gpa, init, condition, post_loop, body);
+    return try Ast.Loop.create(self.arena_alloc, init, condition, post_loop, body);
 }
 
 fn block(self: *Parser) Errors!Statement {
     var stmts = std.ArrayListUnmanaged(Statement){};
 
     while (!self.check(.right_bracket) and !self.isEof()) {
-        try stmts.append(self.gpa, try self.declaration());
+        try stmts.append(self.arena_alloc, try self.declaration());
     }
 
     _ = try self.consume(.right_bracket, "Expected '}'");
 
-    return try Ast.Block.create(try stmts.toOwnedSlice(self.gpa));
+    return try Ast.Block.create(try stmts.toOwnedSlice(self.arena_alloc));
 }
 
 fn expression(self: *Parser) Errors!Expression {
@@ -276,7 +279,7 @@ fn assignment(self: *Parser) Errors!Expression {
         const op = self.previous().tag;
         const rhs = try self.logicalOr();
 
-        expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
+        expr = try Ast.Infix.create(self.arena_alloc, op, expr, rhs, self.previous());
     }
     return expr;
 }
@@ -287,7 +290,7 @@ fn logicalOr(self: *Parser) Errors!Expression {
         const op = self.previous().tag;
         const rhs = try self.logicalAnd();
 
-        expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
+        expr = try Ast.Infix.create(self.arena_alloc, op, expr, rhs, self.previous());
     }
     return expr;
 }
@@ -298,7 +301,7 @@ fn logicalAnd(self: *Parser) Errors!Expression {
         const op = self.previous().tag;
         const rhs = try self.equality();
 
-        expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
+        expr = try Ast.Infix.create(self.arena_alloc, op, expr, rhs, self.previous());
     }
     return expr;
 }
@@ -309,7 +312,7 @@ fn equality(self: *Parser) Errors!Expression {
         const op = self.previous().tag;
         const rhs = try self.comparison();
 
-        expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
+        expr = try Ast.Infix.create(self.arena_alloc, op, expr, rhs, self.previous());
     }
     return expr;
 }
@@ -320,7 +323,7 @@ fn comparison(self: *Parser) Errors!Expression {
         const op = self.previous().tag;
         const rhs = try self.term();
 
-        expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
+        expr = try Ast.Infix.create(self.arena_alloc, op, expr, rhs, self.previous());
     }
     return expr;
 }
@@ -331,7 +334,7 @@ fn term(self: *Parser) Errors!Expression {
         const op = self.previous().tag;
         const rhs = try self.factor();
 
-        expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
+        expr = try Ast.Infix.create(self.arena_alloc, op, expr, rhs, self.previous());
     }
     return expr;
 }
@@ -342,7 +345,7 @@ fn factor(self: *Parser) Errors!Expression {
         const op = self.previous().tag;
         const rhs = try self.unary();
 
-        expr = try Ast.Infix.create(self.gpa, op, expr, rhs, self.previous());
+        expr = try Ast.Infix.create(self.arena_alloc, op, expr, rhs, self.previous());
     }
     return expr;
 }
@@ -353,7 +356,7 @@ fn unary(self: *Parser) Errors!Expression {
         const op = self.previous().tag;
         const rhs = try self.unary();
 
-        return Ast.Unary.create(self.gpa, op, rhs, self.previous());
+        return Ast.Unary.create(self.arena_alloc, op, rhs, self.previous());
     }
 
     return self.new();
@@ -382,23 +385,23 @@ fn nativeCall(self: *Parser) Errors!Expression {
 
         var args = std.ArrayListUnmanaged(Expression){};
         if (!self.check(.right_paren)) {
-            try args.append(self.gpa, try self.expression());
+            try args.append(self.arena_alloc, try self.expression());
             while (self.match(.comma)) {
-                try args.append(self.gpa, try self.expression());
+                try args.append(self.arena_alloc, try self.expression());
             }
         }
 
         const params = (try Native.idxToFn(idx)).params;
         // Ensure call args == function params
         if (params != args.items.len) {
-            const err_msg = try std.fmt.allocPrint(self.gpa, "Expected {d} arguments, found {d}", .{ params, args.items.len });
+            const err_msg = try std.fmt.allocPrint(self.arena_alloc, "Expected {d} arguments, found {d}", .{ params, args.items.len });
             try self.reportError(err_msg);
             return Error.InvalidArguments;
         }
 
         _ = try self.consume(.right_paren, "Expected ')' after native function call.");
 
-        return try Ast.NativeCall.create(self.gpa, try args.toOwnedSlice(self.gpa), idx, src);
+        return try Ast.NativeCall.create(self.arena_alloc, try args.toOwnedSlice(self.arena_alloc), idx, src);
     }
 
     return self.call();
@@ -429,7 +432,7 @@ fn dot(self: *Parser) Errors!Expression {
 
         const field = try Ast.Literal.create(try self.gc.allocString(field_tkn.span), self.peek());
         const prop_assignment: ?Expression = if (self.match(.assign)) try self.expression() else null;
-        return try Ast.FieldAccess.create(self.gpa, root, field, prop_assignment, self.previous());
+        return try Ast.FieldAccess.create(self.arena_alloc, root, field, prop_assignment, self.previous());
     }
 
     return root;
@@ -443,16 +446,16 @@ fn finishObjectCall(self: *Parser, root: Expression, name: TokenData) Errors!Exp
 
     var args = std.ArrayListUnmanaged(Expression){};
     if (!self.check(.right_paren)) {
-        try args.append(self.gpa, try self.expression());
+        try args.append(self.arena_alloc, try self.expression());
         while (self.match(.comma)) {
-            try args.append(self.gpa, try self.expression());
+            try args.append(self.arena_alloc, try self.expression());
         }
     }
 
     _ = try self.consume(.right_paren, "Expected ')' after method call.");
     log.debug("TODO: Add check for obj call args == obj fn params", .{});
 
-    return try Ast.MethodCall.create(self.gpa, root, method, try args.toOwnedSlice(self.gpa), src);
+    return try Ast.MethodCall.create(self.arena_alloc, root, method, try args.toOwnedSlice(self.arena_alloc), src);
 }
 
 fn finishCall(self: *Parser, callee: Expression) Errors!Expression {
@@ -460,28 +463,28 @@ fn finishCall(self: *Parser, callee: Expression) Errors!Expression {
     const name = callee.node.variable.name;
     const metadata = self.functions.get(name);
     if (metadata == null) {
-        const err_msg = try std.fmt.allocPrint(self.gpa, "Undefined function: '{s}'", .{name});
+        const err_msg = try std.fmt.allocPrint(self.arena_alloc, "Undefined function: '{s}'", .{name});
         try self.reportError(err_msg);
         return Error.Undefined;
     }
 
     var args = std.ArrayListUnmanaged(Expression){};
     if (!self.check(.right_paren)) {
-        try args.append(self.gpa, try self.expression());
+        try args.append(self.arena_alloc, try self.expression());
         while (self.match(.comma)) {
-            try args.append(self.gpa, try self.expression());
+            try args.append(self.arena_alloc, try self.expression());
         }
     }
 
     if (args.items.len != metadata.?.params) {
-        const err_msg = try std.fmt.allocPrint(self.gpa, "Expected {d} arguments, found {d}", .{ metadata.?.params, args.items.len });
+        const err_msg = try std.fmt.allocPrint(self.arena_alloc, "Expected {d} arguments, found {d}", .{ metadata.?.params, args.items.len });
         try self.reportError(err_msg);
         return Error.InvalidArguments;
     }
 
     _ = try self.consume(.right_paren, "Expected ')' after call arguments");
 
-    return try Ast.Call.create(self.gpa, callee, try args.toOwnedSlice(self.gpa), src);
+    return try Ast.Call.create(self.arena_alloc, callee, try args.toOwnedSlice(self.arena_alloc), src);
 }
 
 fn primary(self: *Parser) Errors!Expression {
@@ -512,7 +515,7 @@ fn primary(self: *Parser) Errors!Expression {
     if (self.match(.obj_self)) {
         const root = self.previous();
         const name = root.span;
-        return Ast.Variable.create(self.gpa, null, name, self.previous());
+        return Ast.Variable.create(self.arena_alloc, null, name, self.previous());
     }
 
     if (self.match(.obj_self)) {
@@ -521,17 +524,17 @@ fn primary(self: *Parser) Errors!Expression {
         while (self.match(.dot)) {
             _ = try self.consume(.identifier, "Expected identifier");
             const nested_name = self.previous().span;
-            var new_name = try self.gpa.alloc(u8, name.len + nested_name.len);
+            var new_name = try self.arena_alloc.alloc(u8, name.len + nested_name.len);
             @memcpy(new_name[0..name.len], name);
             @memcpy(new_name[name.len..], nested_name);
-            self.gpa.free(name);
+            self.arena_alloc.free(name);
             name = new_name;
         }
-        return Ast.Variable.create(self.gpa, null, name, self.previous());
+        return Ast.Variable.create(self.arena_alloc, null, name, self.previous());
     }
 
     if (self.match(.identifier)) {
-        return Ast.Variable.create(self.gpa, null, self.previous().span, self.previous());
+        return Ast.Variable.create(self.arena_alloc, null, self.previous().span, self.previous());
     }
 
     if (self.match(.left_paren)) {
@@ -541,7 +544,7 @@ fn primary(self: *Parser) Errors!Expression {
     }
 
     const token = self.peek();
-    const err_msg = try std.fmt.allocPrint(self.gpa, "Expected expression, found: {s}", .{token.span});
+    const err_msg = try std.fmt.allocPrint(self.arena_alloc, "Expected expression, found: {s}", .{token.span});
     try self.reportError(err_msg);
     return Error.ExpressionExpected;
 }

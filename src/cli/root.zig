@@ -59,6 +59,7 @@ fn run(ctx: zli.CommandContext) !void {
     var stderr_buf: [1024]u8 = undefined;
     var stderr = std.fs.File.stderr().writer(&stderr_buf);
     var stderr_writer = &stderr.interface;
+
     const file = std.fs.cwd().openFile(ctx.positional_args[0], .{}) catch |err| {
         try utils.printFileError(stderr_writer, err, ctx.positional_args[0]);
         try stderr_writer.flush();
@@ -79,15 +80,13 @@ fn run(ctx: zli.CommandContext) !void {
         .do_not_optimize = ctx.flag("disable-optimization", bool),
     });
     defer res.deinit(gpa);
-
-    if (res.parse_err.len > 0) {
-        var next_err = res.parse_err.pop();
-        while (next_err != null) : (next_err = res.parse_err.pop()) {
-            try utils.printParseError(gpa, stderr_writer, res.lexer, next_err.?, ctx.positional_args[0]);
-        }
+    for (res.parse_err) |err| {
+        try utils.printParseError(gpa, stderr_writer, res.lexer, err, ctx.positional_args[0]);
     }
 
     if (res.compile_err != null) {
         try utils.printCompileErr(stderr_writer, res.compile_err.?);
     }
+
+    try stderr_writer.flush();
 }
