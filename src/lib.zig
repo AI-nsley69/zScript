@@ -3,7 +3,7 @@ pub const Frontend = @import("frontend/frontend.zig");
 pub const Backend = @import("backend/backend.zig");
 pub const Runtime = @import("runtime/runtime.zig");
 pub const Debug = @import("debug.zig");
-const utils = @import("utils.zig");
+pub const Errors = @import("errors.zig");
 
 const Lexer = Frontend.Lexer;
 const Ast = Frontend.Ast;

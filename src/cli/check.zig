@@ -1,7 +1,6 @@
 const std = @import("std");
 const lib = @import("../lib.zig");
 const Gc = @import("../runtime/gc.zig");
-const utils = @import("../utils.zig");
 const zli = @import("zli");
 
 const builtin = @import("builtin");
@@ -38,12 +37,12 @@ fn check(ctx: zli.CommandContext) !void {
 
     var stderr = std.fs.File.stderr().writer(&.{}).interface;
     const file = std.fs.cwd().openFile(ctx.positional_args[0], .{}) catch |err| {
-        try utils.printFileError(&stderr, err, ctx.positional_args[0]);
+        try lib.Errors.printFileError(&stderr, err, ctx.positional_args[0]);
         std.process.exit(1);
     };
 
     const contents = file.readToEndAlloc(gpa, 1 << 24) catch |err| {
-        try utils.printFileError(&stderr, err, ctx.positional_args[0]);
+        try lib.Errors.printFileError(&stderr, err, ctx.positional_args[0]);
         std.process.exit(1);
     };
     defer gpa.free(contents);

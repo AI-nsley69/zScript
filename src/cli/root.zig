@@ -1,7 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const lib = @import("../lib.zig");
-const utils = @import("../utils.zig");
 const zli = @import("zli");
 const ansi = @import("ansi_term");
 
@@ -61,13 +60,13 @@ fn run(ctx: zli.CommandContext) !void {
     var stderr_writer = &stderr.interface;
 
     const file = std.fs.cwd().openFile(ctx.positional_args[0], .{}) catch |err| {
-        try utils.printFileError(stderr_writer, err, ctx.positional_args[0]);
+        try lib.Errors.printFileError(stderr_writer, err, ctx.positional_args[0]);
         try stderr_writer.flush();
         std.process.exit(1);
     };
 
     const contents = file.readToEndAlloc(gpa, 1 << 24) catch |err| {
-        try utils.printFileError(stderr_writer, err, ctx.positional_args[0]);
+        try lib.Errors.printFileError(stderr_writer, err, ctx.positional_args[0]);
         try stderr_writer.flush();
         std.process.exit(1);
     };
@@ -81,11 +80,17 @@ fn run(ctx: zli.CommandContext) !void {
     });
     defer res.deinit(gpa);
     for (res.parse_err) |err| {
-        try utils.printParseError(gpa, stderr_writer, res.lexer, err, ctx.positional_args[0]);
+        const internal_err: lib.Errors.InternalError = .{ .file = ctx.positional_args[0], .token = err, .type = .ParseError };
+        try lib.Errors.printError(gpa, stderr_writer, res.lexer, internal_err);
     }
 
     if (res.compile_err != null) {
-        try utils.printCompileErr(stderr_writer, res.compile_err.?);
+        const err_token: lib.Frontend.Lexer.Token = .{
+            .data = .{ .span = res.compile_err.?, .tag = .err },
+            .info = .{ .line = 1, .pos = 1 },
+        };
+        const internal_err: lib.Errors.InternalError = .{ .file = ctx.positional_args[0], .token = err_token, .type = .CompileError };
+        try lib.Errors.printError(gpa, stderr_writer, res.lexer, internal_err);
     }
 
     try stderr_writer.flush();
