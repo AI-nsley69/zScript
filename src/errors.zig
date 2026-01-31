@@ -74,7 +74,6 @@ fn printExpressionPointer(gpa: Allocator, writer: *Writer, err: InternalError, l
     @memset(ptr_msg, ' ');
 
     std.log.debug("TODO: Get proper span of the AST node that errored", .{});
-    std.debug.print("Span: {s}, pos: {d}\n", .{ err.token.?.data.span, err.token.?.info.pos });
     var start_pos = info.pos + 1;
     const end_pos = start_pos + 1;
     if (err.token != null) {

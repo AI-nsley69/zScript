@@ -69,13 +69,13 @@ pub fn parse(gpa: Allocator, out: *Writer, gc: *Gc, tokens: std.MultiArrayList(L
 
 const CompilerResult = struct {
     data: ?Compiler.CompilerOutput,
-    err: ?[]u8 = null,
+    err: std.ArrayListUnmanaged(Errors.InternalError) = .{},
 };
 
 pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: runOpts) !CompilerResult {
     var compiler = Compiler{ .gpa = gpa, .gc = gc, .ast = parsed };
     const compiled = compiler.compile() catch {
-        return .{ .data = null, .err = compiler.err_msg };
+        return .{ .data = null, .err = compiler.errors };
     };
     errdefer compiled.deinit(gpa);
 
@@ -83,24 +83,25 @@ pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: 
         Debug.disassemble(compiled, out) catch {};
     }
 
-    return .{ .data = compiled, .err = null };
+    return .{ .data = compiled, .err = compiler.errors };
 }
 
 pub const Result = struct {
     lexer: Lexer,
-    parse_err: []Errors.InternalError,
-    compile_err: ?[]u8 = null,
+    errors: std.ArrayListUnmanaged(Errors.InternalError) = .{},
     runtime_err: ?[]u8 = null,
     value: ?Value = null,
     // Used for deinit'ing values
     parse_arena: std.heap.ArenaAllocator,
 
-    pub fn deinit(self: Result, gpa: Allocator) void {
-        self.parse_arena.deinit();
-        gpa.free(self.parse_err);
-        if (self.compile_err != null) {
-            gpa.free(self.compile_err.?);
+    pub fn deinit(self: *Result, gpa: Allocator) void {
+        // Free strings for compile errors, since they need to be allocated
+        for (self.errors.items) |err| {
+            if (err.type != .CompileError) continue;
+            gpa.free(err.err_token.data.span);
         }
+        self.errors.deinit(gpa);
+        self.parse_arena.deinit();
     }
 };
 
@@ -118,18 +119,18 @@ pub fn run(writer: *Writer, gpa: std.mem.Allocator, src: []const u8, opt: runOpt
 
     var result: Result = .{
         .lexer = lexer,
-        .parse_err = parsed.errors,
         .parse_arena = parsed.arena,
     };
-    if (result.parse_err.len > 0) {
+    try result.errors.appendSlice(gpa, parsed.errors);
+    if (result.errors.items.len > 0) {
         return result;
     }
 
     // Ast -> Bytecode
     var compiled = try compile(gpa, writer, gc, parsed, opt);
     defer if (compiled.data != null) compiled.data.?.deinit(gpa);
-    result.compile_err = compiled.err;
-    if (compiled.err != null) {
+    try result.errors.appendSlice(gpa, try compiled.err.toOwnedSlice(gpa));
+    if (compiled.err.items.len > 0) {
         return result;
     }
 

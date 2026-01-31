@@ -60,13 +60,13 @@ ast: Ast.Program,
 comp_frames: std.ArrayListUnmanaged(CompilerFrame) = std.ArrayListUnmanaged(CompilerFrame){},
 frame_idx: u64 = 0,
 
-variables: std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)) = std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)){},
-functions: std.StringHashMapUnmanaged(u8) = std.StringHashMapUnmanaged(u8){},
-constants: std.ArrayListUnmanaged(Value) = std.ArrayListUnmanaged(Value){},
+variables: std.ArrayListUnmanaged(std.StringHashMapUnmanaged(u8)) = .{},
+functions: std.StringHashMapUnmanaged(u8) = .{},
+constants: std.ArrayListUnmanaged(Value) = .{},
 
-objects: std.StringArrayHashMapUnmanaged(Value) = std.StringArrayHashMapUnmanaged(Value){},
+objects: std.StringArrayHashMapUnmanaged(Value) = .{},
 
-err_msg: ?[]u8 = null,
+errors: std.ArrayListUnmanaged(zs.Errors.InternalError) = .{},
 
 inline fn current(self: *Compiler) *CompilerFrame {
     return &self.comp_frames.items[self.frame_idx];
@@ -565,10 +565,13 @@ fn allocateRegister(self: *Compiler) Errors!u8 {
 }
 
 fn reportError(self: *Compiler, msg: []const u8) Errors!void {
-    if (self.err_msg != null) self.gpa.free(self.err_msg.?); // Free old error message (if exists)
     const err_msg = try self.gpa.dupe(u8, msg);
-    errdefer self.gpa.free(err_msg);
-    self.err_msg = err_msg;
+    const err: zs.Errors.InternalError = .{
+        .type = .CompileError,
+        .err_token = .{ .data = .{ .span = err_msg, .tag = .err }, .info = .{ .line = 1, .pos = 1 } },
+        .file = "",
+    };
+    try self.errors.append(self.gpa, err);
 }
 
 fn opcode(target: TokenType) !u8 {
