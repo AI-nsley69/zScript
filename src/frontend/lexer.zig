@@ -267,6 +267,7 @@ pub const keywords = std.StaticStringMap(TokenType).initComptime(&.{
     &.{ "self", .obj_self },
     &.{ "new", .new_obj },
     &.{ "if", .if_stmt },
+    &.{ "else", .else_stmt },
     &.{ "while", .while_stmt },
     &.{ "for", .for_stmt },
     &.{ "return", .@"return" },

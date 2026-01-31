@@ -226,25 +226,35 @@ fn conditional(self: *Compiler, target: *Ast.Conditional) Errors!u8 {
     }
     try out.writeAll(&.{ @intFromEnum(OpCodes.jump_neq), cmp });
     try out.writeInt(u16, 0, .big);
-    // Compile bytecode to jump over the 'then' body
+    // Get current ip to patch the jump dst later
     const current_ip = frame.instructions.items.len - 1;
+    // var else_ip: usize = 0;
+
+    // Compile the body
     const body = try self.statement(target.body);
+    // Handle jump instruction for otherwise instructions.
+    // If body doesn't exist, let IP over into the next code
+    if (target.otherwise != null) {
+        try out.writeByte(@intFromEnum(OpCodes.jump));
+        try out.writeInt(u16, 0, .big);
+    }
+    const body_ip = frame.instructions.items.len - 1;
+    // Patch bytecode to include new jump target if else-block exists
+    defer if (target.otherwise != null) {
+        const target_ip = frame.instructions.items.len;
+        frame.instructions.items[body_ip - 1] = @truncate((target_ip & 0xff00) >> 8);
+        frame.instructions.items[body_ip] = @truncate(target_ip);
+    };
+
     const target_ip = frame.instructions.items.len;
     // Patch the bytecode with the new target to jump to
     frame.instructions.items[current_ip - 1] = @truncate((target_ip & 0xff00) >> 8);
     frame.instructions.items[current_ip] = @truncate(target_ip);
 
-    // TODO: Implement else for if-statements
-    // if (target.otherwise) |else_blk| {
-    //     if (self.instructions.items.len > std.math.maxInt(u16)) {
-    //         try self.reportError("Invalid jump target");
-    //         return Error.InvalidJmpTarget;
-    //     }
-    //     const else_ip: u16 = @truncate(self.instructions.items.len + 3);
-    //     try out.writeByte(@intFromEnum(opcodes.jump));
-    //     try out.writeInt(u16, else_ip);
-    //     _ = try self.statement(else_blk);
-    // }
+    // Compile the else-block
+    if (target.otherwise) |else_blk| {
+        _ = try self.statement(else_blk);
+    }
 
     return body;
 }

@@ -314,6 +314,7 @@ pub fn run(self: *Vm) !void {
         },
         .jump_neq => {
             const isEql = try self.nextReg();
+            log.debug("Is eql: {}", .{try Value.asBool(isEql)});
             const ip = self.readInt(u16);
             if (!(try Value.asBool(isEql))) {
                 self.current().ip = ip;
