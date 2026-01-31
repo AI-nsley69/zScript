@@ -88,7 +88,7 @@ pub fn compile(gpa: Allocator, out: *Writer, gc: *Gc, parsed: Ast.Program, opt: 
 
 pub const Result = struct {
     lexer: Lexer,
-    parse_err: []Lexer.Token,
+    parse_err: []Errors.InternalError,
     compile_err: ?[]u8 = null,
     runtime_err: ?[]u8 = null,
     value: ?Value = null,

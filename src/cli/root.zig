@@ -80,8 +80,11 @@ fn run(ctx: zli.CommandContext) !void {
     });
     defer res.deinit(gpa);
     for (res.parse_err) |err| {
-        const internal_err: lib.Errors.InternalError = .{ .file = ctx.positional_args[0], .token = err, .type = .ParseError };
-        try lib.Errors.printError(gpa, stderr_writer, res.lexer, internal_err);
+        var new_err = err;
+        if (new_err.file.len == 0) {
+            new_err.file = ctx.positional_args[0];
+        }
+        try lib.Errors.printError(gpa, stderr_writer, res.lexer, new_err);
     }
 
     if (res.compile_err != null) {
@@ -89,7 +92,7 @@ fn run(ctx: zli.CommandContext) !void {
             .data = .{ .span = res.compile_err.?, .tag = .err },
             .info = .{ .line = 1, .pos = 1 },
         };
-        const internal_err: lib.Errors.InternalError = .{ .file = ctx.positional_args[0], .token = err_token, .type = .CompileError };
+        const internal_err: lib.Errors.InternalError = .{ .file = ctx.positional_args[0], .err_token = err_token, .type = .CompileError };
         try lib.Errors.printError(gpa, stderr_writer, res.lexer, internal_err);
     }
 

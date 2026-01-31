@@ -286,5 +286,5 @@ pub const Program = struct {
     variables: std.StringHashMapUnmanaged(VariableMetaData),
     objects: std.StringHashMapUnmanaged(*const ObjectValue.Schema),
     arena: std.heap.ArenaAllocator,
-    errors: []Lexer.Token,
+    errors: []zs.Errors.InternalError,
 };

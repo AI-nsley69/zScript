@@ -40,9 +40,9 @@ fn printSourcePosition(gpa: Allocator, writer: *Writer, err: InternalError) !voi
 fn printErrorType(writer: *Writer, err: InternalError) !void {
     try format.updateStyle(writer, boldRedStyle, null);
     const msg = switch (err.type) {
-        .ParseError => "Parse error: ",
-        .CompileError => "Compile error: ",
-        .RuntimeError => "Runtime error: ",
+        .ParseError => "error: ",
+        .CompileError => "error: ",
+        .RuntimeError => "runtime error: ",
     };
     try writer.writeAll(msg);
 }
@@ -68,14 +68,19 @@ fn printLineSource(gpa: Allocator, writer: *Writer, line_source: []const u8) !vo
 
 fn printExpressionPointer(gpa: Allocator, writer: *Writer, err: InternalError, line_source: []const u8) !void {
     const info = err.err_token.info;
-
-    const ptr_msg = try gpa.alloc(u8, 2 + line_source.len);
+    // Indent + src + newline
+    const ptr_msg = try gpa.alloc(u8, 2 + line_source.len + 1);
     defer gpa.free(ptr_msg);
     @memset(ptr_msg, ' ');
 
     std.log.debug("TODO: Get proper span of the AST node that errored", .{});
-    const start_pos = info.pos + 1;
+    std.debug.print("Span: {s}, pos: {d}\n", .{ err.token.?.data.span, err.token.?.info.pos });
+    var start_pos = info.pos + 1;
     const end_pos = start_pos + 1;
+    if (err.token != null) {
+        const offset = err.token.?.data.span.len - 1;
+        start_pos = start_pos - offset;
+    }
     @memset(ptr_msg[start_pos..end_pos], '^');
     ptr_msg[ptr_msg.len - 1] = '\n';
 

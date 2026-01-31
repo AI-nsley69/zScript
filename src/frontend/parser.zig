@@ -57,10 +57,11 @@ variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnman
 functions: std.StringHashMapUnmanaged(FunctionMetadata) = std.StringHashMapUnmanaged(FunctionMetadata){},
 objects: std.StringHashMapUnmanaged(*const Object.Schema) = std.StringHashMapUnmanaged(*const Object.Schema){},
 
-errors: std.ArrayList(Token) = std.ArrayList(Token){},
+errors: std.ArrayList(zs.Errors.InternalError) = std.ArrayList(zs.Errors.InternalError){},
 
 current_func: []const u8 = "main",
 
+// Just to catch any errors for error handling, to continue
 const dummy_stmt = Statement{ .node = .{ .expression = .{ .node = .{ .literal = .{ .boolean = false } }, .src = TokenData{ .tag = .err, .span = "" } } } };
 
 pub fn parse(self: *Parser, gpa: std.mem.Allocator, gc: *Gc, tokens: std.MultiArrayList(Token)) Errors!Program {
@@ -73,6 +74,7 @@ pub fn parse(self: *Parser, gpa: std.mem.Allocator, gc: *Gc, tokens: std.MultiAr
     self.arena_alloc = arena.allocator();
     self.gc = gc;
     self.tokens = tokens;
+
     var statements = std.ArrayListUnmanaged(Statement){};
     while (!self.isEof() and self.errors.items.len < 1) {
         // Proceeds with parsing until then, then prints the errors and goes on
@@ -480,7 +482,8 @@ fn finishCall(self: *Parser, callee: Expression) Errors!Expression {
     const metadata = self.functions.get(name);
     if (metadata == null) {
         const err_msg = try std.fmt.allocPrint(self.arena_alloc, "Undefined function: '{s}'", .{name});
-        try self.reportError(err_msg);
+        const callee_tkn = self.tokens.get(self.current - 2);
+        try self.reportErrorWithToken(err_msg, callee_tkn);
         return Error.Undefined;
     }
 
@@ -585,8 +588,18 @@ fn consume(self: *Parser, token: TokenType, err_msg: []const u8) !TokenData {
 
 fn reportError(self: *Parser, err_msg: []const u8) !void {
     const tkn = self.tokens.get(self.current);
-    const err_tkn: Token = .{ .data = .{ .span = err_msg, .tag = tkn.data.tag }, .info = .{ .line = tkn.info.line, .pos = tkn.info.pos } };
-    try self.errors.append(self.gpa, err_tkn);
+    try self.reportErrorWithToken(err_msg, tkn);
+}
+
+fn reportErrorWithToken(self: *Parser, err_msg: []const u8, token: Token) !void {
+    const err_tkn: Token = .{ .data = .{ .span = err_msg, .tag = .err }, .info = .{ .line = token.info.line, .pos = token.info.pos } };
+    const err: zs.Errors.InternalError = .{
+        .err_token = err_tkn,
+        .token = token,
+        .file = "",
+        .type = .ParseError,
+    };
+    try self.errors.append(self.gpa, err);
 }
 
 fn check(self: *Parser, token: TokenType) bool {
