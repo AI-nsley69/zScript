@@ -19,9 +19,9 @@ pub const ErrorType = enum {
 
 pub const InternalError = struct {
     type: ErrorType,
-    token: zs.Frontend.Lexer.Token,
+    err_token: Token,
+    token: ?Token = null,
     file: []const u8,
-    ast: ?zs.Frontend.Ast.Expression = null,
 };
 
 const boldStyle: Style = .{ .font_style = .{ .bold = true } };
@@ -29,7 +29,7 @@ const boldRedStyle: Style = .{ .font_style = .{ .bold = true }, .foreground = .R
 const greenStyle: Style = .{ .foreground = .Green };
 
 fn printSourcePosition(gpa: Allocator, writer: *Writer, err: InternalError) !void {
-    const info = err.token.info;
+    const info = err.err_token.info;
 
     try format.updateStyle(writer, boldStyle, null);
     const src_msg = try std.fmt.allocPrint(gpa, "{s}:{d}:{d}: ", .{ err.file, info.line, info.pos });
@@ -49,7 +49,7 @@ fn printErrorType(writer: *Writer, err: InternalError) !void {
 
 fn printTokenData(writer: *Writer, err: InternalError) !void {
     try format.updateStyle(writer, boldStyle, null);
-    try writer.writeAll(err.token.data.span);
+    try writer.writeAll(err.err_token.data.span);
     try writer.writeAll("\n");
     try format.resetStyle(writer);
 }
@@ -67,7 +67,7 @@ fn printLineSource(gpa: Allocator, writer: *Writer, line_source: []const u8) !vo
 }
 
 fn printExpressionPointer(gpa: Allocator, writer: *Writer, err: InternalError, line_source: []const u8) !void {
-    const info = err.token.info;
+    const info = err.err_token.info;
 
     const ptr_msg = try gpa.alloc(u8, 2 + line_source.len);
     defer gpa.free(ptr_msg);
@@ -91,7 +91,7 @@ pub fn printError(gpa: Allocator, writer: *Writer, lex: zs.Frontend.Lexer, err: 
     try printErrorType(writer, err);
     try printTokenData(writer, err);
 
-    const line_source = lexer.getLineSource(err.token.info);
+    const line_source = lexer.getLineSource(err.err_token.info);
     try printLineSource(gpa, writer, line_source);
     try printExpressionPointer(gpa, writer, err, line_source);
 }
