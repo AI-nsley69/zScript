@@ -169,7 +169,7 @@ test "Reserved keyword as identifier" {
     inline for (files) |file| {
         const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
         try expect(res.parse_err.len == 1);
-        try expect(std.mem.eql(u8, res.parse_err[0].data.span, err_msg));
+        try expect(std.mem.eql(u8, res.parse_err[0].err_msg, err_msg));
         defer res.deinit(gpa);
     }
     try writer.flush();
@@ -188,7 +188,7 @@ test "Unterminated string" {
 
     const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
     try expect(res.parse_err.len == 1);
-    try expect(std.mem.eql(u8, res.parse_err[0].data.span, err_msg));
+    try expect(std.mem.eql(u8, res.parse_err[0].err_msg, err_msg));
 
     res.deinit(gpa);
     try writer.flush();
