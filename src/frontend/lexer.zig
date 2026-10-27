@@ -96,10 +96,10 @@ pub fn scan(self: *Lexer) !std.MultiArrayList(Token) {
 
     var token = self.scanToken();
     while (token.tag != .eof and token.tag != .err) : (token = self.scanToken()) {
-        try self.tokens.append(self.gpa, .{ .data = token, .info = self.makeTokenInfo() });
+        try self.tokens.append(self.gpa, .{ .data = token, .info = self.makeTokenInfo(token) });
     }
 
-    try self.tokens.append(self.gpa, .{ .data = token, .info = self.makeTokenInfo() });
+    try self.tokens.append(self.gpa, .{ .data = token, .info = self.makeTokenInfo(token) });
 
     log.debug("Tokenized src with {d} tokens", .{self.tokens.items(.data).len});
 
@@ -300,8 +300,8 @@ fn reportError(msg: []const u8) TokenData {
     return .{ .tag = .err, .span = msg };
 }
 
-fn makeTokenInfo(self: *Lexer) TokenInfo {
-    return .{ .line = self.line, .pos = self.current - self.line_pos };
+fn makeTokenInfo(self: *Lexer, token: TokenData) TokenInfo {
+    return .{ .line = self.line, .pos = self.current - token.span.len + 1 };
 }
 
 fn makeToken(self: *Lexer, tokenType: TokenType, start: u64) TokenData {

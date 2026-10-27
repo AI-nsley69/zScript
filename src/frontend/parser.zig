@@ -45,6 +45,11 @@ pub const Error = error{
 
 const Errors = (Error || std.mem.Allocator.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || Native.Error || Val.ConvertError || Gc.Error);
 
+pub const ParseError = struct {
+    err_msg: []const u8,
+    token: Token,
+};
+
 const Parser = @This();
 
 arena_alloc: std.mem.Allocator = undefined,
@@ -57,7 +62,7 @@ variables: std.StringHashMapUnmanaged(VariableMetaData) = std.StringHashMapUnman
 functions: std.StringHashMapUnmanaged(FunctionMetadata) = std.StringHashMapUnmanaged(FunctionMetadata){},
 objects: std.StringHashMapUnmanaged(*const Object.Schema) = std.StringHashMapUnmanaged(*const Object.Schema){},
 
-errors: std.ArrayList(Token) = std.ArrayList(Token){},
+errors: std.ArrayList(ParseError) = .{},
 
 current_func: []const u8 = "main",
 
@@ -588,8 +593,8 @@ fn consume(self: *Parser, token: TokenType, err_msg: []const u8) !TokenData {
 
 fn reportError(self: *Parser, err_msg: []const u8) !void {
     const tkn = self.tokens.get(self.current);
-    const err_tkn: Token = .{ .data = .{ .span = err_msg, .tag = tkn.data.tag }, .info = .{ .line = tkn.info.line, .pos = tkn.info.pos } };
-    try self.errors.append(self.gpa, err_tkn);
+    const err: ParseError = .{ .err_msg = err_msg, .token = tkn };
+    try self.errors.append(self.gpa, err);
 }
 
 fn check(self: *Parser, token: TokenType) bool {

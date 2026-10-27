@@ -1,21 +1,23 @@
 const std = @import("std");
 const Lexer = @import("frontend/lexer.zig");
+const Parser = @import("frontend/parser.zig");
 const ansi = @import("ansi_term");
 const format = ansi.format;
 
 const TokenData = Lexer.TokenData;
 const Token = Lexer.Token;
+const ParseError = Parser.ParseError;
 const TokenInfo = Lexer.TokenInfo;
 const Allocator = std.mem.Allocator;
 const Writer = std.io.Writer;
 
-pub fn printParseError(gpa: Allocator, writer: *Writer, lex: Lexer, token: Token, src_file: []const u8) !void {
+pub fn printParseError(gpa: Allocator, writer: *Writer, lex: Lexer, err: ParseError, src_file: []const u8) !void {
     var lexer = lex;
-    const info = token.info;
+    const token = err.token;
 
     // Print source file with line and position
     try format.updateStyle(writer, .{ .font_style = .{ .bold = true } }, null);
-    const src_msg = try std.fmt.allocPrint(gpa, "{s}:{d}:{d}: ", .{ src_file, info.line, info.pos });
+    const src_msg = try std.fmt.allocPrint(gpa, "{s}:{d}:{d}: ", .{ src_file, token.info.line, token.info.pos });
     defer gpa.free(src_msg);
     try writer.writeAll(src_msg);
 
@@ -25,12 +27,12 @@ pub fn printParseError(gpa: Allocator, writer: *Writer, lex: Lexer, token: Token
 
     // Print the message itself
     try format.updateStyle(writer, .{ .font_style = .{ .bold = true } }, null);
-    try writer.writeAll(token.data.span);
+    try writer.writeAll(err.err_msg);
     try writer.writeAll("\n");
     try format.resetStyle(writer);
 
     // Print the source line indented
-    const line_source = lexer.getLineSource(info);
+    const line_source = lexer.getLineSource(token.info);
     const source_aligned = try std.fmt.allocPrint(gpa, "  {s}", .{line_source});
     defer gpa.free(source_aligned);
     try writer.writeAll(source_aligned);
@@ -41,14 +43,14 @@ pub fn printParseError(gpa: Allocator, writer: *Writer, lex: Lexer, token: Token
     }
 
     // Print a pointer to where the error occured
-    const ptr_msg = try gpa.alloc(u8, 2 + line_source.len);
+    const ptr_msg = try gpa.alloc(u8, 4 + line_source.len);
     defer gpa.free(ptr_msg);
     @memset(ptr_msg, ' ');
 
     // Checks to ensure the message doesn't go out of bounds
     std.log.debug("TODO: Get proper span of the AST node that errored", .{});
-    const start_pos = std.math.clamp(info.pos + 1, 0, ptr_msg.len - 1);
-    const end_pos = std.math.clamp(start_pos + 1, 0, ptr_msg.len - 1);
+    const start_pos = std.math.clamp(token.info.pos + 1, 0, ptr_msg.len - 3);
+    const end_pos = std.math.clamp(start_pos + token.data.span.len, 0, ptr_msg.len - 2);
     @memset(ptr_msg[start_pos..end_pos], '^');
     ptr_msg[ptr_msg.len - 1] = '\n';
 
