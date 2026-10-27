@@ -313,7 +313,7 @@ pub fn getLineSource(self: *Lexer, info: TokenInfo) []const u8 {
     var current: usize = 0;
     var c = self.buf[current];
     const startPos = while (true) : (c = self.buf[current]) {
-        current += 1;
+        defer current += 1;
         if (current == self.buf.len) break current;
         if (c == '\n') {
             line += 1;
