@@ -47,8 +47,8 @@ pub fn printParseError(gpa: Allocator, writer: *Writer, lex: Lexer, token: Token
 
     // Checks to ensure the message doesn't go out of bounds
     std.log.debug("TODO: Get proper span of the AST node that errored", .{});
-    const start_pos = info.pos + 1;
-    const end_pos = start_pos + 1;
+    const start_pos = std.math.clamp(info.pos + 1, 0, ptr_msg.len - 1);
+    const end_pos = std.math.clamp(start_pos + 1, 0, ptr_msg.len - 1);
     @memset(ptr_msg[start_pos..end_pos], '^');
     ptr_msg[ptr_msg.len - 1] = '\n';
 
