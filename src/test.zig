@@ -175,3 +175,22 @@ test "Reserved keyword as identifier" {
     try writer.flush();
     try expectNoLeak(debug_gpa);
 }
+
+test "Unterminated string" {
+    var stdout = std.fs.File.stdout();
+    var writer = stdout.writerStreaming(&.{}).interface;
+
+    var debug_gpa: std.heap.DebugAllocator(.{}) = .init;
+    const gpa = debug_gpa.allocator();
+
+    const file = "./tests/unterminated_string.zs";
+    const err_msg = "Unterminated string: \"Hello World!);";
+
+    const res = try lib.run(&writer, gpa, @embedFile(file), .{ .file = file });
+    try expect(res.parse_err.len == 1);
+    try expect(std.mem.eql(u8, res.parse_err[0].data.span, err_msg));
+
+    res.deinit(gpa);
+    try writer.flush();
+    try expectNoLeak(debug_gpa);
+}

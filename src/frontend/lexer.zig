@@ -7,6 +7,7 @@ pub const TokenType = enum {
     number,
     bool,
     string,
+    unterminated_string,
     add,
     sub,
     mul,
@@ -208,7 +209,9 @@ fn scanToken(self: *Lexer) TokenData {
         '"' => {
             _ = self.takeWhile(isNotQuote);
             // Stops at '"', jump over the trailing quote
-            self.current += 1;
+            if (self.isAtEnd()) {
+                return self.makeToken(.unterminated_string, start);
+            }
             return self.makeToken(.string, start);
         },
         'a'...'z', 'A'...'Z' => return self.alpha(start),
@@ -290,7 +293,7 @@ fn isDigit(char: u8) bool {
 }
 
 fn isNotQuote(char: u8) bool {
-    return char != '"';
+    return char != '"' and char != 0;
 }
 
 fn reportError(msg: []const u8) TokenData {

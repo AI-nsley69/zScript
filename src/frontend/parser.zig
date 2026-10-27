@@ -560,7 +560,10 @@ fn primary(self: *Parser) Errors!Expression {
     }
 
     const token = self.peek();
-    const err_msg = try std.fmt.allocPrint(self.arena_alloc, "Expected expression, found: {s}", .{token.span});
+    const err_msg = if (token.tag != .unterminated_string)
+        try std.fmt.allocPrint(self.arena_alloc, "Expected expression, found: {s}", .{token.span})
+    else
+        try std.fmt.allocPrint(self.arena_alloc, "Unterminated string: {s}", .{token.span});
     try self.reportError(err_msg);
     return Error.ExpressionExpected;
 }
